@@ -1,6 +1,6 @@
 package com.stash.core.media.streaming
 
-import android.util.Log
+import com.stash.core.common.Log
 import com.stash.core.common.ArtUrlUpgrader
 import com.stash.core.data.db.entity.TrackEntity
 import com.stash.core.model.YouTubeVideoId

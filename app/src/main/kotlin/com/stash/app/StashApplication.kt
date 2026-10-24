@@ -296,6 +296,20 @@ class StashApplication : Application(), Configuration.Provider {
 
     override fun onCreate() {
         super.onCreate()
+        com.stash.core.common.Log.delegate = object : com.stash.core.common.Log.Logger {
+            override fun v(tag: String, msg: String) = android.util.Log.v(tag, msg)
+            override fun v(tag: String, msg: String, tr: Throwable?) = android.util.Log.v(tag, msg, tr)
+            override fun d(tag: String, msg: String) = android.util.Log.d(tag, msg)
+            override fun d(tag: String, msg: String, tr: Throwable?) = android.util.Log.d(tag, msg, tr)
+            override fun i(tag: String, msg: String) = android.util.Log.i(tag, msg)
+            override fun i(tag: String, msg: String, tr: Throwable?) = android.util.Log.i(tag, msg, tr)
+            override fun w(tag: String, msg: String) = android.util.Log.w(tag, msg)
+            override fun w(tag: String, tr: Throwable?) = android.util.Log.w(tag, tr)
+            override fun w(tag: String, msg: String, tr: Throwable?) = android.util.Log.w(tag, msg, tr)
+            override fun e(tag: String, msg: String) = android.util.Log.e(tag, msg)
+            override fun e(tag: String, msg: String, tr: Throwable?) = android.util.Log.e(tag, msg, tr)
+            override fun isLoggable(tag: String, level: Int) = android.util.Log.isLoggable(tag, level)
+        }
         // First thing after super: install the crash-to-file handler so any
         // exception thrown by the init steps below still produces a report
         // the user can share from Settings → Diagnostics. The handler
