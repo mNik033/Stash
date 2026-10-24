@@ -31,5 +31,13 @@ gradlePlugin {
             id = "stash.compose.library"
             implementationClass = "ComposeConventionPlugin"
         }
+        register("kmpLibrary") {
+            id = "stash.kmp.library"
+            implementationClass = "KmpLibraryConventionPlugin"
+        }
+        register("kmpCompose") {
+            id = "stash.kmp.compose"
+            implementationClass = "KmpComposeConventionPlugin"
+        }
     }
 }
