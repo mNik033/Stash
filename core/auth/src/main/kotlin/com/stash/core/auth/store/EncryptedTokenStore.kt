@@ -8,7 +8,7 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
-import com.stash.core.auth.crypto.TinkEncryptionManager
+import com.stash.core.auth.crypto.EncryptionManager
 import com.stash.core.auth.model.ServiceToken
 import com.stash.core.auth.model.UserInfo
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -51,7 +51,7 @@ private data class StoredToken(
 @Singleton
 class EncryptedTokenStore @Inject constructor(
     @ApplicationContext private val context: Context,
-    private val encryption: TinkEncryptionManager,
+    private val encryption: EncryptionManager,
 ) {
     private val json = Json { ignoreUnknownKeys = true }
 

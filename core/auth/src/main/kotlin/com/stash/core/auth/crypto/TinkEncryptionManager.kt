@@ -30,7 +30,7 @@ import javax.inject.Singleton
 @Singleton
 class TinkEncryptionManager @Inject constructor(
     @ApplicationContext private val context: Context,
-) {
+) : EncryptionManager {
     @Volatile
     private var keysetResetPending = false
 
@@ -50,7 +50,7 @@ class TinkEncryptionManager @Inject constructor(
      *
      * @return The ciphertext including the authentication tag and IV.
      */
-    fun encrypt(plaintext: ByteArray): ByteArray =
+    override fun encrypt(plaintext: ByteArray): ByteArray =
         aead.encrypt(plaintext, EMPTY_ASSOCIATED_DATA)
 
     /**
@@ -58,7 +58,7 @@ class TinkEncryptionManager @Inject constructor(
      *
      * @throws java.security.GeneralSecurityException if the ciphertext is tampered or the key is wrong.
      */
-    fun decrypt(ciphertext: ByteArray): ByteArray =
+    override fun decrypt(ciphertext: ByteArray): ByteArray =
         aead.decrypt(ciphertext, EMPTY_ASSOCIATED_DATA)
 
     /**
@@ -67,7 +67,7 @@ class TinkEncryptionManager @Inject constructor(
      * unreadable, and the caller that consumes this should delete its copies.
      */
     @Synchronized
-    fun consumeKeysetReset(): Boolean {
+    override fun consumeKeysetReset(): Boolean {
         val pending = keysetResetPending
         keysetResetPending = false
         return pending
