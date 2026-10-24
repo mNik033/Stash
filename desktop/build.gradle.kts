@@ -2,6 +2,7 @@ plugins {
     alias(libs.plugins.kotlin.multiplatform)
     alias(libs.plugins.compose.multiplatform)
     alias(libs.plugins.compose.compiler)
+    alias(libs.plugins.ksp)
 }
 
 kotlin {
@@ -21,9 +22,17 @@ kotlin {
                 implementation(compose.components.resources)
                 implementation(libs.jna)
                 implementation(libs.jna.platform)
+                implementation(libs.dagger)
+                implementation(libs.room.runtime)
+                implementation(libs.sqlite.bundled)
             }
         }
     }
+}
+
+dependencies {
+    add("kspDesktop", libs.dagger.compiler)
+    add("kspDesktop", libs.room.compiler)
 }
 
 compose.desktop {
