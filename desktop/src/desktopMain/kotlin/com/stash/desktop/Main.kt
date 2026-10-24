@@ -4,17 +4,23 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -29,6 +35,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
 import com.stash.desktop.spike.DaggerSpikeComponent
+import com.stash.desktop.spike.MpvAudioPlayer
 import com.stash.desktop.spike.RoomSpike
 import com.stash.desktop.spike.SpikeTrack
 import kotlinx.coroutines.Dispatchers
@@ -54,6 +61,14 @@ fun main() = application {
             ) {
                 var diStatus by remember { mutableStateOf("Initializing DI...") }
                 var dbStatus by remember { mutableStateOf("Initializing Room DB...") }
+                var audioPlayStatus by remember { mutableStateOf("Ready") }
+
+                val player = remember { MpvAudioPlayer() }
+                DisposableEffect(Unit) {
+                    onDispose {
+                        player.close()
+                    }
+                }
 
                 LaunchedEffect(Unit) {
                     try {
@@ -90,33 +105,93 @@ fun main() = application {
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onBackground,
                     )
-                    Spacer(modifier = Modifier.height(8.dp))
+                    Spacer(modifier = Modifier.height(6.dp))
                     Text(
                         text = "Compose Multiplatform Spike · Phase 0",
-                        fontSize = 16.sp,
+                        fontSize = 15.sp,
                         color = Color(0xFF94A3B8),
                     )
-                    Spacer(modifier = Modifier.height(24.dp))
+                    Spacer(modifier = Modifier.height(20.dp))
 
                     StatusCard(
                         title = "Platform",
                         detail = "JVM ${System.getProperty("java.version")} on ${System.getProperty("os.name")}",
                         color = Color(0xFFA78BFA),
                     )
-                    Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(modifier = Modifier.height(10.dp))
 
                     StatusCard(
                         title = "Dependency Injection (Dagger)",
                         detail = diStatus,
                         color = Color(0xFF34D399),
                     )
-                    Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(modifier = Modifier.height(10.dp))
 
                     StatusCard(
                         title = "Database (Room KMP)",
                         detail = dbStatus,
                         color = Color(0xFF38BDF8),
                     )
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth(0.85f)
+                            .background(
+                                color = MaterialTheme.colorScheme.surface,
+                                shape = RoundedCornerShape(12.dp),
+                            )
+                            .padding(horizontal = 20.dp, vertical = 14.dp),
+                    ) {
+                        Column {
+                            Text(
+                                text = "Audio Playback Engine (libmpv / JNA)",
+                                color = Color(0xFFFBBF24),
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.SemiBold,
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = player.statusMessage,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                fontSize = 13.sp,
+                            )
+                            if (player.isAvailable) {
+                                Spacer(modifier = Modifier.height(10.dp))
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Button(
+                                        onClick = {
+                                            // Public test audio URL (Ogg/Vorbis or FLAC test stream)
+                                            val testUrl = "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3"
+                                            val res = player.play(testUrl)
+                                            audioPlayStatus = if (res.isSuccess) "Streaming test audio..." else "Play failed: ${res.exceptionOrNull()?.message}"
+                                        },
+                                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF8B5CF6)),
+                                    ) {
+                                        Text("Play Test Audio")
+                                    }
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    OutlinedButton(onClick = { player.setPause(true); audioPlayStatus = "Paused" }) {
+                                        Text("Pause")
+                                    }
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    OutlinedButton(onClick = { player.setPause(false); audioPlayStatus = "Resumed" }) {
+                                        Text("Resume")
+                                    }
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    OutlinedButton(onClick = { player.stop(); audioPlayStatus = "Stopped" }) {
+                                        Text("Stop")
+                                    }
+                                }
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Text(
+                                    text = "Status: $audioPlayStatus",
+                                    color = Color(0xFF94A3B8),
+                                    fontSize = 12.sp,
+                                )
+                            }
+                        }
+                    }
                 }
             }
         }
