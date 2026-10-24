@@ -40,6 +40,11 @@ class KmpLibraryConventionPlugin : Plugin<Project> {
                     }
                 }
             }
+
+            tasks.withType(org.gradle.api.tasks.compile.JavaCompile::class.java).configureEach {
+                sourceCompatibility = org.gradle.api.JavaVersion.VERSION_17.toString()
+                targetCompatibility = org.gradle.api.JavaVersion.VERSION_17.toString()
+            }
         }
     }
 }
