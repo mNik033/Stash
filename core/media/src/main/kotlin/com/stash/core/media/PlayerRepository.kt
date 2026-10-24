@@ -1,6 +1,7 @@
 package com.stash.core.media
 
 import androidx.media3.common.MediaItem
+import com.stash.core.model.PlayableItem
 import com.stash.core.model.PlayerState
 import com.stash.core.model.Track
 import com.stash.core.model.TrackItem
@@ -14,13 +15,20 @@ import kotlinx.coroutines.flow.StateFlow
  * to render each reason — typically a snackbar for the refusal variants
  * and silent no-op for [NotAvailable] rows (which should already be
  * greyed out in the UI).
- *
- * Defined here rather than in `core/model` because the [Item] variant
- * carries a Media3 [MediaItem], a `core/media`-private type.
  */
 sealed class StreamRoutingResult {
-    /** The track is playable — hand [mediaItem] to the controller. */
-    data class Item(val mediaItem: MediaItem) : StreamRoutingResult()
+    /** The track is playable — contains [mediaItem] and platform-agnostic [playableItem]. */
+    data class Item(
+        val mediaItem: MediaItem,
+    ) : StreamRoutingResult() {
+        val playableItem: PlayableItem
+            get() = PlayableItem(
+                mediaId = mediaItem.mediaId,
+                uri = mediaItem.localConfiguration?.uri?.toString().orEmpty(),
+                title = mediaItem.mediaMetadata.title?.toString().orEmpty(),
+                artist = mediaItem.mediaMetadata.artist?.toString().orEmpty(),
+            )
+    }
 
     /**
      * No local file on disk, not marked streamable in the library, OR
