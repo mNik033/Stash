@@ -1,6 +1,6 @@
 package com.stash.core.common.perf
 
-import android.util.Log
+import com.stash.core.common.Log
 
 /**
  * Wrapper around [Log.d] that only emits when the "Perf" tag is enabled

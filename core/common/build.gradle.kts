@@ -1,14 +1,23 @@
 plugins {
-    id("stash.android.library")
+    id("stash.kmp.library")
 }
+
 android {
     namespace = "com.stash.core.common"
+    sourceSets["test"].resources.srcDir("src/commonTest/resources")
 }
-dependencies {
-    implementation(libs.kotlinx.coroutines.android)
 
-    // Unit tests for the pure-Kotlin artist-credit parser
-    // (String.splitArtistCredits / String.primaryArtist). No Android
-    // framework needed, so plain JUnit keeps the module's test surface minimal.
-    testImplementation("junit:junit:4.13.2")
+kotlin {
+    sourceSets {
+        commonMain.dependencies {
+            implementation(libs.kotlinx.coroutines.core)
+        }
+        androidMain.dependencies {
+            implementation(libs.kotlinx.coroutines.android)
+        }
+        commonTest.dependencies {
+            implementation(kotlin("test"))
+            implementation("junit:junit:4.13.2")
+        }
+    }
 }
