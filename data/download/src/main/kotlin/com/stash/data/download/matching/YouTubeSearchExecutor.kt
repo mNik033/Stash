@@ -1,20 +1,17 @@
 package com.stash.data.download.matching
 
-import com.stash.data.download.ytdlp.YtDlpManager
+import com.stash.core.common.Log
+import com.stash.data.download.ytdlp.YtDlpRunner
 import com.stash.data.download.ytdlp.YtDlpSearchResult
-import com.yausername.youtubedl_android.YoutubeDL
-import com.yausername.youtubedl_android.YoutubeDLRequest
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.withContext
-import android.util.Log
 import kotlinx.serialization.json.Json
 import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Executes YouTube searches via yt-dlp and parses the JSON output
+ * Executes YouTube searches via [YtDlpRunner] and parses the JSON output
  * into [YtDlpSearchResult] DTOs.
  *
  * Uses the `ytsearchN:` prefix to request up to N results from YouTube,
@@ -25,11 +22,11 @@ import javax.inject.Singleton
  */
 @Singleton
 class YouTubeSearchExecutor @Inject constructor(
-    private val ytDlpManager: YtDlpManager,
+    private val ytDlpRunner: YtDlpRunner,
 ) {
     private val json = Json {
         ignoreUnknownKeys = true
-        coerceInputValues = true  // yt-dlp returns null for some fields (e.g. uploader_id)
+        coerceInputValues = true // yt-dlp returns null for some fields (e.g. uploader_id)
     }
 
     companion object {
@@ -47,21 +44,19 @@ class YouTubeSearchExecutor @Inject constructor(
         require(query.isNotBlank()) { "Search query must not be blank" }
         val clampedMax = maxResults.coerceIn(1, 20)
 
-        ytDlpManager.initialize()
-
         return withContext(Dispatchers.IO) {
             try {
-                val request = YoutubeDLRequest("ytsearch$clampedMax:$query")
-                request.addOption("--dump-json")
-                request.addOption("--no-download")
-                request.addOption("--flat-playlist")  // Required: without this, yt-dlp fetches full metadata per result (~15s vs ~3s)
+                val args = listOf(
+                    "ytsearch$clampedMax:$query",
+                    "--dump-json",
+                    "--no-download",
+                    "--flat-playlist", // Required: without this, yt-dlp fetches full metadata per result (~15s vs ~3s)
+                )
 
-                // Interruptible: a cancelled match (download stopped) kills the
-                // yt-dlp process instead of leaving it to run to the end.
-                val response = runInterruptible { YoutubeDL.getInstance().execute(request) }
+                val response = ytDlpRunner.execute(args)
                 val output = response.out
 
-                if (output.isNullOrBlank()) {
+                if (output.isBlank()) {
                     Log.w(TAG, "yt-dlp returned empty output for query: $query")
                     return@withContext emptyList()
                 }

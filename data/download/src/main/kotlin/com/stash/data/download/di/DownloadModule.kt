@@ -39,4 +39,8 @@ abstract class DownloadModule {
     @Binds
     @Singleton
     abstract fun bindUploadNaming(impl: com.stash.data.download.cloud.DriveUploadNaming): com.stash.data.cloud.upload.UploadNaming
+
+    @Binds
+    @Singleton
+    abstract fun bindYtDlpRunner(impl: com.stash.data.download.ytdlp.AndroidYtDlpRunner): com.stash.data.download.ytdlp.YtDlpRunner
 }
