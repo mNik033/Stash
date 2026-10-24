@@ -1,12 +1,11 @@
 package com.stash.core.auth
 
-import android.util.Log
+import com.stash.core.common.Log
 import com.stash.core.auth.model.AuthService
 import com.stash.core.auth.model.AuthState
 import com.stash.core.auth.model.ServiceToken
 import com.stash.core.auth.model.UserInfo
 import com.stash.core.auth.spotify.SpotifyAuthManager
-import com.stash.core.auth.store.EncryptedTokenStore
 import com.stash.core.auth.youtube.YouTubeCookieHelper
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -32,7 +31,7 @@ import javax.inject.Singleton
  */
 @Singleton
 class TokenManagerImpl @Inject constructor(
-    private val tokenStore: EncryptedTokenStore,
+    private val tokenStore: com.stash.core.auth.store.TokenStore,
     private val spotifyAuthManager: SpotifyAuthManager,
     private val youTubeCookieHelper: YouTubeCookieHelper,
 ) : TokenManager {

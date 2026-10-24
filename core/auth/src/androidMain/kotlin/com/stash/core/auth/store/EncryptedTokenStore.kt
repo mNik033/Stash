@@ -52,7 +52,7 @@ private data class StoredToken(
 class EncryptedTokenStore @Inject constructor(
     @ApplicationContext private val context: Context,
     private val encryption: EncryptionManager,
-) {
+) : TokenStore {
     private val json = Json { ignoreUnknownKeys = true }
 
     private companion object {
@@ -69,69 +69,69 @@ class EncryptedTokenStore @Inject constructor(
     // ── Spotify ──────────────────────────────────────────────────────────
 
     /** Emits the current Spotify [ServiceToken], or null if not stored / decryption fails. */
-    val spotifyToken: Flow<ServiceToken?> = context.authDataStore.data.map { prefs ->
+    override val spotifyToken: Flow<ServiceToken?> = context.authDataStore.data.map { prefs ->
         prefs[Keys.SPOTIFY]?.let { decryptToken(it) }
     }
 
     /** Emits the current Spotify [UserInfo], or null if not stored / decryption fails. */
-    val spotifyUser: Flow<UserInfo?> = context.authDataStore.data.map { prefs ->
+    override val spotifyUser: Flow<UserInfo?> = context.authDataStore.data.map { prefs ->
         prefs[Keys.SPOTIFY]?.let { decryptUser(it) }
     }
 
     /** Persists the Spotify token (and optionally user profile) as an encrypted blob. */
-    suspend fun saveSpotifyToken(token: ServiceToken, user: UserInfo? = null) {
+    override suspend fun saveSpotifyToken(token: ServiceToken, user: UserInfo?) {
         val stored = token.toStoredToken(user)
         saveBlob(Keys.SPOTIFY, encryptStored(stored))
     }
 
     /** Removes the stored Spotify credentials. */
-    suspend fun clearSpotify() {
+    override suspend fun clearSpotify() {
         context.authDataStore.edit { it.remove(Keys.SPOTIFY) }
     }
 
     // ── YouTube Music ────────────────────────────────────────────────────
 
     /** Emits the current YouTube Music [ServiceToken], or null if not stored / decryption fails. */
-    val youTubeToken: Flow<ServiceToken?> = context.authDataStore.data.map { prefs ->
+    override val youTubeToken: Flow<ServiceToken?> = context.authDataStore.data.map { prefs ->
         prefs[Keys.YOUTUBE]?.let { decryptToken(it) }
     }
 
     /** Emits the current YouTube Music [UserInfo], or null if not stored / decryption fails. */
-    val youTubeUser: Flow<UserInfo?> = context.authDataStore.data.map { prefs ->
+    override val youTubeUser: Flow<UserInfo?> = context.authDataStore.data.map { prefs ->
         prefs[Keys.YOUTUBE]?.let { decryptUser(it) }
     }
 
     /** Persists the YouTube Music token (and optionally user profile) as an encrypted blob. */
-    suspend fun saveYouTubeToken(token: ServiceToken, user: UserInfo? = null) {
+    override suspend fun saveYouTubeToken(token: ServiceToken, user: UserInfo?) {
         val stored = token.toStoredToken(user)
         saveBlob(Keys.YOUTUBE, encryptStored(stored))
     }
 
     /** Removes the stored YouTube Music credentials. */
-    suspend fun clearYouTube() {
+    override suspend fun clearYouTube() {
         context.authDataStore.edit { it.remove(Keys.YOUTUBE) }
     }
 
     // ── Discord ──────────────────────────────────────────────────────────
 
     /** Emits the current Discord [ServiceToken], or null if not stored / decryption fails. */
-    val discordToken: Flow<ServiceToken?> = context.authDataStore.data.map { prefs ->
+    override val discordToken: Flow<ServiceToken?> = context.authDataStore.data.map { prefs ->
         prefs[Keys.DISCORD]?.let { decryptToken(it) }
     }
 
     /** Emits the current Discord [UserInfo], or null if not stored / decryption fails. */
-    val discordUser: Flow<UserInfo?> = context.authDataStore.data.map { prefs ->
+    override val discordUser: Flow<UserInfo?> = context.authDataStore.data.map { prefs ->
         prefs[Keys.DISCORD]?.let { decryptUser(it) }
     }
 
     /** Persists the Discord token (and optionally user profile) as an encrypted blob. */
-    suspend fun saveDiscordToken(token: ServiceToken, user: UserInfo? = null) {
+    override suspend fun saveDiscordToken(token: ServiceToken, user: UserInfo?) {
         val stored = token.toStoredToken(user)
         saveBlob(Keys.DISCORD, encryptStored(stored))
     }
 
     /** Removes the stored Discord credentials. */
-    suspend fun clearDiscord() {
+    override suspend fun clearDiscord() {
         context.authDataStore.edit { it.remove(Keys.DISCORD) }
     }
 
@@ -143,16 +143,16 @@ class EncryptedTokenStore @Inject constructor(
      * provider plus Stash's account row id ("onedrive_12"): one blob per account, so two
      * connected accounts never share a token.
      */
-    suspend fun getCloudToken(accountKey: String): ServiceToken? =
+    override suspend fun getCloudToken(accountKey: String): ServiceToken? =
         context.authDataStore.data.first()[cloudKey(accountKey)]?.let { decryptToken(it) }
 
     /** Persists a cloud account's token (refresh tokens rotate, so every refresh saves again). */
-    suspend fun saveCloudToken(accountKey: String, token: ServiceToken) {
+    override suspend fun saveCloudToken(accountKey: String, token: ServiceToken) {
         saveBlob(cloudKey(accountKey), encryptStored(token.toStoredToken(null)))
     }
 
     /** Forgets a cloud account's token (disconnect). */
-    suspend fun clearCloudToken(accountKey: String) {
+    override suspend fun clearCloudToken(accountKey: String) {
         context.authDataStore.edit { it.remove(cloudKey(accountKey)) }
     }
 

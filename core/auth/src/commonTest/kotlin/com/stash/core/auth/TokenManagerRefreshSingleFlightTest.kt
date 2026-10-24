@@ -3,7 +3,7 @@ package com.stash.core.auth
 import com.stash.core.auth.model.ServiceToken
 import com.stash.core.auth.model.UserInfo
 import com.stash.core.auth.spotify.SpotifyAuthManager
-import com.stash.core.auth.store.EncryptedTokenStore
+import com.stash.core.auth.store.TokenStore
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
@@ -39,7 +39,7 @@ class TokenManagerRefreshSingleFlightTest {
     @Test fun `concurrent callers near expiry share one refresh`() = runTest {
         val now = Instant.now().epochSecond
         val stored = MutableStateFlow<ServiceToken?>(ServiceToken("old", "sp_dc", expiresAtEpoch = now - 1))
-        val store = mockk<EncryptedTokenStore>(relaxed = true) {
+        val store = mockk<TokenStore>(relaxed = true) {
             every { spotifyToken } returns stored
             every { spotifyUser } returns MutableStateFlow(UserInfo("me", "Me"))
             every { youTubeToken } returns MutableStateFlow(null)

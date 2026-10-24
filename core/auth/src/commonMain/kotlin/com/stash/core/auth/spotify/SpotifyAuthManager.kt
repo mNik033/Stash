@@ -1,7 +1,6 @@
 package com.stash.core.auth.spotify
 
-import android.util.Base64
-import android.util.Log
+import com.stash.core.common.Log
 import com.stash.core.auth.model.ServiceToken
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -268,9 +267,8 @@ class SpotifyAuthManager @Inject constructor(
         try {
             Log.d(TAG, "getClientCredentialsToken: requesting token via client_credentials flow")
 
-            val credentials = Base64.encodeToString(
+            val credentials = java.util.Base64.getEncoder().encodeToString(
                 "$SPOTDL_CLIENT_ID:$SPOTDL_CLIENT_SECRET".toByteArray(),
-                Base64.NO_WRAP,
             )
 
             val body = FormBody.Builder()
@@ -534,7 +532,7 @@ class SpotifyAuthManager @Inject constructor(
                 return null
             }
             val payload = String(
-                Base64.decode(parts[1], Base64.URL_SAFE or Base64.NO_PADDING or Base64.NO_WRAP)
+                java.util.Base64.getUrlDecoder().decode(parts[1])
             )
             Log.d(TAG, "JWT payload decoded, extracting username")
             val jsonObj = json.parseToJsonElement(payload).jsonObject
