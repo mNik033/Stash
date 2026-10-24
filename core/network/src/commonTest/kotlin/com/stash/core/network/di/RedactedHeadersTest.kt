@@ -8,7 +8,7 @@ class RedactedHeadersTest {
 
     @Test
     fun `the relay signature and the supporter token are redacted with the other secrets`() {
-        val redacted = NetworkModule.REDACTED_HEADERS
+        val redacted = StashNetworkDefaults.REDACTED_HEADERS
         for (h in listOf("Authorization", "Cookie", "X-Stash-Edit-Key", "X-Stash-Community-Key", "X-Stash-Auth", "X-Stash-Entitlement")) {
             assertTrue("$h must be redacted", h in redacted)
         }
