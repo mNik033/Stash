@@ -24,6 +24,7 @@ dependencyResolutionManagement {
 rootProject.name = "Stash"
 
 include(":app")
+include(":desktop")
 
 include(":core:ui")
 include(":core:model")
