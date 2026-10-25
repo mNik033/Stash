@@ -20,12 +20,12 @@ import kotlinx.coroutines.flow.first
  * Wi-Fi behavior follows the sync wifiOnly preference (spec §3).
  */
 @Singleton
-class FlacUpgradeEnqueuer @Inject constructor(
+class AndroidFlacUpgradeEnqueuer @Inject constructor(
     @ApplicationContext private val context: Context,
     private val queueDao: FlacUpgradeQueueDao,
     private val syncPreferencesManager: SyncPreferencesManager,
-) {
-    suspend fun startBatch(trackIds: List<Long>) {
+) : FlacUpgradeEnqueuer {
+    override suspend fun startBatch(trackIds: List<Long>) {
         if (trackIds.isEmpty()) return
         queueDao.startBatch(trackIds)
         val wifiOnly = syncPreferencesManager.preferences.first().wifiOnly

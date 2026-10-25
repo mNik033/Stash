@@ -33,18 +33,18 @@ private val Context.libraryScopeDataStore: DataStore<Preferences> by preferences
  * kept and comes back with Stream only.
  */
 @Singleton
-class LibraryScopePreference @Inject constructor(
+class AndroidLibraryScopePreference @Inject constructor(
     @ApplicationContext private val context: Context,
-) {
+) : LibraryScopePreference {
     private val inLibraryOnlyKey = booleanPreferencesKey("artists_albums_in_library_only")
 
-    val inLibraryOnly: Flow<Boolean> = context.libraryScopeDataStore.data.map { prefs ->
+    override val inLibraryOnly: Flow<Boolean> = context.libraryScopeDataStore.data.map { prefs ->
         prefs[inLibraryOnlyKey] ?: false
     }
 
-    suspend fun current(): Boolean = inLibraryOnly.first()
+    override suspend fun current(): Boolean = inLibraryOnly.first()
 
-    suspend fun setInLibraryOnly(value: Boolean) {
+    override suspend fun setInLibraryOnly(value: Boolean) {
         context.libraryScopeDataStore.edit { it[inLibraryOnlyKey] = value }
     }
 }

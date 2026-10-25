@@ -84,5 +84,21 @@ abstract class RepositoryModule {
 
     @Binds
     @Singleton
+    abstract fun bindSharedMixScheduler(impl: com.stash.core.data.share.AndroidSharedMixScheduler): com.stash.core.data.share.SharedMixScheduler
+
+    @Binds
+    @Singleton
     abstract fun bindNowPlayingPreference(impl: AndroidNowPlayingPreference): NowPlayingPreference
+
+    @Binds
+    @Singleton
+    abstract fun bindStreamingPreference(impl: com.stash.core.data.prefs.AndroidStreamingPreference): com.stash.core.data.prefs.StreamingPreference
+
+    @Binds
+    @Singleton
+    abstract fun bindFlacUpgradeEnqueuer(impl: com.stash.core.data.sync.AndroidFlacUpgradeEnqueuer): com.stash.core.data.sync.FlacUpgradeEnqueuer
+
+    @Binds
+    @Singleton
+    abstract fun bindLibraryScopePreference(impl: com.stash.core.data.prefs.AndroidLibraryScopePreference): com.stash.core.data.prefs.LibraryScopePreference
 }

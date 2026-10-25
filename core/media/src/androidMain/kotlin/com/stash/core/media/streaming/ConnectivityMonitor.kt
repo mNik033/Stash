@@ -37,9 +37,9 @@ import javax.inject.Singleton
  * before ExoPlayer's read fails.
  */
 @Singleton
-class ConnectivityMonitor @Inject constructor(
+class AndroidConnectivityMonitor @Inject constructor(
     @ApplicationContext private val context: Context,
-) {
+) : ConnectivityMonitor {
     private val cm: ConnectivityManager
         get() = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
 
@@ -47,7 +47,7 @@ class ConnectivityMonitor @Inject constructor(
      * True iff the active network has both internet capability and the
      * captive-portal probe has validated a real path to the internet.
      */
-    fun isConnected(): Boolean {
+    override fun isConnected(): Boolean {
         val caps = cm.getNetworkCapabilities(cm.activeNetwork) ?: return false
         return caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
             caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
@@ -57,7 +57,7 @@ class ConnectivityMonitor @Inject constructor(
      * True iff the active network uses the cellular transport. False when
      * the device is on Wi-Fi, Ethernet, or has no active network at all.
      */
-    fun isCellular(): Boolean {
+    override fun isCellular(): Boolean {
         val caps = cm.getNetworkCapabilities(cm.activeNetwork) ?: return false
         return caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)
     }

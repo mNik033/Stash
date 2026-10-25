@@ -1,4 +1,4 @@
-﻿package com.stash.core.data.weblink.mirror
+package com.stash.core.data.weblink.mirror
 
 import com.stash.core.common.Log
 import com.stash.core.data.weblink.DeviceAuth
@@ -122,7 +122,7 @@ data class MirrorChange(
  * phone â†’ web whatever the direction (`ro`), and the phone never applies an op for one.
  */
 @Singleton
-class MirrorEngine internal constructor(
+actual class MirrorEngine internal constructor(
     private val api: SyncApi,
     private val store: WebLinkStore,
     private val repo: WebLinkRepository,
@@ -187,7 +187,7 @@ class MirrorEngine internal constructor(
     @Volatile var digester: (suspend (MirrorStatus) -> String)? = null
 
     /** [localId] is a playlist this phone mirrors now (from the last state read: [load] or a run). */
-    fun isMirrored(localId: Long): Boolean {
+    actual fun isMirrored(localId: Long): Boolean {
         val s = _status.value
         val cfg = s.config ?: return false
         return cfg.playlists.dir != Dir.OFF && s.mirrored.any { (mid, id) -> id == localId && mid in cfg.ids }
@@ -198,7 +198,7 @@ class MirrorEngine internal constructor(
      * phone sends playlists and has joined them, or the playlist is read-only (only the phone writes those). Otherwise only
      * "Only here".
      */
-    fun canDeleteEverywhere(localId: Long): Boolean {
+    actual fun canDeleteEverywhere(localId: Long): Boolean {
         if (!isMirrored(localId)) return false
         val s = _status.value
         val cfg = s.config ?: return false
@@ -212,7 +212,7 @@ class MirrorEngine internal constructor(
      * (retried until it lands), and never brought back here by a later edit elsewhere meanwhile. Reads the saved state itself,
      * so it holds even before anything was loaded.
      */
-    suspend fun beforeDelete(localId: Long, everywhere: Boolean) = withContext(Dispatchers.IO) {
+    actual suspend fun beforeDelete(localId: Long, everywhere: Boolean) = withContext(Dispatchers.IO) {
         mutex.withLock {
             val r = guard(null) { records.load() } ?: return@withLock
             val mid = r.map.entries.firstOrNull { it.value.localId == localId }?.key ?: return@withLock
@@ -286,7 +286,7 @@ class MirrorEngine internal constructor(
     }
 
     /** Reads the saved state for the settings screen (no network). */
-    suspend fun load() {
+    actual suspend fun load() {
         val sp = guard(null) { store.space() }
         val r = guard(null) { records.load() }?.takeIf { sp != null && it.spaceId == sp.spaceId }
         val cfg = r?.configJson?.let { runCatching { MirrorWire.readConfig(it) }.getOrNull() }

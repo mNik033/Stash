@@ -23,8 +23,6 @@ private val Context.streamingDataStore: DataStore<Preferences> by preferencesDat
     corruptionHandler = ReplaceFileCorruptionHandler { emptyPreferences() },
 )
 
-/** Stream-quality tier. Persisted as the enum's `name` string. */
-enum class StreamQualityTier { LOSSLESS, HIGH_QUALITY_LOSSY }
 
 /**
  * User-facing streaming preferences:
@@ -43,9 +41,9 @@ enum class StreamQualityTier { LOSSLESS, HIGH_QUALITY_LOSSY }
  * Default is `enabled = false` — Download mode for the existing install base.
  */
 @Singleton
-class StreamingPreference @Inject constructor(
+class AndroidStreamingPreference @Inject constructor(
     @ApplicationContext private val context: Context,
-) {
+) : StreamingPreference {
     private val enabledKey = booleanPreferencesKey("streaming_enabled")
     private val cellularKey = booleanPreferencesKey("streaming_on_cellular")
     private val qualityKey = stringPreferencesKey("streaming_quality_tier")
@@ -61,15 +59,15 @@ class StreamingPreference @Inject constructor(
     private val forceAmzOnlyKey = booleanPreferencesKey("force_amz_only")
     private val forceArcodOnlyKey = booleanPreferencesKey("force_arcod_only")
 
-    val enabled: Flow<Boolean> = context.streamingDataStore.data.map { prefs ->
+    override val enabled: Flow<Boolean> = context.streamingDataStore.data.map { prefs ->
         prefs[enabledKey] ?: false
     }
 
-    val streamOnCellular: Flow<Boolean> = context.streamingDataStore.data.map { prefs ->
+    override val streamOnCellular: Flow<Boolean> = context.streamingDataStore.data.map { prefs ->
         prefs[cellularKey] ?: false
     }
 
-    val streamQuality: Flow<StreamQualityTier> = context.streamingDataStore.data.map { prefs ->
+    override val streamQuality: Flow<StreamQualityTier> = context.streamingDataStore.data.map { prefs ->
         runCatching { StreamQualityTier.valueOf(prefs[qualityKey] ?: "") }
             .getOrDefault(StreamQualityTier.LOSSLESS)
     }
@@ -80,7 +78,7 @@ class StreamingPreference @Inject constructor(
      * fallback resolver only — used to reproduce the lossless-down path
      * on demand. Default `false` (normal use).
      */
-    val forceYouTubeFallback: Flow<Boolean> = context.streamingDataStore.data.map { prefs ->
+    override val forceYouTubeFallback: Flow<Boolean> = context.streamingDataStore.data.map { prefs ->
         prefs[forceYouTubeFallbackKey] ?: false
     }
 
@@ -92,7 +90,7 @@ class StreamingPreference @Inject constructor(
      * Used to exercise qbdlx on demand (it normally ranks last and is hard to
      * trigger). Default `false` (normal use).
      */
-    val forceQbdlxOnly: Flow<Boolean> = context.streamingDataStore.data.map { prefs ->
+    override val forceQbdlxOnly: Flow<Boolean> = context.streamingDataStore.data.map { prefs ->
         prefs[forceQbdlxOnlyKey] ?: false
     }
 
@@ -105,7 +103,7 @@ class StreamingPreference @Inject constructor(
      * intact. Raw stored value; consumers read [isSkipQobuz], which is debug-gated.
      * Default `false`.
      */
-    val skipQobuz: Flow<Boolean> = context.streamingDataStore.data.map { prefs ->
+    override val skipQobuz: Flow<Boolean> = context.streamingDataStore.data.map { prefs ->
         prefs[skipQobuzKey] ?: false
     }
 
@@ -148,36 +146,36 @@ class StreamingPreference @Inject constructor(
         return false
     }
 
-    suspend fun current(): Boolean = enabled.first()
+    override suspend fun current(): Boolean = enabled.first()
 
-    suspend fun isForceYouTubeFallback(): Boolean = forceYouTubeFallback.first()
+    override suspend fun isForceYouTubeFallback(): Boolean = forceYouTubeFallback.first()
 
-    suspend fun isForceQbdlxOnly(): Boolean = devForceToggle(forceQbdlxOnly, "force_qbdlx_only")
+    override suspend fun isForceQbdlxOnly(): Boolean = devForceToggle(forceQbdlxOnly, "force_qbdlx_only")
 
     /** [skipQobuz], honored only on debuggable builds (see [devInstrumentsEnabled]). */
-    suspend fun isSkipQobuz(): Boolean = devForceToggle(skipQobuz, "test_skip_qobuz")
+    override suspend fun isSkipQobuz(): Boolean = devForceToggle(skipQobuz, "test_skip_qobuz")
 
-    suspend fun setEnabled(value: Boolean) {
+    override suspend fun setEnabled(value: Boolean) {
         context.streamingDataStore.edit { it[enabledKey] = value }
     }
 
-    suspend fun setStreamOnCellular(value: Boolean) {
+    override suspend fun setStreamOnCellular(value: Boolean) {
         context.streamingDataStore.edit { it[cellularKey] = value }
     }
 
-    suspend fun setForceYouTubeFallback(value: Boolean) {
+    override suspend fun setForceYouTubeFallback(value: Boolean) {
         context.streamingDataStore.edit { it[forceYouTubeFallbackKey] = value }
     }
 
-    suspend fun setForceQbdlxOnly(value: Boolean) {
+    override suspend fun setForceQbdlxOnly(value: Boolean) {
         context.streamingDataStore.edit { it[forceQbdlxOnlyKey] = value }
     }
 
-    suspend fun setSkipQobuz(value: Boolean) {
+    override suspend fun setSkipQobuz(value: Boolean) {
         context.streamingDataStore.edit { it[skipQobuzKey] = value }
     }
 
-    suspend fun setStreamQuality(tier: StreamQualityTier) {
+    override suspend fun setStreamQuality(tier: StreamQualityTier) {
         context.streamingDataStore.edit { it[qualityKey] = tier.name }
     }
 
@@ -186,7 +184,7 @@ class StreamingPreference @Inject constructor(
      * toggles from existing installs. Called once at startup (see
      * StashApplication). No-op when the keys are already absent.
      */
-    suspend fun purgeRetiredKeys() {
+    override suspend fun purgeRetiredKeys() {
         context.streamingDataStore.edit {
             it.remove(forceAntraOnlyKey)
             it.remove(forceAmzOnlyKey)

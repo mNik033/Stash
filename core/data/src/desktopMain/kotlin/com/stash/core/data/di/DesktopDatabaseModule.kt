@@ -139,4 +139,29 @@ object DesktopDatabaseModule {
     @Singleton
     fun provideLyricsPreference(impl: com.stash.core.data.prefs.DesktopLyricsPreference): com.stash.core.data.prefs.LyricsPreference =
         impl
+
+    @Provides
+    @Singleton
+    fun provideSharePreference(): com.stash.core.data.share.SharePreference =
+        com.stash.core.data.share.DesktopSharePreference()
+
+    @Provides
+    @Singleton
+    fun provideSharedMixScheduler(impl: com.stash.core.data.share.DesktopSharedMixScheduler): com.stash.core.data.share.SharedMixScheduler =
+        impl
+
+    @Provides
+    @Singleton
+    fun provideStreamingPreference(impl: com.stash.core.data.prefs.DesktopStreamingPreference): com.stash.core.data.prefs.StreamingPreference =
+        impl
+
+    @Provides
+    @Singleton
+    fun provideFlacUpgradeEnqueuer(impl: com.stash.core.data.sync.DesktopFlacUpgradeEnqueuer): com.stash.core.data.sync.FlacUpgradeEnqueuer =
+        impl
+
+    @Provides
+    @Singleton
+    fun provideLibraryScopePreference(impl: com.stash.core.data.prefs.DesktopLibraryScopePreference): com.stash.core.data.prefs.LibraryScopePreference =
+        impl
 }

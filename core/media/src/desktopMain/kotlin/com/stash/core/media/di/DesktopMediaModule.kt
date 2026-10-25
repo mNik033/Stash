@@ -14,6 +14,10 @@ interface DesktopMediaModule {
     @Singleton
     fun bindPlayerRepository(impl: DesktopPlayerRepository): PlayerRepository
 
+    @Binds
+    @Singleton
+    fun bindConnectivityMonitor(impl: com.stash.core.media.streaming.DesktopConnectivityMonitor): com.stash.core.media.streaming.ConnectivityMonitor
+
     companion object {
         @Provides
         @Singleton
