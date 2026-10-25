@@ -81,7 +81,6 @@ class NowPlayingLyricsOffsetTest {
         lyricsPreference = mockk(relaxed = true),
         nowPlayingPreference = mockk(relaxed = true),
         lyricsSidecarWriter = mockk(relaxed = true),
-        appContext = mockk(relaxed = true),
         sleepTimerController = mockk(relaxed = true),
         ytMusicApiClient = mockk(relaxed = true),
         lyricsOutputOffsets = outputs,

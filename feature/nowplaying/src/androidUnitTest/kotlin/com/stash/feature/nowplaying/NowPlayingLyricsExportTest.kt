@@ -195,7 +195,6 @@ class NowPlayingLyricsExportTest {
         lyricsPreference = mockk(relaxed = true),
         nowPlayingPreference = mockk(relaxed = true),
         lyricsSidecarWriter = lyricsSidecarWriter,
-        appContext = mockk<Context>(relaxed = true),
         sleepTimerController = mockk(relaxed = true),
         ytMusicApiClient = mockk<YTMusicApiClient>(relaxed = true),
     )

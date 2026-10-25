@@ -269,7 +269,6 @@ class NowPlayingWordSyncedLyricsTest {
         lyricsPreference = lyricsPreference,
         nowPlayingPreference = mockk(relaxed = true),
         lyricsSidecarWriter = mockk<LyricsSidecarWriter>(),
-        appContext = mockk<Context>(relaxed = true),
         sleepTimerController = mockk(relaxed = true),
         ytMusicApiClient = mockk<YTMusicApiClient>(relaxed = true),
     )

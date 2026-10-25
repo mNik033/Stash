@@ -13,15 +13,13 @@ import com.stash.core.media.listen.ListenTogetherState
 import com.stash.core.media.listen.SessionEvent
 import com.stash.core.model.listen.ServerMessage
 import com.stash.core.model.share.SharedTrack
-import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 
 /** Now Playing's Listen Together controls (spec §5). All the work happens in the session; this only forwards. */
-@HiltViewModel
-class ListenTogetherViewModel @Inject constructor(
+open class ListenTogetherViewModel(
     private val controller: ListenTogetherController,
     private val sharePreference: SharePreference,
     private val playerRepository: PlayerRepository,

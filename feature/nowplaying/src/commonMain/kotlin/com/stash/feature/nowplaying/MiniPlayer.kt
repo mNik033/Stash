@@ -46,7 +46,6 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.shadow.Shadow
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.customActions
@@ -58,7 +57,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.hilt.navigation.compose.hiltViewModel
+import com.stash.feature.nowplaying.nowPlayingViewModel
+import com.stash.feature.nowplaying.listenTogetherViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
@@ -134,8 +134,8 @@ fun MiniPlayer(
     onOpenQueue: () -> Unit,
     modifier: Modifier = Modifier,
     sheet: PlayerSheetState? = null,
-    viewModel: NowPlayingViewModel = hiltViewModel(),
-    listen: ListenTogetherViewModel = hiltViewModel(),
+    viewModel: NowPlayingViewModel = nowPlayingViewModel(),
+    listen: ListenTogetherViewModel = listenTogetherViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     // Kept as a State and read only inside drawBehind below: the progress line redraws per
@@ -256,10 +256,10 @@ fun MiniPlayer(
                         if (artModel != null) {
                             // Remembered per cover: a fresh request each recomposition makes Coil treat
                             // it as a new load.
-                            val context = LocalContext.current
+                            val context = coil3.compose.LocalPlatformContext.current
                             // Cached under the plain path/URL: the travelling cover (and Now Playing's
                             // big one) show this bitmap as their placeholder while theirs decodes.
-                            val artRequest = remember(artModel) {
+                            val artRequest = remember(context, artModel) {
                                 ImageRequest.Builder(context)
                                     .data(artModel)
                                     .memoryCacheKey(artModel as? String)

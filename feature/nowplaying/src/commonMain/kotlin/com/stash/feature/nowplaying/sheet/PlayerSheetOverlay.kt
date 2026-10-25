@@ -52,7 +52,7 @@ import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.LayoutDirection
-import androidx.hilt.navigation.compose.hiltViewModel
+import com.stash.feature.nowplaying.nowPlayingViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
 import com.stash.core.ui.ambient.rememberReducedMotion
@@ -82,7 +82,7 @@ fun PlayerSheetOverlay(
     onNavigateToArtist: (id: String, name: String, avatarUrl: String?, focusAlbum: String?) -> Unit,
     onNavigateToAlbum: (albumId: String, name: String, artUrl: String?, artistName: String) -> Unit,
     modifier: Modifier = Modifier,
-    viewModel: NowPlayingViewModel = hiltViewModel(),
+    viewModel: NowPlayingViewModel = nowPlayingViewModel(),
 ) {
     val density = LocalDensity.current
     val reducedMotion = rememberReducedMotion()

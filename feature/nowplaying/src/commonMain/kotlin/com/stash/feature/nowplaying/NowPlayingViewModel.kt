@@ -1,6 +1,5 @@
 package com.stash.feature.nowplaying
 
-import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.stash.core.data.lossless.LosslessUpgrader
@@ -31,8 +30,6 @@ import com.stash.feature.nowplaying.ui.lyricsPositionMs
 import com.stash.feature.nowplaying.ui.lyricsSeekTargetMs
 import com.stash.feature.nowplaying.ui.lyricsViewStateFor
 import com.stash.feature.nowplaying.ui.lyricsViewStateForResult
-import dagger.hilt.android.lifecycle.HiltViewModel
-import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.BufferOverflow
@@ -80,22 +77,16 @@ data class ArtistNavTarget(
  * maps them into a single [NowPlayingUiState], and exposes one-shot action functions
  * that delegate to the repository.
  */
-@HiltViewModel
-class NowPlayingViewModel @Inject constructor(
+open class NowPlayingViewModel(
     private val playerRepository: PlayerRepository,
     private val sleepTimerController: SleepTimerController,
     private val musicRepository: MusicRepository,
     private val likeCoordinator: com.stash.core.data.social.LikeCoordinator,
     private val losslessUpgrader: LosslessUpgrader,
-    // v0.9.36 Task 12 — lyrics view observes the lyrics row and may
-    // enqueue a priority on-open fetch. WorkManager is sourced via
-    // `WorkManager.getInstance(appContext)` to match the rest of the
-    // codebase (it's not Hilt-injectable in this project).
     private val lyricsRepository: LyricsRepository,
     private val lyricsPreference: com.stash.core.data.prefs.LyricsPreference,
     private val nowPlayingPreference: NowPlayingPreference,
     private val lyricsSidecarWriter: LyricsSidecarWriter,
-    @ApplicationContext private val appContext: Context,
     // Tap-to-artist: resolves the playing track's artist NAME to a YT
     // browseId so Now Playing can open the artist profile.
     private val ytMusicApiClient: com.stash.data.ytmusic.YTMusicApiClient,
@@ -1050,7 +1041,7 @@ class NowPlayingViewModel @Inject constructor(
     } catch (e: CancellationException) {
         throw e
     } catch (e: Exception) {
-        android.util.Log.w("NowPlayingViewModel", "ensureTrackPersisted failed", e)
+        com.stash.core.common.Log.w("NowPlayingViewModel", "ensureTrackPersisted failed", e)
         null
     }
 
@@ -1557,7 +1548,7 @@ class NowPlayingViewModel @Inject constructor(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                android.util.Log.w("NowPlayingViewModel", "stash like toggle failed", e)
+                com.stash.core.common.Log.w("NowPlayingViewModel", "stash like toggle failed", e)
                 _userMessages.tryEmit(
                     if (wasLiked) "Couldn't remove from Liked Songs"
                     else "Couldn't add to Liked Songs"

@@ -1,5 +1,8 @@
 plugins {
-    id("stash.android.feature")
+    id("stash.kmp.library")
+    id("stash.kmp.compose")
+    alias(libs.plugins.hilt)
+    alias(libs.plugins.ksp)
 }
 
 android {
@@ -7,52 +10,64 @@ android {
 
     testOptions {
         unitTests {
-            // Return Kotlin defaults from stubbed Android SDK methods so
-            // android.util.Log calls in production code don't throw in JVM tests.
             isReturnDefaultValues = true
-            // Robolectric (the player sheet's back-order test) boots on the merged resources.
             isIncludeAndroidResources = true
         }
     }
 }
 
-dependencies {
-    implementation(project(":core:media"))
-    implementation(project(":core:data"))
-    implementation(project(":core:auth"))
-    // Track-artist display collapses collaboration credits to their lead act
-    // via String.primaryArtist.
-    implementation(project(":core:common"))
-    // v0.9.36 — Now Playing lyrics sheet observes LyricsRepository and
-    // enqueues the priority on-open LyricsFetchWorker. work-runtime gives
-    // us WorkManager + OneTimeWorkRequestBuilder for the priority enqueue.
-    implementation(project(":data:lyrics"))
-    // Tap-to-artist: resolveArtist(name) → YT browseId for the Now Playing
-    // track → artist-profile navigation.
-    implementation(project(":data:ytmusic"))
-    implementation(libs.work.runtime.ktx)
-    implementation(libs.coil.compose)
-    implementation(libs.compose.material.icons.extended)
-    // AppForeground: the lyrics prefetch runs only while Stash is in the foreground.
-    implementation(libs.lifecycle.process)
+kotlin {
+    sourceSets {
+        commonMain.dependencies {
+            implementation(project(":core:ui"))
+            implementation(project(":core:model"))
+            implementation(project(":core:common"))
+            implementation(project(":core:data"))
+            implementation(project(":core:media"))
+            implementation(project(":core:auth"))
+            implementation(project(":data:lyrics"))
+            implementation(project(":data:ytmusic"))
 
-    // v0.9.18 — first tests in this module. Stand up the same JUnit +
-    // mockk + coroutines-test + Robolectric harness that :feature:home
-    // and :core:media use, so future ViewModel tests in this module
-    // have a uniform foundation.
+            implementation(libs.lifecycle.runtime.compose)
+            implementation(libs.lifecycle.viewmodel.compose)
+            implementation(libs.coil.compose)
+            implementation(libs.dagger)
+        }
+
+        androidMain.dependencies {
+            implementation(libs.hilt.android)
+            implementation(libs.hilt.navigation.compose)
+            implementation(libs.work.runtime.ktx)
+            implementation(libs.lifecycle.process)
+            implementation(libs.core.ktx)
+        }
+
+        desktopMain.dependencies {
+            implementation(libs.dagger)
+        }
+    }
+}
+
+dependencies {
+    kspAndroid(libs.hilt.android.compiler)
+
+    testImplementation(project(":core:ui"))
+    testImplementation(project(":core:model"))
+    testImplementation(project(":core:common"))
+    testImplementation(project(":core:data"))
+    testImplementation(project(":core:media"))
+    testImplementation(project(":core:auth"))
+    testImplementation(project(":data:lyrics"))
+    testImplementation(project(":data:ytmusic"))
+
+    testImplementation(platform(libs.compose.bom))
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.1")
-    // Turbine: ergonomic SharedFlow assertions. NowPlayingViewModel's
-    // userMessages is a DROP_OLDEST buffer; without an active collector
-    // sitting on the channel between emits, the first message in a
-    // back-to-back pair is lost — Turbine's awaitItem() is the canonical
-    // fix.
     testImplementation("app.cash.turbine:turbine:1.1.0")
     testImplementation(libs.mockk)
     testImplementation(libs.androidx.test.core)
     testImplementation(libs.robolectric)
-    // The player sheet's back-order test composes on Robolectric.
-    testImplementation(platform(libs.compose.bom))
     testImplementation("androidx.compose.ui:ui-test-junit4")
     testImplementation("androidx.compose.ui:ui-test-manifest")
 }
+

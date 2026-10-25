@@ -1,7 +1,5 @@
 package com.stash.feature.nowplaying.sheet
 
-import com.stash.core.media.service.StashPlaybackService
-
 /**
  * Closes the player when the app navigates while it is open (an artist from Now Playing, a link,
  * a tab switch from the snackbar): the new page opens behind the closing player, and Back from it
@@ -27,10 +25,11 @@ class CollapseOnNavigation(private val sheet: PlayerSheetState) {
 object PlayerSheetDeepLink {
     /** MainActivity's pending deep-link target for "open the full player". */
     const val TARGET = "player"
+    const val ACTION_OPEN_PLAYER = "com.stash.action.OPEN_PLAYER"
 
     /** The deep-link target for a launch intent's [action], or null when it isn't the notification's. */
     fun targetFor(action: String?): String? =
-        if (action == StashPlaybackService.ACTION_OPEN_PLAYER) TARGET else null
+        if (action == ACTION_OPEN_PLAYER) TARGET else null
 
     /** Opens the player for [target]; false (nothing done) for any other target. */
     fun handle(target: String?, sheet: PlayerSheetState): Boolean {

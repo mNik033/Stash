@@ -27,7 +27,6 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.stash.core.media.output.HiResOutputController
@@ -35,13 +34,12 @@ import com.stash.core.media.output.SignalQuality
 import com.stash.core.media.output.SignalVerdict
 import com.stash.core.media.output.withService
 import com.stash.core.ui.theme.StashTheme
-import dagger.hilt.android.lifecycle.HiltViewModel
+import com.stash.feature.nowplaying.signalPathViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.flow.StateFlow
 
 /** Exposes the live signal path to Now Playing. */
-@HiltViewModel
-class SignalPathViewModel @Inject constructor(
+open class SignalPathViewModel(
     controller: HiResOutputController,
 ) : ViewModel() {
     val verdict: StateFlow<SignalVerdict?> = controller.signalPath
@@ -87,7 +85,7 @@ fun SignalPathSheet(
     onDismiss: () -> Unit,
     onOpenSettings: (() -> Unit)?,
     service: String? = null,
-    viewModel: SignalPathViewModel = hiltViewModel(),
+    viewModel: SignalPathViewModel = signalPathViewModel(),
 ) {
     val verdict by viewModel.verdict.collectAsStateWithLifecycle()
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)

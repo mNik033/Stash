@@ -58,7 +58,6 @@ class NowPlayingPinsViewModelTest {
         lyricsPreference = mockk(relaxed = true),
         nowPlayingPreference = preference,
         lyricsSidecarWriter = mockk(relaxed = true),
-        appContext = mockk<Context>(relaxed = true),
         sleepTimerController = mockk(relaxed = true),
         ytMusicApiClient = mockk(relaxed = true),
     )

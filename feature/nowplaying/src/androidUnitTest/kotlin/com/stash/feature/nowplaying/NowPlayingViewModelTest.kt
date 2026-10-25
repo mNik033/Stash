@@ -246,7 +246,6 @@ class NowPlayingViewModelFindInFlacTest {
     // These tests don't exercise either surface, so a relaxed mock for
     // both is enough to satisfy the constructor.
     private val lyricsRepository: LyricsRepository = mockk(relaxed = true)
-    private val appContext: Context = mockk(relaxed = true)
 
     private fun newViewModel(
         nowPlayingPreference: NowPlayingPreference = mockk(relaxed = true),
@@ -259,7 +258,6 @@ class NowPlayingViewModelFindInFlacTest {
         lyricsPreference = mockk(relaxed = true),
         nowPlayingPreference = nowPlayingPreference,
         lyricsSidecarWriter = mockk(relaxed = true),
-        appContext = appContext,
         sleepTimerController = mockk(relaxed = true),
         ytMusicApiClient = mockk(relaxed = true),
     )
@@ -421,7 +419,6 @@ class NowPlayingViewModelLikeRoutingTest {
     }
     private val upgrader: LosslessUpgrader = mockk(relaxed = true)
     private val lyricsRepository: LyricsRepository = mockk(relaxed = true)
-    private val appContext: Context = mockk(relaxed = true)
 
     private fun newViewModel(): NowPlayingViewModel = NowPlayingViewModel(
         playerRepository = playerRepository,
@@ -432,7 +429,6 @@ class NowPlayingViewModelLikeRoutingTest {
         lyricsPreference = mockk(relaxed = true),
         nowPlayingPreference = mockk(relaxed = true),
         lyricsSidecarWriter = mockk(relaxed = true),
-        appContext = appContext,
         sleepTimerController = mockk(relaxed = true),
         ytMusicApiClient = mockk(relaxed = true),
     )
@@ -496,7 +492,6 @@ class NowPlayingViewModelTrackTapTest {
     }
     private val upgrader: LosslessUpgrader = mockk(relaxed = true)
     private val lyricsRepository: LyricsRepository = mockk(relaxed = true)
-    private val appContext: Context = mockk(relaxed = true)
 
     private fun newViewModel(api: YTMusicApiClient): NowPlayingViewModel = NowPlayingViewModel(
         playerRepository = playerRepository,
@@ -507,7 +502,6 @@ class NowPlayingViewModelTrackTapTest {
         lyricsPreference = mockk(relaxed = true),
         nowPlayingPreference = mockk(relaxed = true),
         lyricsSidecarWriter = mockk(relaxed = true),
-        appContext = appContext,
         sleepTimerController = mockk(relaxed = true),
         ytMusicApiClient = api,
     )
@@ -645,7 +639,6 @@ class NowPlayingViewModelRadioTest {
             lyricsPreference = mockk(relaxed = true),
             nowPlayingPreference = mockk(relaxed = true),
             lyricsSidecarWriter = mockk(relaxed = true),
-            appContext = mockk(relaxed = true),
             sleepTimerController = mockk(relaxed = true),
             ytMusicApiClient = mockk(relaxed = true),
         )
@@ -730,7 +723,6 @@ class NowPlayingViewModelPlayPauseTest {
         lyricsPreference = mockk(relaxed = true),
         nowPlayingPreference = mockk(relaxed = true),
         lyricsSidecarWriter = mockk(relaxed = true),
-        appContext = mockk(relaxed = true),
         sleepTimerController = mockk(relaxed = true),
         ytMusicApiClient = mockk(relaxed = true),
     )
@@ -802,7 +794,6 @@ class NowPlayingViewModelTransientTrackTest {
         lyricsPreference = mockk(relaxed = true),
         nowPlayingPreference = mockk(relaxed = true),
         lyricsSidecarWriter = mockk(relaxed = true),
-        appContext = mockk(relaxed = true),
         sleepTimerController = mockk(relaxed = true),
         ytMusicApiClient = mockk(relaxed = true),
     )
@@ -911,7 +902,6 @@ class NowPlayingViewModelPositionTest {
         lyricsPreference = mockk(relaxed = true),
         nowPlayingPreference = mockk(relaxed = true),
         lyricsSidecarWriter = mockk(relaxed = true),
-        appContext = mockk(relaxed = true),
         sleepTimerController = mockk(relaxed = true),
         ytMusicApiClient = mockk(relaxed = true),
     )
@@ -976,7 +966,6 @@ class NowPlayingViewModelQueueUndoTest {
         lyricsPreference = mockk(relaxed = true),
         nowPlayingPreference = mockk(relaxed = true),
         lyricsSidecarWriter = mockk(relaxed = true),
-        appContext = mockk(relaxed = true),
         sleepTimerController = mockk(relaxed = true),
         ytMusicApiClient = mockk(relaxed = true),
     )

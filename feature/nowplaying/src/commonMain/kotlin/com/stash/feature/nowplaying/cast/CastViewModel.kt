@@ -5,7 +5,6 @@ import androidx.lifecycle.viewModelScope
 import com.stash.core.media.cast.CastConnection
 import com.stash.core.media.cast.CastDevice
 import com.stash.core.media.cast.CastDevices
-import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.channels.awaitClose
@@ -18,8 +17,7 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
 
 /** Now Playing's cast button and speaker sheet (spec 2026-10-06 §5). */
-@HiltViewModel
-class CastViewModel @Inject constructor(
+open class CastViewModel(
     private val devices: CastDevices,
 ) : ViewModel() {
     val connection: StateFlow<CastConnection> = devices.connection

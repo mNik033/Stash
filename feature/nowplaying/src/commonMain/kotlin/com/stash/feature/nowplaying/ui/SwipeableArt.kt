@@ -1,6 +1,5 @@
 package com.stash.feature.nowplaying.ui
 
-import android.os.SystemClock
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
@@ -122,7 +121,7 @@ internal fun SwipeableArt(
                                         val next = nextSeekBurst(
                                             previous = burst,
                                             direction = direction,
-                                            nowMs = SystemClock.uptimeMillis(),
+                                            nowMs = System.nanoTime() / 1_000_000L,
                                             positionMs = currentPositionMs(),
                                             durationMs = currentDurationMs,
                                         )

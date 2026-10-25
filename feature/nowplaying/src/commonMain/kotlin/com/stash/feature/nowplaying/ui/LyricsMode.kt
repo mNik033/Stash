@@ -52,10 +52,10 @@ import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.painter.ColorPainter
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalConfiguration
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalView
+import coil3.compose.LocalPlatformContext
+import com.stash.core.ui.ambient.platformAllowHardware
+import com.stash.feature.nowplaying.KeepScreenOn
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
@@ -70,7 +70,6 @@ import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
-import coil3.request.allowHardware
 import coil3.size.Precision
 import com.stash.core.ui.theme.SpaceGrotesk
 import java.util.Locale
@@ -107,17 +106,7 @@ internal fun LyricsPane(
     light: Boolean,
     modifier: Modifier = Modifier,
 ) {
-    // Hold the screen on while lyrics are on screen. Restore the previous value rather than
-    // forcing false, so we never clear a keep-screen-on set by something else.
-    // Only while playing: paused with the phone set down, the screen never timed out (battery,
-    // and static lyrics burning into an AMOLED panel).
-    val view = LocalView.current
-    DisposableEffect(view, isPlaying) {
-        if (!isPlaying) return@DisposableEffect onDispose { }
-        val wasKeepingScreenOn = view.keepScreenOn
-        view.keepScreenOn = true
-        onDispose { view.keepScreenOn = wasKeepingScreenOn }
-    }
+    KeepScreenOn(isPlaying)
 
     BoxWithConstraints(modifier = modifier.lyricsEdgeFade()) {
         val density = LocalDensity.current
@@ -285,20 +274,16 @@ private const val NP_ART_MAX_DECODE_PX = 1440
  */
 @Composable
 internal fun rememberNpArtRequest(artModel: Any?): ImageRequest {
-    val context = LocalContext.current
-    val configuration = LocalConfiguration.current
-    val decodePx = with(LocalDensity.current) {
-        minOf(configuration.screenWidthDp, configuration.screenHeightDp).dp.roundToPx()
-    }.coerceIn(1, NP_ART_MAX_DECODE_PX)
-    return remember(context, artModel, decodePx) {
+    val context = LocalPlatformContext.current
+    return remember(context, artModel) {
         ImageRequest.Builder(context)
             .data(artModel)
             .placeholderMemoryCacheKey(artModel as? String)
-            .size(decodePx)
+            .size(NP_ART_MAX_DECODE_PX)
             .precision(Precision.INEXACT)
             // Software, as when Now Playing sampled its palette from this bitmap. Nothing reads
             // its pixels any more, so a hardware bitmap would do: a separate, measured change.
-            .allowHardware(false)
+            .platformAllowHardware(false)
             .build()
     }
 }

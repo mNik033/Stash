@@ -7,7 +7,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.stash.core.media.listen.ListenTogetherState
 import com.stash.core.model.Track
@@ -35,8 +34,8 @@ import com.stash.feature.nowplaying.ui.QueueBottomSheet
 @Composable
 fun PlayerQueueSheet(
     onDismiss: () -> Unit,
-    viewModel: NowPlayingViewModel = hiltViewModel(),
-    listen: ListenTogetherViewModel = hiltViewModel(),
+    viewModel: NowPlayingViewModel = nowPlayingViewModel(),
+    listen: ListenTogetherViewModel = listenTogetherViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val together by listen.state.collectAsStateWithLifecycle()

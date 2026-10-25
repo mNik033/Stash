@@ -1,6 +1,6 @@
 package com.stash.feature.nowplaying.ui
 
-import android.provider.Settings
+import com.stash.core.ui.ambient.rememberReducedMotion
 import androidx.compose.foundation.MarqueeSpacing
 import androidx.compose.foundation.basicMarquee
 import androidx.compose.material3.Text
@@ -14,7 +14,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.layout
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -38,7 +37,7 @@ internal fun NpMarqueeText(
     color: Color,
     modifier: Modifier = Modifier,
 ) {
-    if (rememberNpReducedMotion()) {
+    if (rememberReducedMotion()) {
         Text(text = text, style = style, color = color, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = modifier)
         return
     }
@@ -94,19 +93,6 @@ private class MarqueeWidths {
     var content = 0
 }
 
-/** The system "animator duration scale" set to off (Remove animations): the reduced-motion case. */
-@Composable
-internal fun rememberNpReducedMotion(): Boolean {
-    val resolver = LocalContext.current.contentResolver
-    return remember(resolver) {
-        try {
-            Settings.Global.getFloat(resolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f) == 0f
-        } catch (_: Exception) {
-            false
-        }
-    }
-}
-
 /** A beat to read the start before it moves, and again before each repeat. */
 private const val MARQUEE_DELAY_MS = 3_800
 
@@ -115,3 +101,6 @@ private val MARQUEE_VELOCITY = 26.dp
 
 /** The trailing fade while the text overflows. */
 private val MARQUEE_FADE = 16.dp
+
+@Composable
+internal fun rememberNpReducedMotion(): Boolean = rememberReducedMotion()

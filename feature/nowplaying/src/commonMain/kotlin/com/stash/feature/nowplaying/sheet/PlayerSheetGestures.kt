@@ -1,6 +1,6 @@
 package com.stash.feature.nowplaying.sheet
 
-import androidx.activity.compose.BackHandler
+import com.stash.feature.nowplaying.BackHandler
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.WindowInsets

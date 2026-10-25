@@ -91,7 +91,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.painter.ColorPainter
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -99,8 +98,15 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.stash.feature.nowplaying.nowPlayingViewModel
+import com.stash.feature.nowplaying.listenTogetherViewModel
+import com.stash.feature.nowplaying.castViewModel
+import com.stash.feature.nowplaying.signalPathViewModel
+import com.stash.feature.nowplaying.rememberTouchExplorationEnabled
+import com.stash.feature.nowplaying.platformShowToast
+import com.stash.feature.nowplaying.platformShareInvite
+import com.stash.feature.nowplaying.platformCopyInvite
 import coil3.compose.AsyncImage
 import com.stash.core.model.RepeatMode
 import com.stash.core.model.isFlac
@@ -152,7 +158,7 @@ fun NowPlayingScreen(
     onDismiss: () -> Unit,
     onNavigateToArtist: (id: String, name: String, avatarUrl: String?, focusAlbum: String?) -> Unit,
     onNavigateToAlbum: (albumId: String, name: String, artUrl: String?, artistName: String) -> Unit,
-    viewModel: NowPlayingViewModel = hiltViewModel(),
+    viewModel: NowPlayingViewModel = nowPlayingViewModel(),
     sheet: PlayerSheetState? = null,
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -193,7 +199,7 @@ fun NowPlayingScreen(
     var showSleepTimerSheet by remember { mutableStateOf(false) }
     // Signal path (hi-res output): opened by tapping the quality line.
     var showSignalPath by remember { mutableStateOf(false) }
-    val signalPathViewModel: com.stash.feature.nowplaying.ui.SignalPathViewModel = hiltViewModel()
+    val signalPathViewModel: com.stash.feature.nowplaying.ui.SignalPathViewModel = signalPathViewModel()
     val signalVerdict by signalPathViewModel.verdict.collectAsStateWithLifecycle()
     var showCustomTimerDialog by remember { mutableStateOf(false) }
     val sleepTimerState by viewModel.sleepTimerState.collectAsStateWithLifecycle()
@@ -207,12 +213,12 @@ fun NowPlayingScreen(
     var queueSaveTrack by remember { mutableStateOf<com.stash.core.model.Track?>(null) }
     val shareTrack by viewModel.shareTrack.collectAsStateWithLifecycle()
     // Listen Together (spec 2026-09-24 §5).
-    val together: com.stash.feature.nowplaying.listen.ListenTogetherViewModel = hiltViewModel()
+    val together: com.stash.feature.nowplaying.listen.ListenTogetherViewModel = listenTogetherViewModel()
     val togetherState by together.state.collectAsStateWithLifecycle()
     val room = togetherState as? ListenTogetherState.InRoom
     var showStartTogether by remember { mutableStateOf(false) }
     // Google Cast (spec 2026-10-06 §5). Hidden on phones without Play Services.
-    val castViewModel: com.stash.feature.nowplaying.cast.CastViewModel = hiltViewModel()
+    val castViewModel: com.stash.feature.nowplaying.cast.CastViewModel = castViewModel()
     val castConnection by castViewModel.connection.collectAsStateWithLifecycle()
     val casting = castConnection is com.stash.core.media.cast.CastConnection.Connected
     var showCastSheet by remember { mutableStateOf(false) }
@@ -261,7 +267,9 @@ fun NowPlayingScreen(
 
     // The ViewModel's userMessages are toasted once, app-wide, by PlayerMessagesToaster (this
     // screen and the mini player share the ViewModel: two collectors toasted each message twice).
-    val toastContext = LocalContext.current
+    val showToast = platformShowToast()
+    val shareInvite = platformShareInvite()
+    val copyInvite = platformCopyInvite()
 
     // Tap-to-artist: the VM resolves the artist name → browseId off the main
     // thread and emits a one-shot nav target; forward it to the host.
@@ -286,13 +294,11 @@ fun NowPlayingScreen(
     // TalkBack: when the player settles open, focus moves to its Dismiss button, so the reader
     // starts at the top of the player rather than wherever it was on the page behind.
     val dismissFocus = remember { androidx.compose.ui.focus.FocusRequester() }
+    val touchExploration = rememberTouchExplorationEnabled()
     if (sheet != null) {
-        val a11yContext = LocalContext.current
-        LaunchedEffect(sheet) {
+        LaunchedEffect(sheet, touchExploration) {
             androidx.compose.runtime.snapshotFlow { sheet.settledAnchor }.collect { anchor ->
-                val am = a11yContext.getSystemService(android.content.Context.ACCESSIBILITY_SERVICE)
-                    as? android.view.accessibility.AccessibilityManager
-                if (anchor == PlayerSheetAnchor.FULL && am?.isTouchExplorationEnabled == true) {
+                if (anchor == PlayerSheetAnchor.FULL && touchExploration) {
                     runCatching { dismissFocus.requestFocus() }
                 }
             }
@@ -394,7 +400,7 @@ fun NowPlayingScreen(
             onDispose { unregister() }
         }
     } else {
-        androidx.activity.compose.BackHandler(enabled = reading) { viewModel.onDismissLyrics() }
+        BackHandler(enabled = reading) { viewModel.onDismissLyrics() }
     }
 
     // What the sheet's progress moves, all read in layers: the controls fade in over the last
@@ -463,7 +469,7 @@ fun NowPlayingScreen(
     }
     // The row's width: the window less Now Playing's 24dp margins. Pins that don't fit at 44dp
     // go to the ⋮ menu for now (narrow phones, large display sizes); see fitTopRow.
-    val rowWidthDp = androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp - 48f
+    val rowWidthDp = rememberScreenWidthDp() - 48f
     val rowFit = remember(pins, actionCtx, rowWidthDp) {
         fitTopRow(topRowActions(pins, actionCtx), rowWidthDp)
     }
@@ -501,10 +507,10 @@ fun NowPlayingScreen(
     }
     // A tap on the top row. A pinned Download on a downloaded track never deletes: it only says
     // so, and "Remove download" stays a labelled row in the ⋮ menu (isInertPinnedTap).
-    val onPinnedAction: (NowPlayingAction) -> Unit = remember(onAction, actionCtx) {
+    val onPinnedAction: (NowPlayingAction) -> Unit = remember(onAction, actionCtx, showToast) {
         { action ->
             if (isInertPinnedTap(action, actionCtx)) {
-                android.widget.Toast.makeText(toastContext, "Downloaded", android.widget.Toast.LENGTH_SHORT).show()
+                showToast("Downloaded")
             } else {
                 onAction(action)
             }
@@ -576,8 +582,8 @@ fun NowPlayingScreen(
             onAnswer = together::answerSuggestion,
             onMakeHost = together::makeHost,
             onEditQueue = together::editQueue,
-            onCopyLink = { com.stash.feature.nowplaying.listen.copyInvite(toastContext, it) },
-            onShare = { com.stash.feature.nowplaying.listen.shareInvite(toastContext, it) },
+            onCopyLink = { copyInvite(it) },
+            onShare = { shareInvite(it) },
             onLeave = {
                 val r = room
                 when {
@@ -1918,36 +1924,6 @@ private fun CustomSpeedDialog(
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
     )
-}
-
-@androidx.compose.ui.tooling.preview.Preview(
-    name = "QualityLine — streaming",
-    showBackground = true,
-    backgroundColor = 0xFF101012,
-)
-@Composable
-private fun PreviewQualityLineStreaming() {
-    com.stash.core.ui.theme.StashTheme {
-        QualityLine(
-            qualityText = "OPUS \u00B7 160 kbps",
-            isStreaming = true,
-        )
-    }
-}
-
-@androidx.compose.ui.tooling.preview.Preview(
-    name = "QualityLine — local",
-    showBackground = true,
-    backgroundColor = 0xFF101012,
-)
-@Composable
-private fun PreviewQualityLineLocal() {
-    com.stash.core.ui.theme.StashTheme {
-        QualityLine(
-            qualityText = "FLAC \u00B7 24-bit/96.0 kHz \u00B7 4233 kbps",
-            isStreaming = false,
-        )
-    }
 }
 
 /** Lyrics mode's header cover radius (CompactCover's clip), for the travelling cover to land on. */

@@ -65,7 +65,6 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.LiveRegionMode
-import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -414,7 +413,7 @@ private fun PinEditor(
     onDone: () -> Unit,
 ) {
     val haptics = LocalHapticFeedback.current
-    val view = LocalView.current
+    val announce = platformAnnounce()
     val full = pinsFull(pins)
     // The pinned group reads in row order (Queue last, as it sits at the far right).
     val pinned = editable.filter { it in pins }.sortedBy { if (it == NowPlayingAction.QUEUE) 1 else 0 }
@@ -466,8 +465,7 @@ private fun PinEditor(
                         // Refused at the cap: felt, and said aloud for TalkBack (storage
                         // enforces the cap too, inside the toggle's DataStore edit).
                         haptics.performHapticFeedback(HapticFeedbackType.Reject)
-                        @Suppress("DEPRECATION")
-                        view.announceForAccessibility(PINS_FULL_MESSAGE)
+                        announce(PINS_FULL_MESSAGE)
                     } else {
                         onTogglePin(action)
                     }
