@@ -15,11 +15,39 @@ kotlin {
     sourceSets {
         val desktopMain by getting {
             dependencies {
+                implementation(project(":core:model"))
+                implementation(project(":core:common"))
+                implementation(project(":core:network"))
+                implementation(project(":core:auth"))
+                implementation(project(":core:data"))
+                implementation(project(":core:media"))
+                implementation(project(":core:ui"))
+
+                implementation(project(":data:spotify"))
+                implementation(project(":data:ytmusic"))
+                implementation(project(":data:lyrics"))
+                implementation(project(":data:download"))
+
+                implementation(project(":feature:nowplaying"))
+                implementation(project(":feature:library"))
+                implementation(project(":feature:search"))
+                implementation(project(":feature:sync"))
+                implementation(project(":feature:settings"))
+
                 implementation(compose.desktop.currentOs)
                 implementation(compose.material3)
                 implementation(compose.foundation)
                 implementation(compose.ui)
                 implementation(compose.components.resources)
+
+                implementation(libs.coil.compose)
+                implementation(libs.coil.network.okhttp)
+                implementation(libs.lifecycle.runtime.compose)
+                implementation(libs.lifecycle.viewmodel.compose)
+                implementation(libs.kotlinx.serialization.json)
+                implementation(libs.datastore.preferences)
+                implementation(libs.okhttp)
+
                 implementation(libs.jna)
                 implementation(libs.jna.platform)
                 implementation(libs.dagger)
