@@ -24,6 +24,7 @@ object MpvBinding {
     val instance: MpvLib?
 
     init {
+        val userHome = System.getProperty("user.home")?.replace('\\', '/') ?: ""
         val candidateNames = when {
             Platform.isMac() -> listOf(
                 "/opt/homebrew/lib/libmpv.dylib",
@@ -33,7 +34,13 @@ object MpvBinding {
                 "libmpv.2",
                 "libmpv"
             )
-            Platform.isWindows() -> listOf("mpv-2", "libmpv-2", "mpv")
+            Platform.isWindows() -> listOf(
+                "$userHome/.stash/bin/libmpv-2.dll",
+                "$userHome/.stash/bin/mpv-2.dll",
+                "libmpv-2",
+                "mpv-2",
+                "mpv"
+            )
             else -> listOf("mpv", "libmpv.so.2", "libmpv.so")
         }
 
@@ -44,11 +51,13 @@ object MpvBinding {
             try {
                 loadedLib = Native.load(name, MpvLib::class.java)
                 loadedName = name
+                println("MpvBinding: successfully loaded native library from '$name'")
                 break
-            } catch (_: UnsatisfiedLinkError) {
+            } catch (e: UnsatisfiedLinkError) {
                 // Try next candidate
-            } catch (_: Throwable) {
-                // Suppress and continue
+                println("MpvBinding: candidate '$name' unsatisfied link: ${e.message}")
+            } catch (t: Throwable) {
+                println("MpvBinding: candidate '$name' threw: ${t.message}")
             }
         }
 

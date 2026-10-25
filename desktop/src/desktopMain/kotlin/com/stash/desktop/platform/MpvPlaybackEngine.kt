@@ -47,11 +47,22 @@ class MpvPlaybackEngine @Inject constructor() : PlaybackEngine, Closeable {
             if (h != null) {
                 lib.mpv_set_option_string(h, "vo", "null")
                 lib.mpv_set_option_string(h, "terminal", "no")
+                lib.mpv_set_option_string(h, "audio-display", "no")
+                lib.mpv_set_option_string(h, "gapless-audio", "yes")
+                lib.mpv_set_option_string(h, "ytdl", "yes")
                 val status = lib.mpv_initialize(h)
                 if (status >= 0) {
                     handle = h
+                    println("MpvPlaybackEngine: libmpv handle initialized successfully (handle=$h)")
+                } else {
+                    val err = lib.mpv_error_string(status)
+                    println("MpvPlaybackEngine: mpv_initialize failed: $err ($status)")
                 }
+            } else {
+                println("MpvPlaybackEngine: mpv_create returned null")
             }
+        } else {
+            println("MpvPlaybackEngine: MpvBinding.instance is null (libmpv not found)")
         }
     }
 
@@ -60,16 +71,18 @@ class MpvPlaybackEngine @Inject constructor() : PlaybackEngine, Closeable {
         _currentPositionMs = 0L
         _durationMs = item.durationMs
 
+        println("MpvPlaybackEngine: playing item='${item.title}' uri='${item.uri}' playWhenReady=$playWhenReady")
+
         val h = handle
         val lib = MpvBinding.instance
         if (h == null || lib == null) {
-            _playbackState.value = PlaybackEngine.State.Error(
-                "libmpv native library not available. Please install mpv on your system."
-            )
+            val msg = "libmpv native library not available. Please install mpv on your system or place libmpv-2.dll in ~/.stash/bin/"
+            println("MpvPlaybackEngine: $msg")
+            _playbackState.value = PlaybackEngine.State.Error(msg)
             return
         }
 
-        val code = lib.mpv_command(h, arrayOf("loadfile", item.uri, null))
+        val code = lib.mpv_command(h, arrayOf("loadfile", item.uri, "replace", null))
         if (code >= 0) {
             if (!playWhenReady) {
                 lib.mpv_set_property_string(h, "pause", "yes")
@@ -81,6 +94,7 @@ class MpvPlaybackEngine @Inject constructor() : PlaybackEngine, Closeable {
             }
         } else {
             val err = lib.mpv_error_string(code)
+            println("MpvPlaybackEngine: loadfile failed with code=$code, error='$err'")
             _playbackState.value = PlaybackEngine.State.Error("Failed to load file in mpv: $err")
         }
     }

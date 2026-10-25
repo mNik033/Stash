@@ -28,6 +28,7 @@ import javax.inject.Singleton
 @Singleton
 class DesktopPlayerRepository @Inject constructor(
     private val engine: PlaybackEngine,
+    private val streamResolver: DesktopStreamResolver,
 ) : PlayerRepository {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
@@ -138,18 +139,25 @@ class DesktopPlayerRepository @Inject constructor(
     }
 
     private fun playTrackItem(track: Track) {
-        val uri = track.filePath ?: track.spotifyUri ?: ""
-        val item = PlayableItem(
-            mediaId = track.id.toString(),
-            uri = uri,
-            title = track.title,
-            artist = track.artist,
-            album = track.album,
-            durationMs = track.durationMs,
-            isLocal = track.isDownloaded,
-            artworkUri = track.albumArtUrl ?: track.albumArtPath,
-        )
-        engine.play(item, playWhenReady = true)
+        scope.launch {
+            val uri = streamResolver.resolveForTrack(track)
+            if (uri.isNullOrBlank()) {
+                _userMessages.emit("Unable to play '${track.title}'. Stream not available.")
+                _playerState.value = _playerState.value.copy(isPlaying = false)
+                return@launch
+            }
+            val item = PlayableItem(
+                mediaId = track.id.toString(),
+                uri = uri,
+                title = track.title,
+                artist = track.artist,
+                album = track.album,
+                durationMs = track.durationMs,
+                isLocal = track.isDownloaded,
+                artworkUri = track.albumArtUrl ?: track.albumArtPath,
+            )
+            engine.play(item, playWhenReady = true)
+        }
     }
 
     override fun resumeLastQueue() {}
@@ -260,7 +268,7 @@ class DesktopPlayerRepository @Inject constructor(
 
     override suspend fun playTrack(track: Track): StreamRoutingResult {
         setQueue(listOf(track), 0, PlaybackSource.Unknown)
-        val uri = track.filePath ?: track.spotifyUri ?: ""
+        val uri = streamResolver.resolveForTrack(track) ?: return StreamRoutingResult.NotAvailable
         val playable = PlayableItem(
             mediaId = track.id.toString(),
             uri = uri,
@@ -276,15 +284,6 @@ class DesktopPlayerRepository @Inject constructor(
 
     override suspend fun playFromStream(item: TrackItem): StreamRoutingResult {
         val durationMs = (item.durationSeconds * 1000).toLong()
-        val playable = PlayableItem(
-            mediaId = item.videoId,
-            uri = item.videoId,
-            title = item.title,
-            artist = item.artist,
-            album = item.album.orEmpty(),
-            durationMs = durationMs,
-            artworkUri = item.thumbnailUrl,
-        )
         val track = Track(
             id = item.videoId.hashCode().toLong(),
             title = item.title,
@@ -294,7 +293,28 @@ class DesktopPlayerRepository @Inject constructor(
             albumArtUrl = item.thumbnailUrl,
             youtubeId = item.videoId,
         )
-        setQueue(listOf(track), 0, PlaybackSource.Unknown)
+        _playerState.value = _playerState.value.copy(
+            queue = listOf(track),
+            currentIndex = 0,
+            currentTrack = track,
+            isPlaying = true,
+        )
+
+        val uri = streamResolver.resolveStreamUrl(item.videoId)
+        if (uri.isNullOrBlank()) {
+            _playerState.value = _playerState.value.copy(isPlaying = false)
+            return StreamRoutingResult.NotAvailable
+        }
+
+        val playable = PlayableItem(
+            mediaId = item.videoId,
+            uri = uri,
+            title = item.title,
+            artist = item.artist,
+            album = item.album.orEmpty(),
+            durationMs = durationMs,
+            artworkUri = item.thumbnailUrl,
+        )
         engine.play(playable, playWhenReady = true)
         return StreamRoutingResult.Item(playable)
     }
