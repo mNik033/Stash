@@ -116,7 +116,7 @@ class StashPlaybackService : MediaLibraryService() {
     @Inject lateinit var discordRpcCoordinator: com.stash.core.data.discord.DiscordRpcCoordinator
 
     // Listen Together (spec 2026-09-24 §5): the session engine lives here and drives the master player.
-    @Inject lateinit var listenTogetherController: com.stash.core.media.listen.ListenTogetherController
+    @Inject lateinit var listenTogetherController: com.stash.core.media.listen.AndroidListenTogetherController
     @Inject lateinit var listenTogetherCatalog: com.stash.core.media.listen.DefaultSessionCatalog
     @Inject lateinit var roomApiClient: com.stash.core.data.listen.RoomApiClient
     @Inject lateinit var roomConnector: com.stash.core.data.listen.OkHttpRoomConnector

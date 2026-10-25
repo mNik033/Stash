@@ -32,7 +32,7 @@ import kotlinx.coroutines.launch
  */
 class ListenTogetherSession(
     private val scope: CoroutineScope,
-    private val controller: ListenTogetherController,
+    private val controller: AndroidListenTogetherController,
     private val player: SessionPlayer,
     private val catalog: SessionCatalog,
     private val api: RoomApiClient,

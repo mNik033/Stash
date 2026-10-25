@@ -47,6 +47,10 @@ abstract class MediaModule {
     @Singleton
     abstract fun bindPlayerRepository(impl: PlayerRepositoryImpl): PlayerRepository
 
+    @Binds
+    @Singleton
+    abstract fun bindListenTogetherController(impl: com.stash.core.media.listen.AndroidListenTogetherController): com.stash.core.media.listen.ListenTogetherController
+
     // ------------------------------------------------------------------
     // EQ rebuild — Task 11 (additive only; legacy EqualizerManager untouched)
     // ------------------------------------------------------------------

@@ -148,7 +148,7 @@ class OutputSession(
  * Standard and dropped by Android when the DAC is unplugged.
  */
 @Singleton
-class HiResOutputController @Inject constructor(
+actual class HiResOutputController @Inject constructor(
     @ApplicationContext context: Context,
     preference: HiResOutputPreference,
     eqController: EqController,
@@ -182,7 +182,7 @@ class HiResOutputController @Inject constructor(
             .stateIn(scope, SharingStarted.Eagerly, false)
 
     /** The listener-facing explanation of [output], ready for the signal-path sheet. */
-    val signalPath: StateFlow<SignalVerdict?> =
+    actual val signalPath: StateFlow<SignalVerdict?> =
         combine(source, output, dspActive) { s, o, d -> SignalPathExplainer.explain(s, o, d) }
             .stateIn(scope, SharingStarted.Eagerly, null)
 

@@ -19,5 +19,15 @@ interface DesktopMediaModule {
         @Singleton
         fun provideSleepTimerController(playerRepository: PlayerRepository): SleepTimerController =
             SleepTimerController(playerRepository)
+
+        @Provides
+        @Singleton
+        fun provideCastDevices(): com.stash.core.media.cast.CastDevices =
+            com.stash.core.media.cast.DesktopCastDevices
+
+        @Provides
+        @Singleton
+        fun provideListenTogetherController(): com.stash.core.media.listen.ListenTogetherController =
+            com.stash.core.media.listen.DesktopListenTogetherController()
     }
 }
