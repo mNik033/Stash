@@ -1,6 +1,6 @@
 package com.stash.data.ytmusic
 
-import android.util.Log
+import com.stash.core.common.Log
 import com.stash.core.model.SyncResult
 import com.stash.data.ytmusic.model.AlbumDetail
 import com.stash.data.ytmusic.model.AlbumSearch

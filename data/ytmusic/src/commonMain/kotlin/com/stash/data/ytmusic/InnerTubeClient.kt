@@ -1,6 +1,6 @@
 package com.stash.data.ytmusic
 
-import android.util.Log
+import com.stash.core.common.Log
 import com.stash.core.auth.TokenManager
 import com.stash.core.auth.youtube.YouTubeCookieHelper
 import com.stash.data.ytmusic.model.MusicVideoType
