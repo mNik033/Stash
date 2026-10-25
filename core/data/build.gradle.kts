@@ -1,58 +1,87 @@
 plugins {
-    id("stash.android.library")
+    id("stash.kmp.library")
     alias(libs.plugins.hilt)
     alias(libs.plugins.ksp)
     alias(libs.plugins.kotlin.serialization)
 }
+
 android {
     namespace = "com.stash.core.data"
 
-    // MigrationTestHelper reads schema JSONs from test assets so
-    // runMigrationsAndValidate can compare the migrated DB to the target
-    // schema. Without this, `helper.runMigrationsAndValidate(..., 19, ...)`
-    // throws FileNotFoundException for "19.json".
-    sourceSets["test"].assets.srcDir("$projectDir/schemas")
+    sourceSets {
+        getByName("test") {
+            assets.srcDir("$projectDir/schemas")
+            resources.srcDir("src/commonTest/resources")
+        }
+    }
 
     testOptions {
         unitTests {
-            // Return Kotlin defaults (Unit) from stubbed Android SDK methods —
-            // needed so android.util.Log.d calls inside production code don't
-            // throw "not mocked" in JVM unit tests.
             isReturnDefaultValues = true
-            // Robolectric needs the merged AGP resources to boot its
-            // Android runtime shim during JVM unit tests.
             isIncludeAndroidResources = true
         }
     }
 }
+
 ksp {
     arg("room.schemaLocation", "$projectDir/schemas")
     arg("room.incremental", "true")
     arg("room.generateKotlin", "true")
 }
-dependencies {
-    implementation(project(":core:model"))
-    implementation(project(":core:common"))
-    implementation(project(":core:auth"))
-    implementation(project(":data:spotify"))
-    implementation(project(":data:ytmusic"))
-    implementation(libs.room.runtime)
-    implementation(libs.room.ktx)
-    ksp(libs.room.compiler)
-    implementation(libs.datastore.preferences)
-    implementation(libs.hilt.android)
-    ksp(libs.hilt.android.compiler)
-    implementation(libs.work.runtime.ktx)
-    implementation(libs.hilt.work)
-    ksp(libs.hilt.work.compiler)
-    implementation(libs.kotlinx.coroutines.android)
-    implementation(libs.kotlinx.serialization.json)
-    implementation(libs.okhttp)
-    // DocumentFile: SAF-aware deletion of tracks stored on external SD card /
-    // USB-OTG via the user's ACTION_OPEN_DOCUMENT_TREE grant. See the
-    // deleteTrackFile helper in MusicRepositoryImpl.
-    implementation("androidx.documentfile:documentfile:1.0.1")
 
+kotlin {
+    sourceSets {
+        commonMain.dependencies {
+            api(project(":core:model"))
+            implementation(project(":core:common"))
+            implementation(project(":core:auth"))
+            implementation(project(":data:spotify"))
+            implementation(project(":data:ytmusic"))
+
+            implementation(libs.room.runtime)
+            implementation(libs.sqlite.bundled)
+            implementation(libs.kotlinx.serialization.json)
+            implementation(libs.kotlinx.coroutines.core)
+            implementation(libs.okhttp)
+            implementation(libs.dagger)
+        }
+        androidMain.dependencies {
+            implementation(libs.room.ktx)
+            implementation(libs.datastore.preferences)
+            implementation(libs.hilt.android)
+            implementation(libs.work.runtime.ktx)
+            implementation(libs.hilt.work)
+            implementation(libs.kotlinx.coroutines.android)
+            implementation("androidx.documentfile:documentfile:1.0.1")
+        }
+        desktopMain.dependencies {
+            implementation(libs.dagger)
+            implementation(libs.sqlite.bundled)
+        }
+        commonTest.dependencies {
+            implementation(project(":core:model"))
+            implementation(project(":core:common"))
+            implementation(kotlin("test"))
+            implementation("junit:junit:4.13.2")
+            implementation(libs.truth)
+            implementation(libs.sqlite.bundled)
+        }
+    }
+}
+
+dependencies {
+    kspAndroid(libs.room.compiler)
+    kspAndroid(libs.hilt.android.compiler)
+    kspAndroid(libs.hilt.work.compiler)
+    kspDesktop(libs.room.compiler)
+    kspDesktop(libs.dagger.compiler)
+
+    testImplementation(project(":core:model"))
+    testImplementation(project(":core:common"))
+    testImplementation(project(":core:auth"))
+    testImplementation(project(":data:spotify"))
+    testImplementation(project(":data:ytmusic"))
+    testImplementation(libs.kotlinx.serialization.json)
     testImplementation("junit:junit:4.13.2")
     testImplementation(libs.truth)
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.1")
@@ -65,13 +94,5 @@ dependencies {
     testImplementation("org.mockito:mockito-core:5.11.0")
     testImplementation("org.mockito.kotlin:mockito-kotlin:5.4.0")
     testImplementation("io.mockk:mockk:1.13.8")
-    // ListenBrainzApiClientTest asserts the wire payload — listened_at in seconds
-    // rather than millis, and listen_type single vs import. Both are accepted
-    // silently when wrong, so they need an HTTP-level test, not a mocked client.
     testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
-    testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
-
-    // SyncCryptoAndroidTest: sync-v1's P-256 ECDH and AES-GCM on the device's own providers (Conscrypt, Android Keystore).
-    androidTestImplementation("androidx.test:runner:1.6.2")
-    androidTestImplementation("androidx.test.ext:junit:1.2.1")
 }
