@@ -1,6 +1,6 @@
 package com.stash.data.spotify
 
-import android.util.Log
+import com.stash.core.common.Log
 import com.stash.data.spotify.model.SpotifyImage
 import com.stash.data.spotify.model.SpotifyOwner
 import com.stash.data.spotify.model.SpotifyPlaylistItem

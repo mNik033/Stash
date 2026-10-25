@@ -1,6 +1,6 @@
 package com.stash.data.spotify
 
-import android.util.Log
+import com.stash.core.common.Log
 import com.stash.core.auth.TokenManager
 import com.stash.core.auth.model.UserInfo
 import com.stash.core.auth.spotify.SpotifyAuthConfig
