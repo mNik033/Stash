@@ -1,5 +1,6 @@
 plugins {
     alias(libs.plugins.kotlin.multiplatform)
+    alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.compose.multiplatform)
     alias(libs.plugins.compose.compiler)
     alias(libs.plugins.ksp)
@@ -38,12 +39,14 @@ kotlin {
                 implementation(compose.material3)
                 implementation(compose.foundation)
                 implementation(compose.ui)
+                implementation(compose.materialIconsExtended)
                 implementation(compose.components.resources)
 
                 implementation(libs.coil.compose)
                 implementation(libs.coil.network.okhttp)
                 implementation(libs.lifecycle.runtime.compose)
                 implementation(libs.lifecycle.viewmodel.compose)
+                implementation(libs.lifecycle.viewmodel.savedstate)
                 implementation(libs.kotlinx.serialization.json)
                 implementation(libs.datastore.preferences)
                 implementation(libs.okhttp)

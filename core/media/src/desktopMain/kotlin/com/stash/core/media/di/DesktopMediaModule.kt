@@ -1,5 +1,7 @@
 package com.stash.core.media.di
 
+import com.stash.core.media.DesktopPlayerRepository
+import com.stash.core.media.PlayerRepository
 import com.stash.core.media.actions.DesktopTrackActionsDelegate
 import com.stash.core.media.actions.TrackActionsDelegate
 import com.stash.core.media.preview.DesktopLosslessUrlPrefetcher
@@ -17,4 +19,8 @@ abstract class DesktopMediaModule {
     @Binds
     @Singleton
     abstract fun bindLosslessUrlPrefetcher(impl: DesktopLosslessUrlPrefetcher): LosslessUrlPrefetcher
+
+    @Binds
+    @Singleton
+    abstract fun bindPlayerRepository(impl: DesktopPlayerRepository): PlayerRepository
 }

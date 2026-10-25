@@ -1,226 +1,39 @@
 package com.stash.desktop
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.material3.darkColorScheme
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Window
+import androidx.compose.ui.window.WindowState
 import androidx.compose.ui.window.application
-import com.stash.desktop.spike.DaggerSpikeComponent
-import com.stash.desktop.spike.MpvAudioPlayer
-import com.stash.desktop.spike.RoomSpike
-import com.stash.desktop.spike.SpikeTrack
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
+import com.stash.core.ui.theme.StashTheme
+import com.stash.desktop.di.DaggerDesktopComponent
+import com.stash.desktop.ui.DesktopScaffold
 
 fun main() = application {
+    val component = remember { DaggerDesktopComponent.create() }
+    var isDarkTheme by remember { mutableStateOf(true) }
+    var isAmoledTheme by remember { mutableStateOf(false) }
+
     Window(
         onCloseRequest = ::exitApplication,
-        title = "Stash — Desktop Spike (Phase 0)",
+        title = "Stash",
+        state = remember { WindowState(width = 1200.dp, height = 800.dp) },
     ) {
-        MaterialTheme(
-            colorScheme = darkColorScheme(
-                primary = Color(0xFF8B5CF6),
-                background = Color(0xFF0F172A),
-                surface = Color(0xFF1E293B),
-                onBackground = Color(0xFFF8FAFC),
-                onSurface = Color(0xFFF8FAFC),
-            )
+        StashTheme(
+            darkTheme = isDarkTheme,
+            amoled = isAmoledTheme,
         ) {
-            Surface(
-                modifier = Modifier.fillMaxSize(),
-                color = MaterialTheme.colorScheme.background,
-            ) {
-                var diStatus by remember { mutableStateOf("Initializing DI...") }
-                var dbStatus by remember { mutableStateOf("Initializing Room DB...") }
-                var audioPlayStatus by remember { mutableStateOf("Ready") }
-
-                val player = remember { MpvAudioPlayer() }
-                DisposableEffect(Unit) {
-                    onDispose {
-                        player.close()
-                    }
-                }
-
-                LaunchedEffect(Unit) {
-                    try {
-                        val component = DaggerSpikeComponent.create()
-                        diStatus = component.service().greeting
-                    } catch (e: Throwable) {
-                        diStatus = "DI Error: ${e.message}"
-                    }
-
-                    try {
-                        withContext(Dispatchers.IO) {
-                            val db = RoomSpike.createInMemoryDb()
-                            val dao = db.dao()
-                            dao.insert(SpikeTrack(id = 1L, title = "Spike Song", artist = "Stash Desktop"))
-                            val track = dao.findById(1L)
-                            dbStatus = "Room KMP + BundledSQLite: read '${track?.title}' by '${track?.artist}'"
-                            db.close()
-                        }
-                    } catch (e: Throwable) {
-                        dbStatus = "Room Error: ${e.message}"
-                    }
-                }
-
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(32.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center,
-                ) {
-                    Text(
-                        text = "Stash Desktop",
-                        fontSize = 32.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onBackground,
-                    )
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Text(
-                        text = "Compose Multiplatform Spike · Phase 0",
-                        fontSize = 15.sp,
-                        color = Color(0xFF94A3B8),
-                    )
-                    Spacer(modifier = Modifier.height(20.dp))
-
-                    StatusCard(
-                        title = "Platform",
-                        detail = "JVM ${System.getProperty("java.version")} on ${System.getProperty("os.name")}",
-                        color = Color(0xFFA78BFA),
-                    )
-                    Spacer(modifier = Modifier.height(10.dp))
-
-                    StatusCard(
-                        title = "Dependency Injection (Dagger)",
-                        detail = diStatus,
-                        color = Color(0xFF34D399),
-                    )
-                    Spacer(modifier = Modifier.height(10.dp))
-
-                    StatusCard(
-                        title = "Database (Room KMP)",
-                        detail = dbStatus,
-                        color = Color(0xFF38BDF8),
-                    )
-                    Spacer(modifier = Modifier.height(10.dp))
-
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth(0.85f)
-                            .background(
-                                color = MaterialTheme.colorScheme.surface,
-                                shape = RoundedCornerShape(12.dp),
-                            )
-                            .padding(horizontal = 20.dp, vertical = 14.dp),
-                    ) {
-                        Column {
-                            Text(
-                                text = "Audio Playback Engine (libmpv / JNA)",
-                                color = Color(0xFFFBBF24),
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.SemiBold,
-                            )
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(
-                                text = player.statusMessage,
-                                color = MaterialTheme.colorScheme.onSurface,
-                                fontSize = 13.sp,
-                            )
-                            if (player.isAvailable) {
-                                Spacer(modifier = Modifier.height(10.dp))
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Button(
-                                        onClick = {
-                                            // Public test audio URL (Ogg/Vorbis or FLAC test stream)
-                                            val testUrl = "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3"
-                                            val res = player.play(testUrl)
-                                            audioPlayStatus = if (res.isSuccess) "Streaming test audio..." else "Play failed: ${res.exceptionOrNull()?.message}"
-                                        },
-                                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF8B5CF6)),
-                                    ) {
-                                        Text("Play Test Audio")
-                                    }
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    OutlinedButton(onClick = { player.setPause(true); audioPlayStatus = "Paused" }) {
-                                        Text("Pause")
-                                    }
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    OutlinedButton(onClick = { player.setPause(false); audioPlayStatus = "Resumed" }) {
-                                        Text("Resume")
-                                    }
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    OutlinedButton(onClick = { player.stop(); audioPlayStatus = "Stopped" }) {
-                                        Text("Stop")
-                                    }
-                                }
-                                Spacer(modifier = Modifier.height(6.dp))
-                                Text(
-                                    text = "Status: $audioPlayStatus",
-                                    color = Color(0xFF94A3B8),
-                                    fontSize = 12.sp,
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun StatusCard(title: String, detail: String, color: Color) {
-    Box(
-        modifier = Modifier
-            .fillMaxWidth(0.85f)
-            .background(
-                color = MaterialTheme.colorScheme.surface,
-                shape = RoundedCornerShape(12.dp),
-            )
-            .padding(horizontal = 20.dp, vertical = 14.dp),
-    ) {
-        Column {
-            Text(
-                text = title,
-                color = color,
-                fontSize = 13.sp,
-                fontWeight = FontWeight.SemiBold,
-            )
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = detail,
-                color = MaterialTheme.colorScheme.onSurface,
-                fontSize = 14.sp,
+            DesktopScaffold(
+                component = component,
+                isDarkTheme = isDarkTheme,
+                isAmoledTheme = isAmoledTheme,
+                onThemeChanged = { dark, amoled ->
+                    isDarkTheme = dark
+                    isAmoledTheme = amoled
+                },
             )
         }
     }

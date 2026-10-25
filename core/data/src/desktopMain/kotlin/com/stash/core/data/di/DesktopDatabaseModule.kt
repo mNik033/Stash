@@ -174,6 +174,12 @@ object DesktopDatabaseModule {
     @Singleton
     fun provideBlocklistGuard(impl: com.stash.core.data.blocklist.DesktopBlocklistGuard): com.stash.core.data.blocklist.BlocklistGuard =
         impl
+
+    @Provides
+    @Singleton
+    fun provideMusicRepository(impl: com.stash.core.data.repository.DesktopMusicRepository): com.stash.core.data.repository.MusicRepository =
+        impl
 }
+
 
 
