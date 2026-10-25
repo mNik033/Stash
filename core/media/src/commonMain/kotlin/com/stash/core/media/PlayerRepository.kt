@@ -1,66 +1,15 @@
 package com.stash.core.media
 
-import androidx.media3.common.MediaItem
-import com.stash.core.model.PlayableItem
+import com.stash.core.data.radio.RadioSeed
+import com.stash.core.media.handoff.HandoffQueuePlan
+import com.stash.core.model.PlaybackSource
 import com.stash.core.model.PlayerState
+import com.stash.core.model.RadioStartResult
 import com.stash.core.model.Track
 import com.stash.core.model.TrackItem
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
-
-/**
- * Outcome of a streaming-routing decision when the player is asked to play
- * a track. Surfaced as a return value rather than emitting through an
- * internal SharedFlow so the caller (a ViewModel / screen) can decide how
- * to render each reason — typically a snackbar for the refusal variants
- * and silent no-op for [NotAvailable] rows (which should already be
- * greyed out in the UI).
- */
-sealed class StreamRoutingResult {
-    /** The track is playable — contains [mediaItem] and platform-agnostic [playableItem]. */
-    data class Item(
-        val mediaItem: MediaItem,
-    ) : StreamRoutingResult() {
-        val playableItem: PlayableItem
-            get() = PlayableItem(
-                mediaId = mediaItem.mediaId,
-                uri = mediaItem.localConfiguration?.uri?.toString().orEmpty(),
-                title = mediaItem.mediaMetadata.title?.toString().orEmpty(),
-                artist = mediaItem.mediaMetadata.artist?.toString().orEmpty(),
-            )
-    }
-
-    /**
-     * No local file on disk, not marked streamable in the library, OR
-     * the resolver couldn't find a stream URL. Library row should be
-     * rendered greyed-out; tap is silently ignored.
-     */
-    data object NotAvailable : StreamRoutingResult()
-
-    /**
-     * Streaming is enabled but the device is on cellular and the user
-     * has not opted-in to streaming on metered networks. Caller surfaces
-     * "Streaming on cellular is off in Settings".
-     */
-    data object CellularRefused : StreamRoutingResult()
-
-    /**
-     * Streaming is enabled but the device has no validated internet
-     * connection (airplane mode, captive portal not yet accepted, etc.).
-     * Caller surfaces "You're offline — can't stream this track".
-     */
-    data object NoConnectivity : StreamRoutingResult()
-
-    /**
-     * Rapid duplicate tap while a prior resolve for the same videoId is
-     * still in flight. Caller should NOT emit any user-visible feedback:
-     * the original tap is being handled and will produce its own outcome
-     * (Item/NotAvailable/etc.) — duplicating the snackbar would just
-     * confuse the user with a "Couldn't find this track" message while
-     * the track is actually about to start playing.
-     */
-    data object Deduped : StreamRoutingResult()
-}
 
 /**
  * Abstraction over the playback engine. Consumers observe [playerState] for UI updates
@@ -82,7 +31,7 @@ interface PlayerRepository {
      * outage (resets after successful playback or user transport).
      * UI surface: a Toast from MainActivity, on whichever screen is showing.
      */
-    val streamingHaltedEvents: kotlinx.coroutines.flow.SharedFlow<StreamingHaltedEvent>
+    val streamingHaltedEvents: SharedFlow<StreamingHaltedEvent>
 
     /**
      * Snackbar-targeted one-shot messages from playback flow. Used for
@@ -98,7 +47,7 @@ interface PlayerRepository {
      * flow, which nothing collected off Now Playing, so a SharedFlow with
      * no subscriber dropped these everywhere else.)
      */
-    val userMessages: kotlinx.coroutines.flow.SharedFlow<String>
+    val userMessages: SharedFlow<String>
 
     /** Start or resume playback. */
     suspend fun play()
@@ -151,7 +100,7 @@ interface PlayerRepository {
     suspend fun setQueue(
         tracks: List<Track>,
         startIndex: Int = 0,
-        source: com.stash.core.model.PlaybackSource = com.stash.core.model.PlaybackSource.Unknown,
+        source: PlaybackSource = PlaybackSource.Unknown,
     )
 
     /**
@@ -181,7 +130,7 @@ interface PlayerRepository {
      * without interrupting, with the other device's shuffle order and repeat. False when the player can't take it now
      * (no controller, a Listen Together session).
      */
-    suspend fun restoreHandoff(plan: com.stash.core.media.handoff.HandoffQueuePlan): Boolean = false
+    suspend fun restoreHandoff(plan: HandoffQueuePlan): Boolean = false
 
     /**
      * v0.9.14: Replace the queue with a freshly-shuffled snapshot of the
@@ -222,18 +171,17 @@ interface PlayerRepository {
     /**
      * Start a radio station seeded from an artist or track. Builds a balanced
      * queue and arms self-extension; replaces any current queue/station.
-     * Returns a [com.stash.core.model.RadioStartResult] naming the exact
-     * outcome; anything but [com.stash.core.model.RadioStartResult.Started]
-     * is a no-op.
+     * Returns a [RadioStartResult] naming the exact outcome; anything but
+     * [RadioStartResult.Started] is a no-op.
      *
      * [keepCurrent] = true (the Now Playing "Start radio from this song" case):
      * the seed IS the currently-playing track, so DON'T restart it — keep the
      * current item playing and splice the discoveries around it.
      */
     suspend fun startRadio(
-        seed: com.stash.core.data.radio.RadioSeed,
+        seed: RadioSeed,
         keepCurrent: Boolean = false,
-    ): com.stash.core.model.RadioStartResult
+    ): RadioStartResult
 
     /** Stop the active station (queued tracks remain; no more auto-grow). */
     fun stopRadio()
@@ -287,14 +235,10 @@ interface PlayerRepository {
      * the routing decision tree for [track] (downloaded → local file;
      * streamable + streaming-on → resolve + cache + stream; etc.). On
      * [StreamRoutingResult.Item], the controller is asked to play the
-     * resolved [MediaItem] immediately, replacing the current queue with
+     * resolved item immediately, replacing the current queue with
      * a single-item queue. On any refusal variant, the controller is
      * **not** touched and the variant is returned so the caller can
      * render a user-visible reason (snackbar).
-     *
-     * Distinct from [setQueue] because the latter pre-assumes local-only
-     * playback and doesn't run the streaming routing. Once Task 18's row
-     * treatment lands the Library tap path will migrate to this method.
      */
     suspend fun playTrack(track: Track): StreamRoutingResult
 
@@ -302,11 +246,7 @@ interface PlayerRepository {
      * v0.9.27: Streaming-only playback entry point for the Search tab
      * (Task 20). Search results carry [TrackItem], a lightweight model
      * that doesn't yet have a [Track] / [com.stash.core.data.db.entity.TrackEntity]
-     * because the song hasn't been imported into the user's library. The
-     * routing layer inline-constructs a transient [com.stash.core.data
-     * .db.entity.TrackEntity] and runs the streaming branch directly —
-     * never a local-file branch, because by definition a search-result
-     * track isn't on disk.
+     * because the song hasn't been imported into the user's library.
      *
      * Returns the same [StreamRoutingResult] variants as [playTrack] so
      * the Search ViewModel can render the same set of snackbars.

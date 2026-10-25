@@ -70,7 +70,7 @@ class TrackActionsDelegateStreamSpinnerTest {
         // Spinner ON for this row while the stream resolves.
         assertThat(d.previewLoadingId.value).isEqualTo("vid123")
 
-        gate.complete(StreamRoutingResult.Item(mockk()))
+        gate.complete(StreamRoutingResult.Item(mockk<androidx.media3.common.MediaItem>()))
         runCurrent() // resolve completes -> finally clears the id
 
         assertThat(d.previewLoadingId.value).isNull()
