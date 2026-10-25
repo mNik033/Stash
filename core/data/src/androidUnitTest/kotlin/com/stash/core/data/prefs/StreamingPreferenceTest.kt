@@ -26,7 +26,7 @@ import java.io.File
 class StreamingPreferenceTest {
 
     private lateinit var context: Context
-    private lateinit var prefs: StreamingPreference
+    private lateinit var prefs: AndroidStreamingPreference
     private lateinit var file: File
 
     @Before fun setUp() {
@@ -34,8 +34,9 @@ class StreamingPreferenceTest {
         file = context.preferencesDataStoreFile("streaming_preference")
         // Make sure no stale file from a prior run leaks in.
         if (file.exists()) file.delete()
-        prefs = StreamingPreference(context)
+        prefs = AndroidStreamingPreference(context)
     }
+
 
     @After fun tearDown() {
         if (file.exists()) file.delete()

@@ -47,5 +47,15 @@ abstract class DownloadModule {
     @Binds
     @Singleton
     abstract fun bindLocalImportCoordinator(impl: com.stash.data.download.files.RealLocalImportCoordinator): com.stash.data.download.files.LocalImportCoordinator
+
+    @Binds
+    @Singleton
+    abstract fun bindLibrarySizeHolder(impl: com.stash.data.download.files.AndroidLibrarySizeHolder): com.stash.data.download.files.LibrarySizeHolder
+
+    @Binds
+    @Singleton
+    abstract fun bindDownloadProgressTracker(impl: com.stash.data.download.DownloadManager): com.stash.data.download.DownloadProgressTracker
 }
+
+
 

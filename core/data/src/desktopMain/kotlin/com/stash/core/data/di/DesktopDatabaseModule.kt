@@ -164,4 +164,16 @@ object DesktopDatabaseModule {
     @Singleton
     fun provideLibraryScopePreference(impl: com.stash.core.data.prefs.DesktopLibraryScopePreference): com.stash.core.data.prefs.LibraryScopePreference =
         impl
+
+    @Provides
+    @Singleton
+    fun provideLastFmRecommendationSource(impl: com.stash.core.data.mix.DesktopLastFmRecommendationSource): com.stash.core.data.mix.LastFmRecommendationSource =
+        impl
+
+    @Provides
+    @Singleton
+    fun provideBlocklistGuard(impl: com.stash.core.data.blocklist.DesktopBlocklistGuard): com.stash.core.data.blocklist.BlocklistGuard =
+        impl
 }
+
+

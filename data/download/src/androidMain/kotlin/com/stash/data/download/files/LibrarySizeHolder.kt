@@ -52,10 +52,10 @@ import kotlinx.coroutines.flow.update
  * value across app restarts is out of scope (see spec).
  */
 @Singleton
-class LibrarySizeHolder @Inject constructor(
+class AndroidLibrarySizeHolder @Inject constructor(
     private val fileOrganizer: FileOrganizer,
     private val musicRepository: MusicRepository,
-) {
+) : LibrarySizeHolder {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val refreshVersion = MutableStateFlow(0L)
 
@@ -63,7 +63,7 @@ class LibrarySizeHolder @Inject constructor(
     private var lastVersion = 0L
     private var lastWalkEndedAtMs = 0L
 
-    val size: StateFlow<LibrarySizeBreakdown> = combine(
+    override val size: StateFlow<LibrarySizeBreakdown> = combine(
         musicRepository.getTrackCount().distinctUntilChanged(),
         refreshVersion,
     ) { _, version -> version }
@@ -93,7 +93,7 @@ class LibrarySizeHolder @Inject constructor(
         )
 
     /** Requests a fresh filesystem walk even when the track count is unchanged. */
-    fun refresh() {
+    override fun refresh() {
         refreshVersion.update { it + 1 }
     }
 
@@ -107,3 +107,9 @@ class LibrarySizeHolder @Inject constructor(
         private val NOT_WALKED = LibrarySizeBreakdown(0L, 0L, 0)
     }
 }
+
+fun LibrarySizeHolder(
+    fileOrganizer: FileOrganizer,
+    musicRepository: MusicRepository,
+): LibrarySizeHolder = AndroidLibrarySizeHolder(fileOrganizer, musicRepository)
+

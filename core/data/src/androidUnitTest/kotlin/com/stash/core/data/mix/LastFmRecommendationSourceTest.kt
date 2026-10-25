@@ -42,7 +42,8 @@ import org.robolectric.annotation.Config
 class LastFmRecommendationSourceTest {
 
     private lateinit var db: StashDatabase
-    private lateinit var source: LastFmRecommendationSource
+    private lateinit var source: AndroidLastFmRecommendationSource
+
 
     private val sessionFlow = MutableStateFlow<LastFmSession?>(null)
     private val enabledFlow = MutableStateFlow(true)

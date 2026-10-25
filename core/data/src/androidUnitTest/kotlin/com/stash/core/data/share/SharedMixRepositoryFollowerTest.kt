@@ -64,7 +64,7 @@ class SharedMixRepositoryFollowerTest {
             )
         }
         val api = ShareApiClient(OkHttpClient()).apply { baseUrls = listOf(server.url("/").toString().removeSuffix("/")) }
-        repo = SharedMixRepository(db, db.sharedMixDao(), db.playlistDao(), db.trackDao(), music, api, ApplicationProvider.getApplicationContext())
+        repo = SharedMixRepository(db, db.sharedMixDao(), db.playlistDao(), db.trackDao(), music, api, mockk<SharedMixScheduler>(relaxed = true))
     }
     @After fun tearDown() { db.close(); server.shutdown() }
 

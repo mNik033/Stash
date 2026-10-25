@@ -1,4 +1,4 @@
-﻿package com.stash.core.data.blocklist
+package com.stash.core.data.blocklist
 
 import com.stash.core.common.Log
 import androidx.room.withTransaction
@@ -18,26 +18,10 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * v0.9.15: Where a block originated. Used for telemetry attribution and
- * the Settings UI's "blocked from N" label.
- */
-enum class BlockSource {
-    NOW_PLAYING, CONTEXT_MENU, PLAYLIST_DELETE,
-    MIGRATION_V19, INTEGRITY_WORKER, FAILED_DOWNLOADS, OTHER
-}
-
-/**
- * v0.9.15: Single chokepoint for blocklist enforcement. Every track-source
- * flow (sync, mix, discovery, search, download, swap, failed-match) consults
- * this guard via [isBlocked] before inserting / queueing / linking. The
- * block action [block] runs atomically inside a Room transaction so the
- * user can't end up with an orphaned file or stale playlist_tracks rows.
- *
- * Identity-keyed: a block survives `tracks` row churn, source-switches,
- * and canonical-normaliser disagreements that produce duplicate rows.
+ * Android implementation of [BlocklistGuard].
  */
 @Singleton
-class BlocklistGuard @Inject constructor(
+class AndroidBlocklistGuard @Inject constructor(
     private val database: StashDatabase,
     private val blocklistDao: TrackBlocklistDao,
     private val trackDao: TrackDao,
@@ -46,10 +30,10 @@ class BlocklistGuard @Inject constructor(
     private val fileDeleter: FileDeleter,
     private val matcher: TrackMatcher,
     private val canonicalRecompute: CanonicalRecomputeState,
-) {
+) : BlocklistGuard {
 
     /** Identity check by raw fields. Used by sync workers reading from snapshots. */
-    suspend fun isBlocked(
+    override suspend fun isBlocked(
         artist: String,
         title: String,
         spotifyUri: String?,
@@ -60,33 +44,21 @@ class BlocklistGuard @Inject constructor(
     }
 
     /** Identity check by trackId (looks up the row, then forwards). */
-    suspend fun isBlockedByTrackId(trackId: Long): Boolean {
+    override suspend fun isBlockedByTrackId(trackId: Long): Boolean {
         val track = trackDao.getById(trackId) ?: return false
         return isBlocked(track.artist, track.title, track.spotifyUri, track.youtubeId)
     }
 
     /**
-     * Whether a row stored under these canonical words would have a blocked key: the words'
-     * `artist|title` ([BlocklistKey.fromStoredCanonicals]) is on the blocklist, which is what the
-     * library lists hide by and the integrity sweep deletes by. Ids are not consulted.
+     * Whether a row stored under these canonical words would have a blocked key.
      */
-    suspend fun isKeyBlocked(canonicalTitle: String, canonicalArtist: String): Boolean =
+    override suspend fun isKeyBlocked(canonicalTitle: String, canonicalArtist: String): Boolean =
         blocklistDao.findByKey(BlocklistKey.fromStoredCanonicals(canonicalArtist, canonicalTitle)) != null
 
     /**
-     * Atomic block. Inserts a blocklist entry, hard-deletes every
-     * `playlist_tracks` row referencing this track id, deletes any
-     * `download_queue` rows, deletes the audio + art files, and deletes
-     * the `tracks` row itself. Row deletes happen in one Room transaction.
-     *
-     * File deletes happen OUTSIDE the transaction to avoid holding a write
-     * lock across slow I/O. If a file delete fails (e.g. storage unmounted),
-     * row deletes still proceed and we accept an orphaned file on disk â€”
-     * the current integrity worker does NOT walk the music directory
-     * looking for orphans, so add a periodic file-orphan sweep separately
-     * if that ever becomes a real issue.
+     * Atomic block. Inserts a blocklist entry, deletes references and files.
      */
-    suspend fun block(track: TrackEntity, source: BlockSource) {
+    override suspend fun block(track: TrackEntity, source: BlockSource) {
         val key = BlocklistKey.of(track.artist, track.title, matcher)
         val entry = TrackBlocklistEntity(
             canonicalKey = key,
@@ -107,16 +79,9 @@ class BlocklistGuard @Inject constructor(
             playlistDao.deleteAllCrossRefsForTrack(track.id)
             downloadQueueDao.deleteByTrackId(track.id)
             trackDao.deleteById(track.id)
-            // Every Spotify playlist is read in full at the next sync. A full sync
-            // filters the song by its key everywhere, including a twin row of it
-            // (another upload or version) that only another playlist holds; that
-            // playlist's own rows didn't move, so a skip would keep the twin
-            // (see SpotifyMirrorStamp). Blocks are rare; one full read is cheap.
             playlistDao.forgetSpotifyMirrorStamps()
             heldBy
         }
-        // The Library cards show a stored count; every playlist that held the song loses one.
-        // After the commit, so the recount reads the rows without it.
         playlistIds.forEach { id ->
             playlistDao.updateTrackCount(id, trackDao.getByPlaylist(id, includeStreamable = true).first().size)
         }
@@ -124,17 +89,9 @@ class BlocklistGuard @Inject constructor(
     }
 
     /**
-     * Remove the block. Used by the Settings unblock action. A song saved while this key was
-     * blocked kept its exact words (so the blocklist couldn't match and sweep it); a fresh
-     * re-key run gives it the shared words again, or sync wouldn't find it and would add a twin.
-     *
-     * Every Spotify playlist is read in full at the next sync: an unblocked song goes back into
-     * the playlists that hold it on Spotify, and which ones those are isn't known here (its links
-     * were deleted with the block). A playlist unchanged since its last sync would otherwise be
-     * skipped and never get the song back (see SpotifyMirrorStamp). In one transaction with the
-     * unblock, so a sync can never see the song unblocked with the stamps still trusted.
+     * Remove the block.
      */
-    suspend fun unblock(canonicalKey: String) {
+    override suspend fun unblock(canonicalKey: String) {
         database.withTransaction {
             blocklistDao.deleteByKey(canonicalKey)
             playlistDao.forgetSpotifyMirrorStamps()
@@ -143,12 +100,25 @@ class BlocklistGuard @Inject constructor(
     }
 
     /** UI feed for the Blocked Songs viewer. */
-    fun observeBlocklist(): Flow<List<TrackBlocklistEntity>> = blocklistDao.observeAll()
+    override fun observeBlocklist(): Flow<List<TrackBlocklistEntity>> = blocklistDao.observeAll()
 
     /** Reactive count for the Sync-tab "Blocked Songs" badge. */
-    fun observeCount(): Flow<Int> = blocklistDao.observeCount()
+    override fun observeCount(): Flow<Int> = blocklistDao.observeCount()
 
     private companion object {
         const val TAG = "BlocklistGuard"
     }
 }
+
+fun BlocklistGuard(
+    database: StashDatabase,
+    blocklistDao: TrackBlocklistDao,
+    trackDao: TrackDao,
+    playlistDao: PlaylistDao,
+    downloadQueueDao: DownloadQueueDao,
+    fileDeleter: FileDeleter,
+    matcher: TrackMatcher,
+    canonicalRecompute: CanonicalRecomputeState,
+): BlocklistGuard = AndroidBlocklistGuard(
+    database, blocklistDao, trackDao, playlistDao, downloadQueueDao, fileDeleter, matcher, canonicalRecompute
+)

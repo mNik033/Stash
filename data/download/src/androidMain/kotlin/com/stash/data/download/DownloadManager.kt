@@ -170,7 +170,7 @@ class DownloadManager @Inject constructor(
     /** A match the retry sweep just found for this song: taken instead of asking again. */
     private val handoff: com.stash.data.download.lossless.ResolvedSourceHandoff =
         com.stash.data.download.lossless.ResolvedSourceHandoff(),
-) {
+) : com.stash.data.download.DownloadProgressTracker {
     /** Limits concurrent downloads. 8 parallel slots â€” with native opus (no FFmpeg
      *  transcode) downloads are almost entirely network-bound so more parallelism helps. */
     private val concurrencySemaphore = Semaphore(8)
@@ -181,7 +181,7 @@ class DownloadManager @Inject constructor(
     private val _progress = MutableSharedFlow<DownloadProgress>(replay = 1, extraBufferCapacity = 64)
 
     /** Emits real-time progress snapshots for all in-flight downloads. */
-    val progress: SharedFlow<DownloadProgress> = _progress.asSharedFlow()
+    override val progress: SharedFlow<DownloadProgress> = _progress.asSharedFlow()
 
     companion object {
         private const val TAG = "DownloadManager"

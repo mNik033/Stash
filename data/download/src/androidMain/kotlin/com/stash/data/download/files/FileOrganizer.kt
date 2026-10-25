@@ -1017,13 +1017,3 @@ class FileOrganizer @Inject constructor(
     )
 }
 
-/**
- * One-walk breakdown of the music library on disk. Returned from
- * [FileOrganizer.computeMusicLibrarySize] so consumers get total + lossless
- * sizes + lossless count without three separate tree walks.
- */
-data class LibrarySizeBreakdown(
-    val totalBytes: Long,
-    val losslessBytes: Long,
-    val losslessFileCount: Int,
-)

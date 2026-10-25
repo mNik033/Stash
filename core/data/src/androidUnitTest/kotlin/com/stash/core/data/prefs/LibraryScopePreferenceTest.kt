@@ -17,7 +17,7 @@ import java.io.File
 @RunWith(RobolectricTestRunner::class)
 class LibraryScopePreferenceTest {
     private lateinit var context: Context
-    private lateinit var preference: LibraryScopePreference
+    private lateinit var preference: AndroidLibraryScopePreference
     private lateinit var file: File
 
     @Before fun setUp() {
@@ -25,8 +25,9 @@ class LibraryScopePreferenceTest {
         // A DataStore file, so the settings backup (datastore/) carries the choice.
         file = context.preferencesDataStoreFile("library_scope_preference")
         if (file.exists()) file.delete()
-        preference = LibraryScopePreference(context)
+        preference = AndroidLibraryScopePreference(context)
     }
+
 
     @After fun tearDown() {
         if (file.exists()) file.delete()

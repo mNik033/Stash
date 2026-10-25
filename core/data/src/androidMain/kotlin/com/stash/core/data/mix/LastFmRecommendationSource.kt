@@ -1,4 +1,4 @@
-﻿package com.stash.core.data.mix
+package com.stash.core.data.mix
 
 import android.content.Context
 import com.stash.core.common.Log
@@ -22,47 +22,29 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * UI state for the Last.fm source surface (issue #255). Everything the
- * Sync-tab card and its manage screen render, derived reactively.
- *
- * @property connected   A Last.fm session exists (user completed web auth).
- * @property enabled     The user hasn't turned Recommendations off.
- * @property trackCount  Tracks currently in the materialized playlist;
- *                       null until the first refresh has created it.
- * @property lastRefreshedAt  Epoch-millis of the last successful recipe
- *                       refresh; null never-refreshed.
- */
-data class LastFmRecommendationState(
-    val connected: Boolean = false,
-    val enabled: Boolean = true,
-    val trackCount: Int? = null,
-    val lastRefreshedAt: Long? = null,
-)
-
-/**
  * Treats Last.fm as a sync **source**, not just a scrobble destination.
  *
  * Last.fm has no public playlist API, so "importing from Last.fm" means
  * something different here than it does for Spotify/YouTube: a dedicated,
- * app-managed Stash Mix recipe â€” **"Recommended by Last.fm"** â€” whose slots
+ * app-managed Stash Mix recipe — **"Recommended by Last.fm"** — whose slots
  * fill entirely with tracks Last.fm recommends (`track.getSimilar` seeded
  * from the user's recent plays and top tracks), matched against YouTube
  * Music / Spotify and downloaded/streamed through the existing discovery
  * pipeline ([com.stash.core.data.sync.workers.StashMixRefreshWorker] +
  * [com.stash.core.data.sync.workers.StashDiscoveryWorker]). No new worker,
- * table, or fetch path â€” the feature rides machinery that already handles
+ * table, or fetch path — the feature rides machinery that already handles
  * candidate generation, library/skip filtering, cross-mix dedup, and
  * stream-only stubs.
  *
  * Lifecycle:
- *  - The recipe is NOT shipped in [StashMixDefaults] â€” users without
+ *  - The recipe is NOT shipped in [StashMixDefaults] — users without
  *    Last.fm must not accumulate an eternally-empty pure-discovery mix.
  *    It's find-or-created lazily by [ensureRecipe].
  *  - [reconcile] runs at app startup and after every Last.fm connect /
  *    disconnect: the recipe (and its materialized playlist) are active iff
  *    a session exists AND the user hasn't opted out via
  *    [LastFmSourcePreference]. Disabling hides the playlist rather than
- *    deleting it â€” re-enabling restores the accumulated track list, the
+ *    deleting it — re-enabling restores the accumulated track list, the
  *    same contract as the Stash-Mixes master opt-out.
  *
  * Deliberately `isBuiltin = false`: Home's Discover hero resolves "the"
@@ -72,14 +54,14 @@ data class LastFmRecommendationState(
  * to a user-built mix on every screen.
  */
 @Singleton
-class LastFmRecommendationSource @Inject constructor(
+class AndroidLastFmRecommendationSource @Inject constructor(
     private val recipeDao: StashMixRecipeDao,
     private val playlistDao: PlaylistDao,
     private val sessionPreference: LastFmSessionPreference,
     private val sourcePreference: LastFmSourcePreference,
     private val stashMixPreference: StashMixPreference,
     @ApplicationContext private val context: Context,
-) {
+) : LastFmRecommendationSource {
     companion object {
         const val TAG = "LastFmRecSource"
 
@@ -110,7 +92,7 @@ class LastFmRecommendationSource @Inject constructor(
      * playlist's live track count.
      */
     @OptIn(ExperimentalCoroutinesApi::class)
-    fun observeState(): Flow<LastFmRecommendationState> =
+    override fun observeState(): Flow<LastFmRecommendationState> =
         combine(
             sessionPreference.session,
             sourcePreference.recommendationsEnabled,
@@ -133,7 +115,7 @@ class LastFmRecommendationSource @Inject constructor(
                         connected = inputs.connected,
                         enabled = inputs.enabled,
                         // Hidden (is_active=0) counts as not-materialized for
-                        // display purposes â€” the user turned it off, so the
+                        // display purposes — the user turned it off, so the
                         // card shouldn't quote a stale number.
                         trackCount = playlist?.takeIf { it.isActive }?.trackCount,
                         lastRefreshedAt = inputs.lastRefreshedAt,
@@ -153,7 +135,7 @@ class LastFmRecommendationSource @Inject constructor(
      *   false on startup and on master-switch flips, which have their own
      *   refresh scheduling.
      */
-    suspend fun reconcile(kickRefresh: Boolean = false) {
+    override suspend fun reconcile(kickRefresh: Boolean) {
         ensureRecipe()
         val connected = sessionPreference.session.first() != null
         val enabled = sourcePreference.recommendationsEnabled.first()
@@ -166,9 +148,9 @@ class LastFmRecommendationSource @Inject constructor(
      * the choice and applies it immediately; enabling kicks a one-shot
      * single-recipe refresh so the playlist starts building without waiting
      * for the daily cycle (skipped when the Stash-Mixes master switch is
-     * off â€” that opt-out owns all mix scheduling).
+     * off — that opt-out owns all mix scheduling).
      */
-    suspend fun setRecommendationsEnabled(enabled: Boolean) {
+    override suspend fun setRecommendationsEnabled(enabled: Boolean) {
         sourcePreference.setRecommendationsEnabled(enabled)
         applyActivation(active = enabled && sessionPreference.session.first() != null, kickRefresh = enabled)
         Log.i(TAG, "setRecommendationsEnabled($enabled)")
@@ -237,3 +219,16 @@ class LastFmRecommendationSource @Inject constructor(
         val lastRefreshedAt: Long?,
     )
 }
+
+fun LastFmRecommendationSource(
+    recipeDao: StashMixRecipeDao,
+    playlistDao: PlaylistDao,
+    sessionPreference: LastFmSessionPreference,
+    sourcePreference: LastFmSourcePreference,
+    stashMixPreference: StashMixPreference,
+    context: Context,
+): AndroidLastFmRecommendationSource = AndroidLastFmRecommendationSource(
+    recipeDao, playlistDao, sessionPreference, sourcePreference, stashMixPreference, context
+)
+
+

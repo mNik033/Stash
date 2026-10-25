@@ -51,8 +51,9 @@ class CommunityRepositoryTest {
         val base = server.url("/").toString().removeSuffix("/")
         shared = SharedMixRepository(
             db, db.sharedMixDao(), db.playlistDao(), db.trackDao(), mockk(relaxed = true),
-            ShareApiClient(OkHttpClient()).apply { baseUrls = listOf(base) }, ApplicationProvider.getApplicationContext(),
+            ShareApiClient(OkHttpClient()).apply { baseUrls = listOf(base) }, mockk(relaxed = true),
         )
+
         repo = repository(keyStore(existingKey = key))
     }
 

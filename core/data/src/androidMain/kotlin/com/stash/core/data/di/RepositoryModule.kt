@@ -101,4 +101,14 @@ abstract class RepositoryModule {
     @Binds
     @Singleton
     abstract fun bindLibraryScopePreference(impl: com.stash.core.data.prefs.AndroidLibraryScopePreference): com.stash.core.data.prefs.LibraryScopePreference
+
+    @Binds
+    @Singleton
+    abstract fun bindLastFmRecommendationSource(impl: com.stash.core.data.mix.AndroidLastFmRecommendationSource): com.stash.core.data.mix.LastFmRecommendationSource
+
+    @Binds
+    @Singleton
+    abstract fun bindBlocklistGuard(impl: com.stash.core.data.blocklist.AndroidBlocklistGuard): com.stash.core.data.blocklist.BlocklistGuard
 }
+
+

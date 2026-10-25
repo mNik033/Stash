@@ -27,6 +27,7 @@ import com.stash.core.data.prefs.DownloadNetworkPreference
 import com.stash.core.data.prefs.StreamingPreference
 import com.stash.core.data.share.ShareApiClient
 import com.stash.core.data.share.SharedMixRepository
+import com.stash.core.data.share.SharedMixScheduler
 import com.stash.core.data.sync.SingleTrackDownloadEnqueuer
 import com.stash.core.data.sync.SyncPreferences
 import com.stash.core.data.sync.SyncPreferencesManager
@@ -503,7 +504,7 @@ class MusicRepositoryQueuePlaylistTest {
         val song = member(mix, 0, track("Waiting"))
         db.downloadQueueDao().insert(DownloadQueueEntity(trackId = song, searchQuery = "A - Waiting"))
         val shares = SharedMixRepository(
-            db, db.sharedMixDao(), db.playlistDao(), db.trackDao(), repo(), ShareApiClient(OkHttpClient()), context,
+            db, db.sharedMixDao(), db.playlistDao(), db.trackDao(), repo(), ShareApiClient(OkHttpClient()), mockk<SharedMixScheduler>(relaxed = true),
         )
 
         shares.unfollow(mix)

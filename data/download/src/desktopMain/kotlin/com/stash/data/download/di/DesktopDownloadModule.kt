@@ -18,5 +18,15 @@ abstract class DesktopDownloadModule {
     @Binds
     @Singleton
     abstract fun bindLocalImportCoordinator(impl: DesktopLocalImportCoordinator): LocalImportCoordinator
+
+    @Binds
+    @Singleton
+    abstract fun bindLibrarySizeHolder(impl: com.stash.data.download.files.DesktopLibrarySizeHolder): com.stash.data.download.files.LibrarySizeHolder
+
+    @Binds
+    @Singleton
+    abstract fun bindDownloadProgressTracker(impl: com.stash.data.download.DesktopDownloadProgressTracker): com.stash.data.download.DownloadProgressTracker
 }
+
+
 
