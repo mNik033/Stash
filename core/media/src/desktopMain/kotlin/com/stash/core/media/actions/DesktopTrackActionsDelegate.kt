@@ -28,7 +28,6 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 import javax.inject.Singleton
 
-@Singleton
 class DesktopTrackActionsDelegate @Inject constructor(
     private val playerRepository: PlayerRepository,
     private val musicRepository: MusicRepository,

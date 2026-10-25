@@ -13,7 +13,6 @@ import javax.inject.Singleton
 @Module
 abstract class DesktopMediaModule {
     @Binds
-    @Singleton
     abstract fun bindTrackActionsDelegate(impl: DesktopTrackActionsDelegate): TrackActionsDelegate
 
     @Binds

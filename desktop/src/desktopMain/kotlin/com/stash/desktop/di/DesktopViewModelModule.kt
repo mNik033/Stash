@@ -107,4 +107,124 @@ object DesktopViewModelModule {
     @Provides
     @Singleton
     fun provideSyncViewModel(): SyncViewModel = SyncViewModel()
+
+    @Provides
+    @Singleton
+    fun provideArtistProfileViewModelFactory(
+        artistCache: com.stash.core.data.cache.ArtistCache,
+        albumCache: com.stash.core.data.cache.AlbumCache,
+        prefetcher: PreviewPrefetcher,
+        playerRepository: PlayerRepository,
+        musicRepository: MusicRepository,
+        streamingPreference: StreamingPreference,
+        delegateProvider: javax.inject.Provider<TrackActionsDelegate>,
+        losslessPrefetcher: LosslessUrlPrefetcher,
+    ): DesktopArtistProfileViewModelFactory = DesktopArtistProfileViewModelFactory(
+        artistCache = artistCache,
+        albumCache = albumCache,
+        prefetcher = prefetcher,
+        playerRepository = playerRepository,
+        musicRepository = musicRepository,
+        streamingPreference = streamingPreference,
+        delegateProvider = delegateProvider,
+        losslessPrefetcher = losslessPrefetcher,
+    )
+
+    @Provides
+    @Singleton
+    fun provideAlbumDiscoveryViewModelFactory(
+        albumCache: com.stash.core.data.cache.AlbumCache,
+        ytMusicApiClient: YTMusicApiClient,
+        prefetcher: PreviewPrefetcher,
+        playerRepository: PlayerRepository,
+        musicRepository: MusicRepository,
+        streamingPreference: StreamingPreference,
+        delegateProvider: javax.inject.Provider<TrackActionsDelegate>,
+        losslessPrefetcher: LosslessUrlPrefetcher,
+    ): DesktopAlbumDiscoveryViewModelFactory = DesktopAlbumDiscoveryViewModelFactory(
+        albumCache = albumCache,
+        ytMusicApiClient = ytMusicApiClient,
+        prefetcher = prefetcher,
+        playerRepository = playerRepository,
+        musicRepository = musicRepository,
+        streamingPreference = streamingPreference,
+        delegateProvider = delegateProvider,
+        losslessPrefetcher = losslessPrefetcher,
+    )
 }
+
+class DesktopArtistProfileViewModelFactory(
+    private val artistCache: com.stash.core.data.cache.ArtistCache,
+    private val albumCache: com.stash.core.data.cache.AlbumCache,
+    private val prefetcher: PreviewPrefetcher,
+    private val playerRepository: PlayerRepository,
+    private val musicRepository: MusicRepository,
+    private val streamingPreference: StreamingPreference,
+    private val delegateProvider: javax.inject.Provider<TrackActionsDelegate>,
+    private val losslessPrefetcher: LosslessUrlPrefetcher,
+) {
+    fun create(
+        artistId: String,
+        name: String = "",
+        avatarUrl: String? = null,
+        focusAlbum: String? = null,
+    ): com.stash.feature.search.ArtistProfileViewModel {
+        val map = mutableMapOf<String, Any>("artistId" to artistId, "name" to name)
+        if (avatarUrl != null) map["avatarUrl"] = avatarUrl
+        if (focusAlbum != null) map["focusAlbum"] = focusAlbum
+        return com.stash.feature.search.ArtistProfileViewModel(
+            savedStateHandle = SavedStateHandle(map),
+            artistCache = artistCache,
+            albumCache = albumCache,
+            prefetcher = prefetcher,
+            playerRepository = playerRepository,
+            musicRepository = musicRepository,
+            streamingPreference = streamingPreference,
+            delegate = delegateProvider.get(),
+            losslessPrefetcher = losslessPrefetcher,
+        )
+    }
+}
+
+class DesktopAlbumDiscoveryViewModelFactory(
+    private val albumCache: com.stash.core.data.cache.AlbumCache,
+    private val ytMusicApiClient: YTMusicApiClient,
+    private val prefetcher: PreviewPrefetcher,
+    private val playerRepository: PlayerRepository,
+    private val musicRepository: MusicRepository,
+    private val streamingPreference: StreamingPreference,
+    private val delegateProvider: javax.inject.Provider<TrackActionsDelegate>,
+    private val losslessPrefetcher: LosslessUrlPrefetcher,
+) {
+    fun create(
+        browseId: String,
+        title: String = "",
+        artist: String = "",
+        thumbnailUrl: String? = null,
+        year: String? = null,
+        source: com.stash.data.ytmusic.model.AlbumSource = com.stash.data.ytmusic.model.AlbumSource.YOUTUBE,
+        qobuzTrackCount: Int? = null,
+    ): com.stash.feature.search.AlbumDiscoveryViewModel {
+        val map = mutableMapOf<String, Any>(
+            "browseId" to browseId,
+            "title" to title,
+            "artist" to artist,
+            "source" to source,
+        )
+        if (thumbnailUrl != null) map["thumbnailUrl"] = thumbnailUrl
+        if (year != null) map["year"] = year
+        if (qobuzTrackCount != null) map["qobuzTrackCount"] = qobuzTrackCount
+        return com.stash.feature.search.AlbumDiscoveryViewModel(
+            savedStateHandle = SavedStateHandle(map),
+            albumCache = albumCache,
+            ytMusicApiClient = ytMusicApiClient,
+            prefetcher = prefetcher,
+            playerRepository = playerRepository,
+            musicRepository = musicRepository,
+            streamingPreference = streamingPreference,
+            delegate = delegateProvider.get(),
+            losslessPrefetcher = losslessPrefetcher,
+        )
+    }
+}
+

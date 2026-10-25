@@ -88,6 +88,18 @@ import com.stash.feature.search.LocalSearchViewModel
 import com.stash.feature.search.SearchScreen
 import com.stash.feature.sync.LocalSyncViewModel
 import com.stash.feature.sync.SyncScreen
+import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.type
+import com.stash.data.ytmusic.model.AlbumSource
+import com.stash.data.ytmusic.model.AlbumSummary
+import com.stash.feature.search.AlbumDiscoveryScreen
+import com.stash.feature.search.ArtistProfileScreen
+import com.stash.feature.search.LocalAlbumDiscoveryViewModel
+import com.stash.feature.search.LocalArtistProfileViewModel
 import kotlinx.coroutines.launch
 
 enum class DesktopNavTab(val label: String, val icon: ImageVector) {
@@ -95,6 +107,28 @@ enum class DesktopNavTab(val label: String, val icon: ImageVector) {
     Search("Search", Icons.Default.Search),
     Sync("Sync", Icons.Default.Sync),
     Settings("Settings", Icons.Default.Settings),
+}
+
+sealed interface DesktopScreen {
+    data object Library : DesktopScreen
+    data object Search : DesktopScreen
+    data object Sync : DesktopScreen
+    data object Settings : DesktopScreen
+    data class ArtistProfile(
+        val artistId: String,
+        val name: String,
+        val avatarUrl: String?,
+        val focusAlbum: String? = null,
+    ) : DesktopScreen
+    data class AlbumDiscovery(
+        val browseId: String,
+        val title: String,
+        val artist: String,
+        val thumbnailUrl: String?,
+        val year: String?,
+        val source: AlbumSource = AlbumSource.YOUTUBE,
+        val qobuzTrackCount: Int? = null,
+    ) : DesktopScreen
 }
 
 @Composable
@@ -105,8 +139,18 @@ fun DesktopScaffold(
     onThemeChanged: (dark: Boolean, amoled: Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    var currentTab by remember { mutableStateOf(DesktopNavTab.Library) }
+    val backStack = remember { mutableStateListOf<DesktopScreen>(DesktopScreen.Library) }
+    val currentScreen = backStack.lastOrNull() ?: DesktopScreen.Library
     var showLyricsPanel by remember { mutableStateOf(false) }
+
+    val activeNavTab = when (currentScreen) {
+        DesktopScreen.Library -> DesktopNavTab.Library
+        DesktopScreen.Search -> DesktopNavTab.Search
+        DesktopScreen.Sync -> DesktopNavTab.Sync
+        DesktopScreen.Settings -> DesktopNavTab.Settings
+        is DesktopScreen.ArtistProfile,
+        is DesktopScreen.AlbumDiscovery -> DesktopNavTab.Search
+    }
 
     val playerRepository = remember { component.playerRepository() }
     val playerState by playerRepository.playerState.collectAsState()
@@ -124,7 +168,15 @@ fun DesktopScaffold(
         Column(
             modifier = modifier
                 .fillMaxSize()
-                .background(MaterialTheme.colorScheme.background),
+                .background(MaterialTheme.colorScheme.background)
+                .onKeyEvent { keyEvent ->
+                    if (keyEvent.key == Key.Escape && keyEvent.type == KeyEventType.KeyUp && backStack.size > 1) {
+                        backStack.removeAt(backStack.lastIndex)
+                        true
+                    } else {
+                        false
+                    }
+                },
         ) {
             // Main workspace (Navigation rail + Content stage + optional lyrics panel)
             Row(
@@ -134,8 +186,17 @@ fun DesktopScaffold(
             ) {
                 // ── Left Navigation Rail ──────────────────────────────────────────
                 DesktopNavRail(
-                    currentTab = currentTab,
-                    onTabSelected = { currentTab = it },
+                    currentTab = activeNavTab,
+                    onTabSelected = { tab ->
+                        val target = when (tab) {
+                            DesktopNavTab.Library -> DesktopScreen.Library
+                            DesktopNavTab.Search -> DesktopScreen.Search
+                            DesktopNavTab.Sync -> DesktopScreen.Sync
+                            DesktopNavTab.Settings -> DesktopScreen.Settings
+                        }
+                        backStack.clear()
+                        backStack.add(target)
+                    },
                     isConnected = isConnected,
                     modifier = Modifier.width(220.dp),
                 )
@@ -146,20 +207,40 @@ fun DesktopScaffold(
                         .weight(1f)
                         .fillMaxHeight(),
                 ) {
-                    when (currentTab) {
-                        DesktopNavTab.Library -> {
+                    when (val screen = currentScreen) {
+                        DesktopScreen.Library -> {
                             LibraryScreen()
                         }
-                        DesktopNavTab.Search -> {
+                        DesktopScreen.Search -> {
                             SearchScreen(
-                                onNavigateToArtist = { _, _, _ -> },
-                                onNavigateToAlbum = { _ -> },
+                                onNavigateToArtist = { id, name, avatar ->
+                                    backStack.add(
+                                        DesktopScreen.ArtistProfile(
+                                            artistId = id,
+                                            name = name,
+                                            avatarUrl = avatar,
+                                        ),
+                                    )
+                                },
+                                onNavigateToAlbum = { album ->
+                                    backStack.add(
+                                        DesktopScreen.AlbumDiscovery(
+                                            browseId = album.id,
+                                            title = album.title,
+                                            artist = album.artist,
+                                            thumbnailUrl = album.thumbnailUrl,
+                                            year = album.year,
+                                            source = album.source,
+                                            qobuzTrackCount = album.trackCount,
+                                        ),
+                                    )
+                                },
                             )
                         }
-                        DesktopNavTab.Sync -> {
+                        DesktopScreen.Sync -> {
                             SyncScreen()
                         }
-                        DesktopNavTab.Settings -> {
+                        DesktopScreen.Settings -> {
                             DesktopSettingsScreen(
                                 appPaths = component.appPaths(),
                                 platformInfo = component.platformInfo(),
@@ -172,6 +253,82 @@ fun DesktopScaffold(
                                 isAmoledTheme = isAmoledTheme,
                                 onThemeChanged = onThemeChanged,
                             )
+                        }
+                        is DesktopScreen.ArtistProfile -> {
+                            val vm = remember(screen.artistId) {
+                                component.artistProfileViewModelFactory().create(
+                                    artistId = screen.artistId,
+                                    name = screen.name,
+                                    avatarUrl = screen.avatarUrl,
+                                    focusAlbum = screen.focusAlbum,
+                                )
+                            }
+                            CompositionLocalProvider(
+                                LocalArtistProfileViewModel provides vm,
+                            ) {
+                                ArtistProfileScreen(
+                                    onBack = {
+                                        if (backStack.size > 1) backStack.removeAt(backStack.lastIndex)
+                                    },
+                                    onNavigateToAlbum = { album ->
+                                        backStack.add(
+                                            DesktopScreen.AlbumDiscovery(
+                                                browseId = album.id,
+                                                title = album.title,
+                                                artist = album.artist,
+                                                thumbnailUrl = album.thumbnailUrl,
+                                                year = album.year,
+                                                source = album.source,
+                                                qobuzTrackCount = album.trackCount,
+                                            ),
+                                        )
+                                    },
+                                    onNavigateToArtist = { id, name, avatar ->
+                                        backStack.add(
+                                            DesktopScreen.ArtistProfile(
+                                                artistId = id,
+                                                name = name,
+                                                avatarUrl = avatar,
+                                            ),
+                                        )
+                                    },
+                                )
+                            }
+                        }
+                        is DesktopScreen.AlbumDiscovery -> {
+                            val vm = remember(screen.browseId, screen.source) {
+                                component.albumDiscoveryViewModelFactory().create(
+                                    browseId = screen.browseId,
+                                    title = screen.title,
+                                    artist = screen.artist,
+                                    thumbnailUrl = screen.thumbnailUrl,
+                                    year = screen.year,
+                                    source = screen.source,
+                                    qobuzTrackCount = screen.qobuzTrackCount,
+                                )
+                            }
+                            CompositionLocalProvider(
+                                LocalAlbumDiscoveryViewModel provides vm,
+                            ) {
+                                AlbumDiscoveryScreen(
+                                    onBack = {
+                                        if (backStack.size > 1) backStack.removeAt(backStack.lastIndex)
+                                    },
+                                    onNavigateToAlbum = { album ->
+                                        backStack.add(
+                                            DesktopScreen.AlbumDiscovery(
+                                                browseId = album.id,
+                                                title = album.title,
+                                                artist = album.artist,
+                                                thumbnailUrl = album.thumbnailUrl,
+                                                year = album.year,
+                                                source = album.source,
+                                                qobuzTrackCount = album.trackCount,
+                                            ),
+                                        )
+                                    },
+                                )
+                            }
                         }
                     }
                 }

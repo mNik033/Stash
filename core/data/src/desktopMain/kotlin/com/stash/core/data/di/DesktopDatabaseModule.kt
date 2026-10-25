@@ -179,6 +179,31 @@ object DesktopDatabaseModule {
     @Singleton
     fun provideMusicRepository(impl: com.stash.core.data.repository.DesktopMusicRepository): com.stash.core.data.repository.MusicRepository =
         impl
+
+    @Provides
+    @Singleton
+    fun provideArtistCache(
+        dao: ArtistProfileCacheDao,
+        api: com.stash.data.ytmusic.YTMusicApiClient,
+    ): com.stash.core.data.cache.ArtistCache = com.stash.core.data.cache.ArtistCache(
+        dao = dao,
+        api = api,
+    )
+
+    @Provides
+    @Singleton
+    fun provideAlbumCache(
+        api: com.stash.data.ytmusic.YTMusicApiClient,
+    ): com.stash.core.data.cache.AlbumCache = com.stash.core.data.cache.AlbumCache(
+        api = api,
+        qobuzFetcher = object : com.stash.core.data.discography.QobuzAlbumFetcher {
+            override suspend fun getAlbum(qobuzAlbumId: String): com.stash.data.ytmusic.model.AlbumDetail =
+                error("Qobuz albums are not supported on desktop yet")
+
+            override suspend fun getPlaylist(playlistId: String): com.stash.data.ytmusic.model.AlbumDetail =
+                error("Qobuz playlists are not supported on desktop yet")
+        },
+    )
 }
 
 

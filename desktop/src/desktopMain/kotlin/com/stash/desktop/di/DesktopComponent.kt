@@ -58,6 +58,8 @@ interface DesktopComponent {
     fun allSongsViewModel(): AllSongsViewModel
     fun searchViewModel(): SearchViewModel
     fun syncViewModel(): SyncViewModel
+    fun artistProfileViewModelFactory(): DesktopArtistProfileViewModelFactory
+    fun albumDiscoveryViewModelFactory(): DesktopAlbumDiscoveryViewModelFactory
 
     @Component.Factory
     interface Factory {
