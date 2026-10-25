@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.annotation.DrawableRes
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Public
@@ -26,30 +25,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalUriHandler
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import com.stash.core.common.ArtUrlUpgrader
 import com.stash.data.ytmusic.model.ArtistAbout
 
-/**
- * Maps a [com.stash.data.ytmusic.model.SocialLink] `kind` to its brand-logo
- * drawable (vendored Simple Icons, CC0). Returns `null` for "website" and any
- * unknown kind — the caller renders the Material globe for those. Pure (returns
- * a resource id) so it can be unit-tested without a Compose harness.
- */
-@DrawableRes
-fun socialIconFor(kind: String): Int? = when (kind.lowercase()) {
-    "instagram" -> R.drawable.ic_social_instagram
-    "x" -> R.drawable.ic_social_x
-    "tiktok" -> R.drawable.ic_social_tiktok
-    "youtube" -> R.drawable.ic_social_youtube
-    "facebook" -> R.drawable.ic_social_facebook
-    "soundcloud" -> R.drawable.ic_social_soundcloud
-    "bandcamp" -> R.drawable.ic_social_bandcamp
-    else -> null // website + unknown -> Material globe fallback
-}
 
 /**
  * Spotify-style "About" section: artist photo, collapsible bio, and a row of
@@ -116,10 +97,10 @@ fun AboutSection(
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 about.socials.forEach { social ->
                     IconButton(onClick = { runCatching { uriHandler.openUri(social.url) } }) {
-                        val brand = socialIconFor(social.kind)
+                        val brand = rememberSocialPainter(social.kind)
                         if (brand != null) {
                             Icon(
-                                painter = painterResource(brand),
+                                painter = brand,
                                 contentDescription = social.kind,
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
                             )

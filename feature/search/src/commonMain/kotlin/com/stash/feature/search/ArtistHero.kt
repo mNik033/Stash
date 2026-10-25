@@ -45,7 +45,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalUriHandler
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -279,10 +278,10 @@ fun ArtistHero(
                             modifier = Modifier.size(32.dp),
                         ) {
                             Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
-                                val brand = socialIconFor(social.kind)
+                                val brand = rememberSocialPainter(social.kind)
                                 if (brand != null) {
                                     Icon(
-                                        painter = painterResource(brand),
+                                        painter = brand,
                                         contentDescription = social.kind,
                                         tint = ink.copy(alpha = 0.85f),
                                         modifier = Modifier.size(16.dp),

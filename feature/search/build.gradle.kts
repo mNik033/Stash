@@ -1,6 +1,10 @@
 plugins {
-    id("stash.android.feature")
+    id("stash.kmp.library")
+    id("stash.kmp.compose")
+    alias(libs.plugins.hilt)
+    alias(libs.plugins.ksp)
 }
+
 android {
     namespace = "com.stash.feature.search"
 
@@ -17,21 +21,52 @@ android {
         }
     }
 }
+
+kotlin {
+    sourceSets {
+        commonMain.dependencies {
+            implementation(project(":core:ui"))
+            implementation(project(":core:model"))
+            implementation(project(":core:common"))
+            implementation(project(":core:data"))
+            implementation(project(":core:media"))
+            implementation(project(":core:auth"))
+            implementation(project(":data:download"))
+            implementation(project(":data:ytmusic"))
+
+            implementation(libs.coil.compose)
+            implementation(libs.coil.network.okhttp)
+            implementation(libs.lifecycle.runtime.compose)
+            implementation(libs.lifecycle.viewmodel.compose)
+            implementation(libs.lifecycle.viewmodel.savedstate)
+            implementation(libs.dagger)
+        }
+
+        androidMain.dependencies {
+            implementation(libs.hilt.android)
+            implementation(libs.hilt.navigation.compose)
+            implementation(libs.datastore.preferences)
+        }
+
+        desktopMain.dependencies {
+            implementation(libs.dagger)
+            implementation(libs.datastore.preferences)
+        }
+    }
+}
+
 dependencies {
-    implementation(project(":core:auth"))
-    implementation(project(":core:common"))
-    implementation(project(":core:data"))
-    implementation(project(":core:media"))
-    implementation(project(":data:download"))
-    implementation(project(":data:ytmusic"))
-    implementation(libs.compose.material.icons.extended)
-    implementation(libs.coil.compose)
-    implementation(libs.coil.network.okhttp)
-    // media3-exoplayer transitively exposes `androidx.media3.common.PlaybackException`
-    // which `SearchViewModel.onPreviewError` accepts as a parameter.
-    implementation(libs.media3.exoplayer)
-    // Recent-searches persistence (RecentSearchesStore).
-    implementation(libs.datastore.preferences)
+    kspAndroid(libs.hilt.android.compiler)
+
+    testImplementation(project(":core:ui"))
+    testImplementation(project(":core:model"))
+    testImplementation(project(":core:common"))
+    testImplementation(project(":core:data"))
+    testImplementation(project(":core:media"))
+    testImplementation(project(":core:auth"))
+    testImplementation(project(":data:download"))
+    testImplementation(project(":data:ytmusic"))
+    testImplementation(libs.media3.exoplayer)
 
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.1")
@@ -39,9 +74,7 @@ dependencies {
     testImplementation("org.mockito:mockito-core:5.14.2")
     testImplementation("org.mockito.kotlin:mockito-kotlin:5.4.0")
     testImplementation(libs.truth)
-    // Robolectric — Android env for the DataStore-backed RecentSearchesStoreTest.
     testImplementation(libs.robolectric)
     testImplementation(libs.androidx.test.core)
-    // AlbumRegionFallbackWiringTest hands the real YTMusicApiClient InnerTube JSON.
     testImplementation(libs.kotlinx.serialization.json)
 }

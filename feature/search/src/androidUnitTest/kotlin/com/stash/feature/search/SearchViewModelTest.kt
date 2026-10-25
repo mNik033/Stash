@@ -356,7 +356,7 @@ class SearchViewModelTest {
         val expectedId = item.videoId.hashCode().toLong()
         assertTrue(expectedId in emissions)
 
-        gate.complete(StreamRoutingResult.Item(mock()))
+        gate.complete(StreamRoutingResult.Item(mock<androidx.media3.common.MediaItem>()))
         runCurrent()
         assertEquals(null, emissions.last())
 

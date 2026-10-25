@@ -1,7 +1,6 @@
 package com.stash.feature.search
 
-import android.os.SystemClock
-import android.util.Log
+import com.stash.core.common.Log
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -21,7 +20,6 @@ import com.stash.core.model.TrackItem
 import com.stash.data.ytmusic.model.AlbumSource
 import com.stash.data.ytmusic.model.ArtistProfile
 import com.stash.data.ytmusic.model.TrackSummary
-import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -61,8 +59,7 @@ import javax.inject.Inject
  * `downloadedIds`, `previewLoadingId`, and `previewState` from
  * `vm.delegate.*` directly.
  */
-@HiltViewModel
-class ArtistProfileViewModel @Inject constructor(
+open class ArtistProfileViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val artistCache: ArtistCache,
     private val albumCache: AlbumCache,
@@ -174,7 +171,7 @@ class ArtistProfileViewModel @Inject constructor(
      * duplicating the body.
      */
     private suspend fun observeCache() {
-        val t0 = SystemClock.elapsedRealtime()
+        val t0 = System.currentTimeMillis()
         artistCache.get(artistId)
             .catch { t ->
                 // Cold miss with no cached fallback — the flow throws and
@@ -403,7 +400,7 @@ class ArtistProfileViewModel @Inject constructor(
             viewModelScope.launch { delegate.refreshDownloadedIds(videoIds) }
         }
         PerfLog.d {
-            "ArtistProfile paint after ${SystemClock.elapsedRealtime() - t0}ms (status=$status)"
+            "ArtistProfile paint after ${System.currentTimeMillis() - t0}ms (status=$status)"
         }
     }
 

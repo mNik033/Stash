@@ -23,7 +23,7 @@ import org.robolectric.RobolectricTestRunner
 class RecentSearchesStoreTest {
 
     private val ctx = ApplicationProvider.getApplicationContext<Context>()
-    private fun store() = RecentSearchesStore(ctx)
+    private fun store(): RecentSearchesStore = AndroidRecentSearchesStore(ctx)
 
     private fun query(text: String) = RecentSearch(RecentSearch.Type.QUERY, text)
 

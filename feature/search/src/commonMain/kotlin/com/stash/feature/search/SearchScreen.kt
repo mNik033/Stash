@@ -71,7 +71,6 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -107,7 +106,7 @@ import com.stash.core.ui.components.bottomChromePadding
 fun SearchScreen(
     onNavigateToArtist: (artistId: String, name: String, avatarUrl: String?) -> Unit,
     onNavigateToAlbum: (album: AlbumSummary) -> Unit,
-    viewModel: SearchViewModel = hiltViewModel(),
+    viewModel: SearchViewModel = searchViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val previewState by viewModel.delegate.previewState.collectAsStateWithLifecycle()

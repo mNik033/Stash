@@ -1,6 +1,6 @@
 package com.stash.feature.search
 
-import android.util.Log
+import com.stash.core.common.Log
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -19,7 +19,6 @@ import com.stash.data.ytmusic.model.AlbumDetail
 import com.stash.data.ytmusic.model.AlbumSearch
 import com.stash.data.ytmusic.model.AlbumSource
 import com.stash.data.ytmusic.model.AlbumSummary
-import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
@@ -79,8 +78,7 @@ import kotlin.math.abs
  * exactly. The screen reads `downloadingIds`, `downloadedIds`,
  * `previewLoadingId`, and `previewState` from `vm.delegate.*` directly.
  */
-@HiltViewModel
-class AlbumDiscoveryViewModel @Inject constructor(
+open class AlbumDiscoveryViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val albumCache: AlbumCache,
     private val ytMusicApiClient: YTMusicApiClient,

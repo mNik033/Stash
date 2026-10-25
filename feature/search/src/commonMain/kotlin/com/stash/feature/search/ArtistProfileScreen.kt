@@ -1,16 +1,9 @@
 package com.stash.feature.search
 
-import android.app.Activity
-import android.content.Context
-import android.content.ContextWrapper
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.statusBars
-import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.graphics.luminance
-import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.Dp
-import androidx.core.view.WindowCompat
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -50,7 +43,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.stash.core.media.preview.LosslessUrlPrefetcher
 import com.stash.core.ui.components.AlbumsRowSkeleton
@@ -88,7 +80,7 @@ fun ArtistProfileScreen(
     onBack: () -> Unit,
     onNavigateToAlbum: (album: AlbumSummary) -> Unit,
     onNavigateToArtist: (artistId: String, name: String, avatarUrl: String?) -> Unit,
-    vm: ArtistProfileViewModel = hiltViewModel(),
+    vm: ArtistProfileViewModel = artistProfileViewModel(),
 ) {
     val state by vm.uiState.collectAsStateWithLifecycle()
     val previewState by vm.delegate.previewState.collectAsStateWithLifecycle()
@@ -396,27 +388,4 @@ private fun ArtistCollapsedBar(name: String, statusBarTop: Dp) {
                 .wrapContentHeight(Alignment.CenterVertically),
         )
     }
-}
-
-/**
- * Sets the status-bar icons light ([light]) or dark while this page shows, and
- * puts back what was there when it leaves.
- */
-@Composable
-private fun StatusBarIcons(light: Boolean) {
-    val view = LocalView.current
-    val controller = remember(view) {
-        view.context.findActivity()?.window?.let { WindowCompat.getInsetsController(it, view) }
-    }
-    DisposableEffect(controller) {
-        val before = controller?.isAppearanceLightStatusBars
-        onDispose { if (before != null) controller.isAppearanceLightStatusBars = before }
-    }
-    SideEffect { controller?.isAppearanceLightStatusBars = !light }
-}
-
-private tailrec fun Context.findActivity(): Activity? = when (this) {
-    is Activity -> this
-    is ContextWrapper -> baseContext.findActivity()
-    else -> null
 }

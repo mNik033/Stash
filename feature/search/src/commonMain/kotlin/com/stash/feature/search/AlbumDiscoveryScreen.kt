@@ -29,7 +29,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.stash.core.media.preview.LosslessUrlPrefetcher
 import com.stash.core.model.TrackItem
@@ -75,7 +74,7 @@ import com.stash.core.ui.components.bottomChromePadding
 fun AlbumDiscoveryScreen(
     onBack: () -> Unit,
     onNavigateToAlbum: (AlbumSummary) -> Unit,
-    vm: AlbumDiscoveryViewModel = hiltViewModel(),
+    vm: AlbumDiscoveryViewModel = albumDiscoveryViewModel(),
 ) {
     val state by vm.uiState.collectAsStateWithLifecycle()
     val downloadingIds by vm.delegate.downloadingIds.collectAsStateWithLifecycle()

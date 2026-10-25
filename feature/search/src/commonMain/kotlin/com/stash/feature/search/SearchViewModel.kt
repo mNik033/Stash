@@ -1,7 +1,6 @@
 package com.stash.feature.search
 
-import android.os.SystemClock
-import android.util.Log
+import com.stash.core.common.Log
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -17,7 +16,6 @@ import com.stash.data.ytmusic.YTMusicApiClient
 import com.stash.data.ytmusic.model.SearchResultSection
 import com.stash.data.ytmusic.model.TopResultItem
 import com.stash.data.ytmusic.model.TrackSummary
-import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -38,23 +36,8 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
-/**
- * ViewModel for the Search screen.
- *
- * Task 9 rewired the search path from a manual `delay → launch` debounce
- * onto [flatMapLatest] driven by a [MutableStateFlow] so a new keystroke
- * cancels the in-flight `searchAll` call without any bookkeeping.
- *
- * The preview and download paths — plus their retry policy and error
- * snackbars — were extracted to [TrackActionsDelegate] in the Album
- * Discovery phase-1 migration so `ArtistProfileViewModel` (and, next,
- * `AlbumDiscoveryViewModel`) can share them. This VM owns only the
- * search-query pipeline; everything per-track is read off
- * `viewModel.delegate.*` in the screen.
- */
-@HiltViewModel
 @OptIn(ExperimentalCoroutinesApi::class, FlowPreview::class)
-class SearchViewModel @Inject constructor(
+open class SearchViewModel @Inject constructor(
     private val api: YTMusicApiClient,
     private val prefetcher: PreviewPrefetcher,
     val delegate: TrackActionsDelegate,
@@ -306,9 +289,9 @@ class SearchViewModel @Inject constructor(
         // Captured BEFORE the skeleton emit so both bookends measure from the
         // same keystroke-cancelled-then-debounced moment. Spec §4.1 latency
         // targets are tap → visible, so wall-clock from flow start is correct.
-        val t0 = SystemClock.elapsedRealtime()
+        val t0 = System.currentTimeMillis()
         emit(SearchStatus.Loading)
-        PerfLog.d { "Search skeleton at ${SystemClock.elapsedRealtime() - t0}ms" }
+        PerfLog.d { "Search skeleton at ${System.currentTimeMillis() - t0}ms" }
         try {
             val results = api.searchAll(query)
             val sections = results.sections
@@ -317,7 +300,7 @@ class SearchViewModel @Inject constructor(
             } else {
                 emit(SearchStatus.Results(sections))
                 PerfLog.d {
-                    "Search first-results at ${SystemClock.elapsedRealtime() - t0}ms (q=$query)"
+                    "Search first-results at ${System.currentTimeMillis() - t0}ms (q=$query)"
                 }
                 prefetchTopN(sections)
                 refreshDownloadedIds(sections)
