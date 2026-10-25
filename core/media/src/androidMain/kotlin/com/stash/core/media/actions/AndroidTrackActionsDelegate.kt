@@ -47,7 +47,7 @@ import javax.inject.Inject
  * bound; calling any action method before binding throws.
  */
 @ViewModelScoped
-class TrackActionsDelegate @Inject constructor(
+class AndroidTrackActionsDelegate @Inject constructor(
     private val previewPlayer: PreviewPlayer,
     private val searchPreviewMediaSource: SearchPreviewMediaSource,
     private val previewUrlExtractor: PreviewUrlExtractor,
@@ -59,28 +59,28 @@ class TrackActionsDelegate @Inject constructor(
     private val musicRepository: com.stash.core.data.repository.MusicRepository,
     private val blocklistGuard: com.stash.core.data.blocklist.BlocklistGuard,
     private val listenTogether: com.stash.core.media.listen.ListenTogetherController? = null,
-) {
+) : TrackActionsDelegate {
     /** Mirrors [PreviewPlayer.previewState] so consumers don't need a second dep. */
-    val previewState: StateFlow<PreviewState> = previewPlayer.previewState
+    override val previewState: StateFlow<PreviewState> = previewPlayer.previewState
 
     private val _userMessages = MutableSharedFlow<String>(extraBufferCapacity = 4)
     /** One-shot user-facing messages (snackbars). Buffered so emissions during
      *  init aren't dropped before the UI subscribes. */
-    val userMessages: SharedFlow<String> = _userMessages.asSharedFlow()
+    override val userMessages: SharedFlow<String> = _userMessages.asSharedFlow()
 
     private val _downloadingIds = MutableStateFlow<Set<String>>(emptySet())
     /** VideoIds currently being downloaded — used by the UI to render spinners. */
-    val downloadingIds: StateFlow<Set<String>> = _downloadingIds.asStateFlow()
+    override val downloadingIds: StateFlow<Set<String>> = _downloadingIds.asStateFlow()
 
     private val _downloadedIds = MutableStateFlow<Set<String>>(emptySet())
     /** VideoIds already in the local library — used by the UI to show the
      *  green checkmark in place of the download button. */
-    val downloadedIds: StateFlow<Set<String>> = _downloadedIds.asStateFlow()
+    override val downloadedIds: StateFlow<Set<String>> = _downloadedIds.asStateFlow()
 
     private val _previewLoadingId = MutableStateFlow<String?>(null)
     /** VideoId whose preview URL is currently being resolved (extractor in
      *  flight). UI shows a row-level spinner for this id. */
-    val previewLoadingId: StateFlow<String?> = _previewLoadingId.asStateFlow()
+    override val previewLoadingId: StateFlow<String?> = _previewLoadingId.asStateFlow()
 
     private val _waitingForLosslessIds = MutableStateFlow<Set<String>>(emptySet())
     /**
@@ -91,7 +91,7 @@ class TrackActionsDelegate @Inject constructor(
      * permanently broken. Cleared when the user taps the row again or the
      * retry succeeds.
      */
-    val waitingForLosslessIds: StateFlow<Set<String>> = _waitingForLosslessIds.asStateFlow()
+    override val waitingForLosslessIds: StateFlow<Set<String>> = _waitingForLosslessIds.asStateFlow()
 
     private var boundScope: CoroutineScope? = null
 
@@ -123,7 +123,7 @@ class TrackActionsDelegate @Inject constructor(
      *
      * @throws IllegalStateException if called twice on the same instance.
      */
-    fun bindToScope(scope: CoroutineScope) {
+    override fun bindToScope(scope: CoroutineScope) {
         check(boundScope == null) { "TrackActionsDelegate.bindToScope called twice" }
         boundScope = scope
         scope.launch {
@@ -183,7 +183,7 @@ class TrackActionsDelegate @Inject constructor(
      * @param track Full [TrackItem] so that [SearchPreviewMediaSource] can
      *              perform artist+title matching for lossless-source selection.
      */
-    fun previewTrack(track: TrackItem) {
+    override fun previewTrack(track: TrackItem) {
         val videoId = track.videoId
 
         if ((previewState.value as? PreviewState.Playing)?.videoId == videoId) return
@@ -361,7 +361,7 @@ class TrackActionsDelegate @Inject constructor(
     }
 
     /** Stops the current audio preview, if any, and clears the loading flag. */
-    fun stopPreview() {
+    override fun stopPreview() {
         val ownedRequestId = previewRequestId
         val ownedAttemptId = lastPreviewAttemptId
         ++previewGeneration
@@ -471,7 +471,7 @@ class TrackActionsDelegate @Inject constructor(
      * it, a VM cancel would mark the download as failed instead of propagating
      * the cancel.
      */
-    fun downloadTrack(item: TrackItem) {
+    override fun downloadTrack(item: TrackItem) {
         val key = item.videoId
         if (key in _downloadingIds.value || key in _downloadedIds.value) return
         _downloadingIds.update { it + key }
@@ -556,7 +556,7 @@ class TrackActionsDelegate @Inject constructor(
      * screen. Callers supply the list of ids visible on screen (not all ids
      * in the DB) so this stays O(screen-size) not O(library-size).
      */
-    suspend fun refreshDownloadedIds(videoIds: Collection<String>) {
+    override suspend fun refreshDownloadedIds(videoIds: Collection<String>) {
         if (videoIds.isEmpty()) return
         val downloaded = videoIds.filter { id ->
             trackDao.findByYoutubeId(id)?.isDownloaded == true
@@ -565,7 +565,7 @@ class TrackActionsDelegate @Inject constructor(
     }
 
     /** Insert [item] right after the current track. */
-    fun playNext(item: TrackItem) {
+    override fun playNext(item: TrackItem) {
         scope().launch {
             try {
                 confirmAdd(playerRepository.addNext(item.toDomainTrack()), "Playing next")
@@ -580,7 +580,7 @@ class TrackActionsDelegate @Inject constructor(
 
     /** Start a song radio seeded from [item]. Streaming-only: on a non-Started
      *  result (streaming off/offline) we surface a hint instead of a dead tap. */
-    fun startRadio(item: TrackItem) {
+    override fun startRadio(item: TrackItem) {
         scope().launch {
             val started = playerRepository.startRadio(
                 com.stash.core.data.radio.RadioSeed.Song(
@@ -592,7 +592,7 @@ class TrackActionsDelegate @Inject constructor(
     }
 
     /** Append [item] to the end of the queue. */
-    fun addToQueue(item: TrackItem) {
+    override fun addToQueue(item: TrackItem) {
         scope().launch {
             try {
                 confirmAdd(playerRepository.addToQueue(item.toDomainTrack()), "Added to queue")
@@ -606,7 +606,7 @@ class TrackActionsDelegate @Inject constructor(
     }
 
     /** In a Listen Together session an add becomes a suggestion or a session-queue add, and the session confirms it. */
-    val inListenTogether: Boolean get() = listenTogether?.active?.value == true
+    override val inListenTogether: Boolean get() = listenTogether?.active?.value == true
 
     private fun confirmAdd(added: Boolean, text: String) {
         if (added && inListenTogether) return
@@ -662,7 +662,7 @@ class TrackActionsDelegate @Inject constructor(
 
     /** Add [item] to an existing playlist. Inserts a streamable stub if the
      *  track isn't in the library yet (NOT downloaded). */
-    fun addToPlaylist(item: TrackItem, playlistId: Long) {
+    override fun addToPlaylist(item: TrackItem, playlistId: Long) {
         scope().launch {
             try {
                 val trackId = ensureTrackPersisted(item) ?: run {
@@ -681,7 +681,7 @@ class TrackActionsDelegate @Inject constructor(
     }
 
     /** Create a new playlist named [name] and add [item] to it. */
-    fun createPlaylistAndAdd(item: TrackItem, name: String) {
+    override fun createPlaylistAndAdd(item: TrackItem, name: String) {
         scope().launch {
             try {
                 val trackId = ensureTrackPersisted(item) ?: run {
@@ -701,7 +701,7 @@ class TrackActionsDelegate @Inject constructor(
     }
 
     /** User-created playlists for the picker. */
-    val userPlaylists: kotlinx.coroutines.flow.Flow<List<com.stash.core.model.Playlist>> =
+    override val userPlaylists: kotlinx.coroutines.flow.Flow<List<com.stash.core.model.Playlist>> =
         musicRepository.getUserCreatedPlaylists()
 
     /**
@@ -729,7 +729,7 @@ class TrackActionsDelegate @Inject constructor(
      * audio doesn't outlive the screen. [boundScope] auto-cancels via
      * structured concurrency; no need to stop the error collector manually.
      */
-    fun onOwnerCleared() {
+    override fun onOwnerCleared() {
         stopPreview()
     }
 
@@ -758,6 +758,31 @@ class TrackActionsDelegate @Inject constructor(
     }
 }
 
-// TrackItem was defined here until v0.9.12; it now lives in
-// com.stash.core.model.TrackItem so that :data:download can reference it
-// without creating a circular module dependency with :core:media.
+/**
+ * Factory function preserving constructor call-site compatibility for tests and non-injected callers.
+ */
+fun TrackActionsDelegate(
+    previewPlayer: PreviewPlayer,
+    searchPreviewMediaSource: SearchPreviewMediaSource,
+    previewUrlExtractor: PreviewUrlExtractor,
+    previewUrlCache: PreviewUrlCache,
+    trackDao: TrackDao,
+    searchDownloadCoordinator: SearchDownloadCoordinator,
+    playerRepository: com.stash.core.media.PlayerRepository,
+    streamingPreference: com.stash.core.data.prefs.StreamingPreference,
+    musicRepository: com.stash.core.data.repository.MusicRepository,
+    blocklistGuard: com.stash.core.data.blocklist.BlocklistGuard,
+    listenTogether: com.stash.core.media.listen.ListenTogetherController? = null,
+): AndroidTrackActionsDelegate = AndroidTrackActionsDelegate(
+    previewPlayer = previewPlayer,
+    searchPreviewMediaSource = searchPreviewMediaSource,
+    previewUrlExtractor = previewUrlExtractor,
+    previewUrlCache = previewUrlCache,
+    trackDao = trackDao,
+    searchDownloadCoordinator = searchDownloadCoordinator,
+    playerRepository = playerRepository,
+    streamingPreference = streamingPreference,
+    musicRepository = musicRepository,
+    blocklistGuard = blocklistGuard,
+    listenTogether = listenTogether,
+)

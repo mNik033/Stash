@@ -28,22 +28,6 @@ import kotlinx.coroutines.flow.asSharedFlow
 // ---------------------------------------------------------------------------
 // State model
 // ---------------------------------------------------------------------------
-
-/**
- * Represents the playback state of [PreviewPlayer].
- *
- * [Idle] is the initial state and is re-entered whenever playback ends,
- * is stopped, or an error occurs.
- *
- * [Playing] carries the [videoId] of the track currently being previewed so
- * that UI layers can highlight the correct row without needing a separate
- * "current item" field.
- */
-sealed interface PreviewState {
-    data object Idle : PreviewState
-    data class Playing(val videoId: String) : PreviewState
-}
-
 /**
  * Error event surfaced by [PreviewPlayer] when ExoPlayer's [Player.Listener]
  * reports an [onPlayerError]. Emitted on [PreviewPlayer.playerErrors].

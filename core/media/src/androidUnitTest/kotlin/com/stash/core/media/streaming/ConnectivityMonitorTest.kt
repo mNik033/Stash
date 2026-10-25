@@ -21,7 +21,7 @@ class ConnectivityMonitorTest {
     private val context: Context = mockk {
         every { getSystemService(Context.CONNECTIVITY_SERVICE) } returns cm
     }
-    private val monitor = ConnectivityMonitor(context)
+    private val monitor = AndroidConnectivityMonitor(context)
 
     @Test
     fun isConnected_returnsTrueOnValidatedInternet() {

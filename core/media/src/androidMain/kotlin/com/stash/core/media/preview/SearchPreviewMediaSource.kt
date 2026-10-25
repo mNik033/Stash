@@ -27,7 +27,7 @@ import javax.inject.Singleton
  */
 @Singleton
 class SearchPreviewMediaSource @Inject constructor(
-    private val prefetcher: LosslessUrlPrefetcher,
+    private val prefetcher: AndroidLosslessUrlPrefetcher,
     private val previewUrlExtractor: PreviewUrlExtractor,
     private val previewCache: SimpleCache,
     private val httpDataSourceFactory: HttpDataSource.Factory,
