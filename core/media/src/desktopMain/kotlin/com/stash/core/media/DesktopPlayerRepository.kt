@@ -9,8 +9,10 @@ import com.stash.core.model.PlayerState
 import com.stash.core.model.RadioStartResult
 import com.stash.core.model.Track
 import com.stash.core.model.TrackItem
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
@@ -21,6 +23,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -31,6 +34,7 @@ class DesktopPlayerRepository @Inject constructor(
     private val streamResolver: DesktopStreamResolver,
 ) : PlayerRepository {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    private var activePlaybackJob: Job? = null
 
     private val _playerState = MutableStateFlow(PlayerState())
     override val playerState: StateFlow<PlayerState> = _playerState.asStateFlow()
@@ -75,16 +79,24 @@ class DesktopPlayerRepository @Inject constructor(
             engine.playbackState.collect { state ->
                 when (state) {
                     is PlaybackEngine.State.Playing -> {
-                        _playerState.value = _playerState.value.copy(isPlaying = true)
+                        _playerState.value = _playerState.value.copy(isPlaying = true, isBuffering = false)
                     }
                     is PlaybackEngine.State.Paused -> {
-                        _playerState.value = _playerState.value.copy(isPlaying = false)
+                        _playerState.value = _playerState.value.copy(isPlaying = false, isBuffering = false)
+                    }
+                    is PlaybackEngine.State.Buffering -> {
+                        _playerState.value = _playerState.value.copy(isBuffering = true)
                     }
                     is PlaybackEngine.State.Ended -> {
-                        skipNext()
+                        if (_playerState.value.repeatMode == com.stash.core.model.RepeatMode.ONE) {
+                            seekTo(0L)
+                            engine.resume()
+                        } else {
+                            skipNext()
+                        }
                     }
                     is PlaybackEngine.State.Error -> {
-                        _playerState.value = _playerState.value.copy(isPlaying = false)
+                        _playerState.value = _playerState.value.copy(isPlaying = false, isBuffering = false)
                         _userMessages.emit(state.message)
                     }
                     else -> Unit
@@ -113,18 +125,36 @@ class DesktopPlayerRepository @Inject constructor(
 
     override suspend fun skipNext() {
         val s = _playerState.value
+        if (s.queue.isEmpty()) {
+            activePlaybackJob?.cancel()
+            engine.stop()
+            _playerState.value = s.copy(isPlaying = false, isBuffering = false)
+            return
+        }
+
+        if (s.isShuffleEnabled && s.queue.size > 1) {
+            val unplayed = s.queue.indices.filter { it != s.currentIndex }
+            val nextIndex = unplayed.random()
+            skipToQueueIndex(nextIndex)
+            return
+        }
+
         val nextIndex = s.currentIndex + 1
         if (nextIndex < s.queue.size) {
             skipToQueueIndex(nextIndex)
+        } else if (s.repeatMode == com.stash.core.model.RepeatMode.ALL) {
+            skipToQueueIndex(0)
         } else {
+            activePlaybackJob?.cancel()
             engine.stop()
-            _playerState.value = s.copy(isPlaying = false)
+            _playerState.value = s.copy(isPlaying = false, isBuffering = false)
         }
     }
 
     override suspend fun skipPrevious() {
         if (engine.currentPositionMs > 3000L) {
             engine.seekTo(0L)
+            _playerState.value = _playerState.value.copy(positionMs = 0L)
             return
         }
         val s = _playerState.value
@@ -133,6 +163,7 @@ class DesktopPlayerRepository @Inject constructor(
             skipToQueueIndex(prevIndex)
         } else {
             engine.seekTo(0L)
+            _playerState.value = _playerState.value.copy(positionMs = 0L)
         }
     }
 
@@ -144,36 +175,68 @@ class DesktopPlayerRepository @Inject constructor(
     override suspend fun setQueue(tracks: List<Track>, startIndex: Int, source: PlaybackSource) {
         val safeIndex = startIndex.coerceIn(0, (tracks.size - 1).coerceAtLeast(0))
         val current = tracks.getOrNull(safeIndex)
+
+        // Cancel previous track resolution and immediately stop old audio
+        activePlaybackJob?.cancel()
+        engine.stop()
+
         _playerState.value = _playerState.value.copy(
             queue = tracks,
             currentIndex = safeIndex,
             currentTrack = current,
+            positionMs = 0L,
+            durationMs = current?.durationMs ?: 0L,
             isPlaying = current != null,
+            isBuffering = current != null,
         )
         if (current != null) {
             playTrackItem(current)
+            prefetchNextTrack(tracks, safeIndex)
         }
     }
 
     private fun playTrackItem(track: Track) {
-        scope.launch {
-            val uri = streamResolver.resolveForTrack(track)
-            if (uri.isNullOrBlank()) {
-                _userMessages.emit("Unable to play '${track.title}'. Stream not available.")
-                _playerState.value = _playerState.value.copy(isPlaying = false)
-                return@launch
+        activePlaybackJob?.cancel()
+        activePlaybackJob = scope.launch {
+            try {
+                val uri = streamResolver.resolveForTrack(track)
+                if (!isActive) return@launch
+                if (uri.isNullOrBlank()) {
+                    _userMessages.emit("Unable to play '${track.title}'. Stream not available.")
+                    _playerState.value = _playerState.value.copy(isPlaying = false, isBuffering = false)
+                    return@launch
+                }
+                val item = PlayableItem(
+                    mediaId = track.id.toString(),
+                    uri = uri,
+                    title = track.title,
+                    artist = track.artist,
+                    album = track.album,
+                    durationMs = track.durationMs,
+                    isLocal = track.isDownloaded,
+                    artworkUri = track.albumArtUrl ?: track.albumArtPath,
+                )
+                if (!isActive) return@launch
+                engine.play(item, playWhenReady = true)
+                _playerState.value = _playerState.value.copy(
+                    isPlaying = true,
+                    isBuffering = false,
+                )
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                _playerState.value = _playerState.value.copy(isPlaying = false, isBuffering = false)
+                _userMessages.emit("Error playing '${track.title}': ${e.message}")
             }
-            val item = PlayableItem(
-                mediaId = track.id.toString(),
-                uri = uri,
-                title = track.title,
-                artist = track.artist,
-                album = track.album,
-                durationMs = track.durationMs,
-                isLocal = track.isDownloaded,
-                artworkUri = track.albumArtUrl ?: track.albumArtPath,
-            )
-            engine.play(item, playWhenReady = true)
+        }
+    }
+
+    private fun prefetchNextTrack(queue: List<Track>, currentIndex: Int) {
+        val nextIndex = currentIndex + 1
+        if (nextIndex in queue.indices) {
+            val nextTrack = queue[nextIndex]
+            scope.launch(Dispatchers.IO) {
+                runCatching { streamResolver.resolveForTrack(nextTrack) }
+            }
         }
     }
 
@@ -275,12 +338,21 @@ class DesktopPlayerRepository @Inject constructor(
         val s = _playerState.value
         if (index !in s.queue.indices) return
         val track = s.queue[index]
+
+        // Immediately stop old audio
+        activePlaybackJob?.cancel()
+        engine.stop()
+
         _playerState.value = s.copy(
             currentIndex = index,
             currentTrack = track,
+            positionMs = 0L,
+            durationMs = track.durationMs,
             isPlaying = true,
+            isBuffering = true,
         )
         playTrackItem(track)
+        prefetchNextTrack(s.queue, index)
     }
 
     override suspend fun playTrack(track: Track): StreamRoutingResult {
@@ -300,6 +372,9 @@ class DesktopPlayerRepository @Inject constructor(
     }
 
     override suspend fun playFromStream(item: TrackItem): StreamRoutingResult {
+        activePlaybackJob?.cancel()
+        engine.stop()
+
         val durationMs = (item.durationSeconds * 1000).toLong()
         val track = Track(
             id = item.videoId.hashCode().toLong(),
@@ -314,12 +389,15 @@ class DesktopPlayerRepository @Inject constructor(
             queue = listOf(track),
             currentIndex = 0,
             currentTrack = track,
+            positionMs = 0L,
+            durationMs = durationMs,
             isPlaying = true,
+            isBuffering = true,
         )
 
         val uri = streamResolver.resolveStreamUrl(item.videoId)
         if (uri.isNullOrBlank()) {
-            _playerState.value = _playerState.value.copy(isPlaying = false)
+            _playerState.value = _playerState.value.copy(isPlaying = false, isBuffering = false)
             return StreamRoutingResult.NotAvailable
         }
 
@@ -333,6 +411,7 @@ class DesktopPlayerRepository @Inject constructor(
             artworkUri = item.thumbnailUrl,
         )
         engine.play(playable, playWhenReady = true)
+        _playerState.value = _playerState.value.copy(isPlaying = true, isBuffering = false)
         return StreamRoutingResult.Item(playable)
     }
 }

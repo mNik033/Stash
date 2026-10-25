@@ -26,10 +26,23 @@ class DesktopStreamResolver @Inject constructor(
 ) {
     companion object {
         private const val TAG = "DesktopStreamResolver"
+        private const val CACHE_TTL_MS = 2 * 60 * 60 * 1000L // 2 hours
     }
 
-    suspend fun resolveStreamUrl(videoId: String): String? = withContext(Dispatchers.IO) {
+    private val streamUrlCache = java.util.concurrent.ConcurrentHashMap<String, Pair<String, Long>>()
+    private val canonicalIdCache = java.util.concurrent.ConcurrentHashMap<String, String>()
+
+    suspend fun resolveStreamUrl(videoId: String, forceFresh: Boolean = false): String? = withContext(Dispatchers.IO) {
         require(YouTubeVideoId.isValid(videoId)) { "Invalid YouTube video id: $videoId" }
+
+        val now = System.currentTimeMillis()
+        if (!forceFresh) {
+            val cached = streamUrlCache[videoId]
+            if (cached != null && now < cached.second) {
+                Log.d(TAG, "Stream cache hit for $videoId")
+                return@withContext cached.first
+            }
+        }
 
         val stream = innerTubeClient.playerForAudio(videoId) { response, streamPot ->
             val status = response["playabilityStatus"]?.jsonObject?.get("status")?.jsonPrimitive?.content
@@ -72,6 +85,7 @@ class DesktopStreamResolver @Inject constructor(
         }
 
         val resolved = stream?.url ?: "https://www.youtube.com/watch?v=$videoId"
+        streamUrlCache[videoId] = Pair(resolved, now + CACHE_TTL_MS)
         Log.d(TAG, "Resolved stream for $videoId (variant=${stream?.variant}) -> ${resolved.take(60)}...")
         resolved
     }
@@ -96,11 +110,19 @@ class DesktopStreamResolver @Inject constructor(
         val artist = track.artist.trim()
         val title = track.title.trim()
         if (artist.isNotBlank() || title.isNotBlank()) {
+            val key = "${artist.lowercase()}::${title.lowercase()}"
+            val cachedId = canonicalIdCache[key]
+            if (!cachedId.isNullOrBlank()) {
+                val cachedUrl = runCatching { resolveStreamUrl(cachedId) }.getOrNull()
+                if (cachedUrl != null) return cachedUrl
+            }
+
             val canonicalId = runCatching {
                 ytMusicApiClient.searchCanonicalVideoId(artist, title)
             }.getOrNull()
 
             if (!canonicalId.isNullOrBlank()) {
+                canonicalIdCache[key] = canonicalId
                 return runCatching { resolveStreamUrl(canonicalId) }.getOrNull()
             }
 
@@ -121,6 +143,7 @@ class DesktopStreamResolver @Inject constructor(
                     ?.track?.videoId
 
             if (!songId.isNullOrBlank()) {
+                canonicalIdCache[key] = songId
                 return runCatching { resolveStreamUrl(songId) }.getOrNull()
             }
         }

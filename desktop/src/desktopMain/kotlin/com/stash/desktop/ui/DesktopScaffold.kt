@@ -635,12 +635,20 @@ private fun DesktopBottomPlayerBar(
                             },
                         contentAlignment = Alignment.Center,
                     ) {
-                        Icon(
-                            imageVector = if (playerState.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                            contentDescription = if (playerState.isPlaying) "Pause" else "Play",
-                            tint = Color.White,
-                            modifier = Modifier.size(22.dp),
-                        )
+                        if (playerState.isBuffering) {
+                            CircularProgressIndicator(
+                                color = Color.White,
+                                modifier = Modifier.size(20.dp),
+                                strokeWidth = 2.dp,
+                            )
+                        } else {
+                            Icon(
+                                imageVector = if (playerState.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                                contentDescription = if (playerState.isPlaying) "Pause" else "Play",
+                                tint = Color.White,
+                                modifier = Modifier.size(22.dp),
+                            )
+                        }
                     }
                     IconButton(onClick = onSkipNext) {
                         Icon(
