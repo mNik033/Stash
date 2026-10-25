@@ -10,8 +10,8 @@ android {
 kotlin {
     sourceSets {
         commonMain.dependencies {
-            implementation(project(":core:model"))
-            implementation(project(":core:common"))
+            api(project(":core:model"))
+            api(project(":core:common"))
             implementation(libs.coil.compose)
             implementation(libs.coil.network.okhttp)
             implementation(libs.haze)
@@ -25,6 +25,8 @@ kotlin {
         }
 
         desktopMain.dependencies {
+            implementation(project(":core:model"))
+            implementation(project(":core:common"))
         }
     }
 }

@@ -47,6 +47,8 @@ kotlin {
                 implementation(libs.lifecycle.runtime.compose)
                 implementation(libs.lifecycle.viewmodel.compose)
                 implementation(libs.lifecycle.viewmodel.savedstate)
+                implementation(libs.kotlinx.coroutines.core)
+                implementation(libs.kotlinx.coroutines.swing)
                 implementation(libs.kotlinx.serialization.json)
                 implementation(libs.datastore.preferences)
                 implementation(libs.okhttp)
