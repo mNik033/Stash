@@ -37,7 +37,23 @@ class DesktopPlayerRepository @Inject constructor(
 
     override val currentPosition: Flow<Long> = flow {
         while (true) {
-            emit(engine.currentPositionMs)
+            val pos = engine.currentPositionMs
+            val dur = engine.durationMs
+            val state = _playerState.value
+
+            val durationChanged = dur > 0L && state.durationMs != dur
+            val positionChanged = state.positionMs != pos
+
+            if (durationChanged || positionChanged) {
+                _playerState.value = state.copy(
+                    positionMs = pos,
+                    durationMs = if (dur > 0L) dur else state.durationMs,
+                    currentTrack = state.currentTrack?.let { track ->
+                        if (dur > 0L && track.durationMs != dur) track.copy(durationMs = dur) else track
+                    }
+                )
+            }
+            emit(pos)
             delay(250)
         }
     }
@@ -122,6 +138,7 @@ class DesktopPlayerRepository @Inject constructor(
 
     override suspend fun seekTo(positionMs: Long) {
         engine.seekTo(positionMs)
+        _playerState.value = _playerState.value.copy(positionMs = positionMs)
     }
 
     override suspend fun setQueue(tracks: List<Track>, startIndex: Int, source: PlaybackSource) {

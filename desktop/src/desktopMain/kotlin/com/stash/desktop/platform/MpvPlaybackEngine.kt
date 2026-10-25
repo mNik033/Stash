@@ -154,6 +154,7 @@ class MpvPlaybackEngine @Inject constructor() : PlaybackEngine, Closeable {
         pollerJob = scope.launch {
             val h = handle ?: return@launch
             val lib = MpvBinding.instance ?: return@launch
+            var hasStartedPlaying = false
 
             while (isActive) {
                 delay(250)
@@ -164,7 +165,11 @@ class MpvPlaybackEngine @Inject constructor() : PlaybackEngine, Closeable {
                         val posStr = posPtr.getString(0, "UTF-8")
                         lib.mpv_free(posPtr)
                         posStr.toDoubleOrNull()?.let { sec ->
-                            _currentPositionMs = (sec * 1000).toLong()
+                            val posMs = (sec * 1000).toLong()
+                            _currentPositionMs = posMs
+                            if (posMs > 0L) {
+                                hasStartedPlaying = true
+                            }
                         }
                     }
 
@@ -181,19 +186,40 @@ class MpvPlaybackEngine @Inject constructor() : PlaybackEngine, Closeable {
                         }
                     }
 
-                    // Query idle-active (true when playback ended)
+                    // Query eof-reached
+                    val eofPtr = lib.mpv_get_property_string(h, "eof-reached")
+                    var isEof = false
+                    if (eofPtr != null) {
+                        val eofStr = eofPtr.getString(0, "UTF-8")
+                        lib.mpv_free(eofPtr)
+                        if (eofStr == "yes") {
+                            isEof = true
+                        }
+                    }
+
+                    // Query idle-active (true when playback ended or idle)
                     val idlePtr = lib.mpv_get_property_string(h, "idle-active")
+                    var isIdle = false
                     if (idlePtr != null) {
                         val idleStr = idlePtr.getString(0, "UTF-8")
                         lib.mpv_free(idlePtr)
-                        if (idleStr == "yes" && _playbackState.value is PlaybackEngine.State.Playing) {
-                            _playbackState.value = PlaybackEngine.State.Ended
-                            stopPoller()
-                            break
+                        if (idleStr == "yes") {
+                            isIdle = true
+                        } else {
+                            hasStartedPlaying = true
                         }
                     }
-                } catch (_: Throwable) {
-                    // Ignore and continue polling
+
+                    // Only transition to Ended if playback had actively started,
+                    // and either reached EOF or returned to idle state.
+                    if (hasStartedPlaying && (isEof || isIdle) && _playbackState.value is PlaybackEngine.State.Playing) {
+                        println("MpvPlaybackEngine: playback ended (isEof=$isEof, isIdle=$isIdle)")
+                        _playbackState.value = PlaybackEngine.State.Ended
+                        stopPoller()
+                        break
+                    }
+                } catch (t: Throwable) {
+                    println("MpvPlaybackEngine poller warning: ${t.message}")
                 }
             }
         }

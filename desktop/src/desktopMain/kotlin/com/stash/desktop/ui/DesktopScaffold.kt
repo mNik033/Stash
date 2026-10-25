@@ -337,8 +337,14 @@ private fun DesktopBottomPlayerBar(
     modifier: Modifier = Modifier,
 ) {
     val track = playerState.currentTrack
-    val durationMs = (track?.durationMs ?: 0L).coerceAtLeast(0L)
+    val durationMs = (playerState.durationMs.takeIf { it > 0 } ?: track?.durationMs ?: 0L).coerceAtLeast(0L)
     val progress = if (durationMs > 0) (currentPositionMs.toFloat() / durationMs.toFloat()).coerceIn(0f, 1f) else 0f
+
+    var isDraggingSlider by remember { mutableStateOf(false) }
+    var dragProgress by remember { mutableFloatStateOf(0f) }
+
+    val displayProgress = if (isDraggingSlider) dragProgress else progress
+    val displayPos = if (isDraggingSlider) (dragProgress * durationMs).toLong() else currentPositionMs
 
     var volume by remember { mutableFloatStateOf(0.85f) }
     var isMuted by remember { mutableStateOf(false) }
@@ -489,15 +495,21 @@ private fun DesktopBottomPlayerBar(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(
-                        text = formatDuration(currentPositionMs),
+                        text = formatDuration(displayPos),
                         fontSize = 11.sp,
                         color = Color(0xFF94A3B8),
                     )
                     Slider(
-                        value = progress,
+                        value = displayProgress,
                         onValueChange = { newProgress ->
-                            val seekPos = (newProgress * durationMs).toLong()
-                            onSeekTo(seekPos)
+                            isDraggingSlider = true
+                            dragProgress = newProgress
+                        },
+                        onValueChangeFinished = {
+                            if (durationMs > 0) {
+                                onSeekTo((dragProgress * durationMs).toLong())
+                            }
+                            isDraggingSlider = false
                         },
                         modifier = Modifier
                             .weight(1f)
