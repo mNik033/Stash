@@ -134,4 +134,9 @@ object DesktopDatabaseModule {
     @Provides
     fun provideListeningHistoryDao(db: StashDatabase): ListeningHistoryDao =
         db.listeningHistoryDao()
+
+    @Provides
+    @Singleton
+    fun provideLyricsPreference(impl: com.stash.core.data.prefs.DesktopLyricsPreference): com.stash.core.data.prefs.LyricsPreference =
+        impl
 }

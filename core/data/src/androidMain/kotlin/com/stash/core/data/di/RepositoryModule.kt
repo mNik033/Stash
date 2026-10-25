@@ -2,12 +2,14 @@ package com.stash.core.data.di
 
 import com.stash.core.data.audio.FFmpegBridge
 import com.stash.core.data.audio.FFmpegBridgeImpl
+import com.stash.core.data.prefs.AndroidLyricsPreference
 import com.stash.core.data.prefs.AutoplayRadioPreference
 import com.stash.core.data.prefs.AutoplayRadioPreferencesManager
 import com.stash.core.data.prefs.CrossfadePreference
 import com.stash.core.data.prefs.CrossfadePreferencesManager
 import com.stash.core.data.prefs.HiResOutputPreference
 import com.stash.core.data.prefs.HiResOutputPreferencesManager
+import com.stash.core.data.prefs.LyricsPreference
 import com.stash.core.data.prefs.StoragePreference
 import com.stash.core.data.prefs.StoragePreferencesManager
 import com.stash.core.data.prefs.ThemePreference
@@ -61,4 +63,8 @@ abstract class RepositoryModule {
     @Binds
     @Singleton
     abstract fun bindFFmpegBridge(impl: FFmpegBridgeImpl): FFmpegBridge
+
+    @Binds
+    @Singleton
+    abstract fun bindLyricsPreference(impl: AndroidLyricsPreference): LyricsPreference
 }
