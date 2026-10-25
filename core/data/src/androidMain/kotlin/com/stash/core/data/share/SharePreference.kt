@@ -21,13 +21,13 @@ private val Context.shareDataStore: DataStore<Preferences> by preferencesDataSto
 
 /** The optional display name on shared mixes (spec §5), remembered between shares. */
 @Singleton
-class SharePreference @Inject constructor(@ApplicationContext private val context: Context) {
+class AndroidSharePreference @Inject constructor(@ApplicationContext private val context: Context) : SharePreference {
     private val nameKey = stringPreferencesKey("display_name")
 
-    suspend fun displayName(): String? =
+    override suspend fun displayName(): String? =
         runCatching { context.shareDataStore.data.map { it[nameKey] }.first() }.getOrNull()?.takeIf { it.isNotBlank() }
 
-    suspend fun setDisplayName(name: String?) {
+    override suspend fun setDisplayName(name: String?) {
         context.shareDataStore.edit { if (name.isNullOrBlank()) it.remove(nameKey) else it[nameKey] = name.trim().cut(40) }
     }
 }

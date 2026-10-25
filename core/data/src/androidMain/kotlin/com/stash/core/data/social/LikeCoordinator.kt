@@ -56,7 +56,7 @@ import kotlinx.coroutines.launch
  * virtual-time minGap).
  */
 @Singleton
-class LikeCoordinator internal constructor(
+class RealLikeCoordinator internal constructor(
     private val stashLikedRepository: StashLikedPlaylistRepository,
     private val likePreferences: LikePreferences,
     private val dispatcher: LikeDestinationDispatcher,
@@ -64,7 +64,7 @@ class LikeCoordinator internal constructor(
     private val crossPlatformResolver: CrossPlatformLikeResolver,
     scope: CoroutineScope,
     private val minGapMs: Long,
-) {
+) : LikeCoordinator {
     @Inject constructor(
         stashLikedRepository: StashLikedPlaylistRepository,
         likePreferences: LikePreferences,
@@ -88,19 +88,19 @@ class LikeCoordinator internal constructor(
 
     private val _mirrorFailures = MutableSharedFlow<String>(extraBufferCapacity = 1)
 
-    /** One subtle "couldn't sync â€” will retry" per session; UI collects this. */
-    val mirrorFailures: SharedFlow<String> = _mirrorFailures
+    /** One subtle "couldn't sync — will retry" per session; UI collects this. */
+    override val mirrorFailures: SharedFlow<String> = _mirrorFailures
 
     init {
         scope.launch { drainLoop() }
     }
 
     /**
-     * Toggle the heart for [trackId]. [trackId] must be a real Room PK â€”
+     * Toggle the heart for [trackId]. [trackId] must be a real Room PK —
      * callers already resolve synthetic/streaming ids (ensureTrackPersisted
      * / resolveTrackIdForLike) before calling.
      */
-    suspend fun setLiked(trackId: Long, liked: Boolean) {
+    override suspend fun setLiked(trackId: Long, liked: Boolean) {
         if (liked) stashLikedRepository.add(trackId) else stashLikedRepository.remove(trackId)
 
         // Fast-path gate so a mirroring-off install never churns the queue.

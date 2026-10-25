@@ -18,33 +18,24 @@ private val Context.nowPlayingDataStore by preferencesDataStore(
     corruptionHandler = ReplaceFileCorruptionHandler { emptyPreferences() },
 )
 
-/** How Now Playing's ambient moves (Settings > Appearance > Ambient style). */
-enum class AmbientStyle {
-    /** The default: the web player's soft orbs. */
-    SOFT_GLOW,
-
-    /** The app's original ambient. */
-    CLASSIC,
-}
-
 @Singleton
-class NowPlayingPreference @Inject constructor(@ApplicationContext private val context: Context) {
+class AndroidNowPlayingPreference @Inject constructor(@ApplicationContext private val context: Context) : NowPlayingPreference {
     private val ambientAnimationKey = booleanPreferencesKey("ambient_animation_enabled")
-    val ambientAnimationEnabled = context.nowPlayingDataStore.data.map { it[ambientAnimationKey] ?: true }
+    override val ambientAnimationEnabled = context.nowPlayingDataStore.data.map { it[ambientAnimationKey] ?: true }
 
-    suspend fun setAmbientAnimationEnabled(enabled: Boolean) {
+    override suspend fun setAmbientAnimationEnabled(enabled: Boolean) {
         context.nowPlayingDataStore.edit { it[ambientAnimationKey] = enabled }
     }
 
     private val ambientStyleKey = stringPreferencesKey("ambient_style")
 
     /** Unset or unknown reads as [AmbientStyle.SOFT_GLOW], so existing installs get the default. */
-    val ambientStyle = context.nowPlayingDataStore.data.map { prefs ->
+    override val ambientStyle = context.nowPlayingDataStore.data.map { prefs ->
         prefs[ambientStyleKey]?.let { name -> AmbientStyle.entries.firstOrNull { it.name == name } }
             ?: AmbientStyle.SOFT_GLOW
     }
 
-    suspend fun setAmbientStyle(style: AmbientStyle) {
+    override suspend fun setAmbientStyle(style: AmbientStyle) {
         context.nowPlayingDataStore.edit { it[ambientStyleKey] = style.name }
     }
 
@@ -55,11 +46,11 @@ class NowPlayingPreference @Inject constructor(@ApplicationContext private val c
      * [NowPlayingAction.DefaultPins]; an empty set is kept as empty (the user unpinned all).
      * Unknown names are ignored, see [NowPlayingAction.parsePins].
      */
-    val pinnedActions = context.nowPlayingDataStore.data.map { prefs ->
+    override val pinnedActions = context.nowPlayingDataStore.data.map { prefs ->
         NowPlayingAction.parsePins(prefs[pinnedActionsKey])
     }
 
-    suspend fun setPinnedActions(pins: Set<NowPlayingAction>) {
+    override suspend fun setPinnedActions(pins: Set<NowPlayingAction>) {
         context.nowPlayingDataStore.edit { it[pinnedActionsKey] = pins.mapTo(HashSet()) { a -> a.name } }
     }
 
@@ -70,7 +61,7 @@ class NowPlayingPreference @Inject constructor(@ApplicationContext private val c
      * both land, rather than the second overwriting the first from a stale read, and the cap
      * holds in storage whatever the UI believed. Returns false when the row was full.
      */
-    suspend fun togglePin(action: NowPlayingAction): Boolean {
+    override suspend fun togglePin(action: NowPlayingAction): Boolean {
         var changed = false
         context.nowPlayingDataStore.edit { prefs ->
             val next = NowPlayingAction.togglePin(NowPlayingAction.parsePins(prefs[pinnedActionsKey]), action)
@@ -83,7 +74,7 @@ class NowPlayingPreference @Inject constructor(@ApplicationContext private val c
     }
 
     /** Back to Radio · ⋮ · Queue (and to whatever a later release makes the default). */
-    suspend fun resetPinnedActions() {
+    override suspend fun resetPinnedActions() {
         context.nowPlayingDataStore.edit { it.remove(pinnedActionsKey) }
     }
 }

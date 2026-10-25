@@ -26,7 +26,7 @@ class NowPlayingPreferenceTest {
         context = ApplicationProvider.getApplicationContext()
         file = context.preferencesDataStoreFile("now_playing_preference")
         if (file.exists()) file.delete()
-        preference = NowPlayingPreference(context)
+        preference = AndroidNowPlayingPreference(context)
     }
 
     @After fun tearDown() {

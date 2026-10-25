@@ -66,7 +66,7 @@ class LikeCoordinatorTest {
     }
 
     private fun kotlinx.coroutines.test.TestScope.coordinator(minGapMs: Long = 1_500L) =
-        LikeCoordinator(stashLiked, prefs, dispatcher, trackDao, resolver, backgroundScope, minGapMs)
+        RealLikeCoordinator(stashLiked, prefs, dispatcher, trackDao, resolver, backgroundScope, minGapMs)
 
     @Test fun `local like always happens, mirroring off touches nothing external`() = runTest {
         mirrorPrefs(spotify = false, yt = false)
