@@ -21,6 +21,7 @@ kotlin {
 
         androidMain.dependencies {
             implementation(libs.core.ktx)
+            implementation(libs.activity.compose)
         }
 
         desktopMain.dependencies {
