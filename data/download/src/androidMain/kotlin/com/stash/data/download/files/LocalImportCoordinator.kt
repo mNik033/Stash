@@ -1,4 +1,4 @@
-﻿package com.stash.data.download.files
+package com.stash.data.download.files
 
 import android.content.ContentResolver
 import android.content.Context
@@ -28,75 +28,32 @@ import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/**
- * State of the "Import from device" flow. Observable via
- * [LocalImportCoordinator.state]. Stays on [Done] or [Error] until
- * [LocalImportCoordinator.dismiss] is called.
- */
-sealed interface LocalImportState {
-    data object Idle : LocalImportState
-    data class Running(val current: Int, val total: Int) : LocalImportState
-    data class Done(val imported: Int, val failed: Int) : LocalImportState
-    data class Error(val message: String) : LocalImportState
-}
-
-/**
- * Imports user-picked audio files into the Stash library.
- *
- * For each URI from the SAF picker (or share intent):
- *   1. Copies the bytes to a temp cache file whose name Stash picks.
- *   2. Extracts metadata via `MediaMetadataRetriever` (title/artist/album/
- *      duration/embedded album art). Falls back to filename parsing
- *      (`Artist - Title.ext`) when tags are missing.
- *   3. Picks the extension: the provider's MIME type or display name when
- *      either maps to an audio type Stash saves ([ImportedAudioType]), else
- *      the content's own container type ([ImportedAudioType.fromContent]).
- *      A file none of them identifies is refused.
- *   4. Hands the temp file to [FileOrganizer.commitDownload] so the final
- *      destination obeys the user's storage preference (internal vs. SAF),
- *      as a new file: it never replaces a library file or shares a path
- *      with another track.
- *   5. Persists the embedded album art (if any) into the app's cache.
- *   6. Inserts a [Track] with `source = MusicSource.LOCAL`, `isDownloaded =
- *      true`, and `spotifyUri` / `youtubeId` null.
- *
- * Runs on an app-scoped [CoroutineScope] so the import survives VM
- * death â€” the user can leave Settings/Library and come back to see
- * progress. The UI observes [state] to render a progress strip.
- *
- * Safety invariants:
- *   - Only content:// URIs whose provider belongs to another app are read.
- *   - No sender-supplied text becomes the temp name or a file extension;
- *     folder and file names derived from tags or the display name go
- *     through slugify. The extension is always one of
- *     [ImportedAudioType.EXTENSIONS].
- *   - Per-file failures don't abort the batch â€” they increment `failed`
- *     and log with the offending URI.
- *   - Temp files are always deleted (success: commitDownload deletes
- *     them; a failure or a cancel: [importOne] deletes them).
- *   - A cancel stops the batch and leaves it [LocalImportState.Idle], never
- *     [LocalImportState.Done]. A file whose save has begun finishes first,
- *     so the library never keeps a file no song records.
- *   - Concurrent [start] calls while [Running] are no-ops.
- */
 @Singleton
-class LocalImportCoordinator @Inject constructor(
+class RealLocalImportCoordinator @Inject constructor(
     @ApplicationContext private val context: Context,
     private val fileOrganizer: FileOrganizer,
     private val musicRepository: MusicRepository,
-) {
+) : LocalImportCoordinator {
     private val _state = MutableStateFlow<LocalImportState>(LocalImportState.Idle)
-    val state: StateFlow<LocalImportState> = _state.asStateFlow()
+    override val state: StateFlow<LocalImportState> = _state.asStateFlow()
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var activeJob: Job? = null
+
+    override fun start(uris: List<String>) {
+        startUris(uris.map(Uri::parse))
+    }
 
     /**
      * Start importing [uris]. No-op if already [LocalImportState.Running].
      * An empty list flips to `Done(0, 0)` immediately so the UI can show
      * a "nothing to import" banner without a spinner.
      */
-    fun start(uris: List<Uri>) {
+    fun startFromUris(uris: List<Uri>) {
+        startUris(uris)
+    }
+
+    private fun startUris(uris: List<Uri>) {
         if (_state.value is LocalImportState.Running) return
         if (uris.isEmpty()) {
             _state.value = LocalImportState.Done(imported = 0, failed = 0)
@@ -106,14 +63,14 @@ class LocalImportCoordinator @Inject constructor(
     }
 
     /** Cancel a running import. Files imported so far remain in the library. */
-    fun cancel() {
+    override fun cancel() {
         activeJob?.cancel()
         activeJob = null
         _state.value = LocalImportState.Idle
     }
 
     /** Dismiss a terminal state ([Done] / [Error]), returning to [Idle]. */
-    fun dismiss() {
+    override fun dismiss() {
         if (_state.value is LocalImportState.Done || _state.value is LocalImportState.Error) {
             _state.value = LocalImportState.Idle
         }

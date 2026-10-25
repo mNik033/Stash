@@ -386,7 +386,7 @@ class MainActivity : ComponentActivity() {
             else -> emptyList()
         }
         if (uris.isNotEmpty()) {
-            localImportCoordinator.start(uris)
+            localImportCoordinator.start(uris.map { it.toString() })
         }
     }
 }

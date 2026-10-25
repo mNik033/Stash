@@ -237,7 +237,7 @@ class LocalImportCoordinatorTest {
         every { resolver.openInputStream(source) } answers { gatedStream(reading, gate) }
         val coordinator = coordinator()
 
-        coordinator.start(listOf(source, second))
+        coordinator.startFromUris(listOf(source, second))
         assertThat(reading.await(5, TimeUnit.SECONDS)).isTrue()
         coordinator.cancel()
         gate.countDown()
@@ -268,7 +268,7 @@ class LocalImportCoordinatorTest {
         }
         val coordinator = coordinator()
 
-        coordinator.start(listOf(source, second))
+        coordinator.startFromUris(listOf(source, second))
         assertThat(saving.await(5, TimeUnit.SECONDS)).isTrue()
         coordinator.cancel()
 
@@ -311,11 +311,11 @@ class LocalImportCoordinatorTest {
     }
 
     private fun coordinator() =
-        LocalImportCoordinator(context, FileOrganizer(context, storagePreference, trackDao), musicRepository)
+        RealLocalImportCoordinator(context, FileOrganizer(context, storagePreference, trackDao), musicRepository)
 
     private fun importOne() = runBlocking {
         val coordinator = coordinator()
-        coordinator.start(listOf(source))
+        coordinator.startFromUris(listOf(source))
         val done = withTimeout(10_000) {
             coordinator.state.first { it is LocalImportState.Done || it is LocalImportState.Error }
         }

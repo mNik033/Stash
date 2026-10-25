@@ -156,7 +156,7 @@ class LibraryViewModel @Inject constructor(
 
     /** Kick off an import for the URIs picked via the SAF audio picker. */
     fun startLocalImport(uris: List<Uri>) {
-        localImportCoordinator.start(uris)
+        localImportCoordinator.start(uris.map { it.toString() })
     }
 
     /** Cancel an in-progress import. Files imported so far stay put. */

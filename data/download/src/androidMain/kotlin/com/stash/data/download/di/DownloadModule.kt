@@ -43,4 +43,9 @@ abstract class DownloadModule {
     @Binds
     @Singleton
     abstract fun bindYtDlpRunner(impl: com.stash.data.download.ytdlp.AndroidYtDlpRunner): com.stash.data.download.ytdlp.YtDlpRunner
+
+    @Binds
+    @Singleton
+    abstract fun bindLocalImportCoordinator(impl: com.stash.data.download.files.RealLocalImportCoordinator): com.stash.data.download.files.LocalImportCoordinator
 }
+

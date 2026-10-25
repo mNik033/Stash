@@ -1,5 +1,7 @@
 package com.stash.data.download.di
 
+import com.stash.data.download.files.DesktopLocalImportCoordinator
+import com.stash.data.download.files.LocalImportCoordinator
 import com.stash.data.download.ytdlp.DesktopYtDlpRunner
 import com.stash.data.download.ytdlp.YtDlpRunner
 import dagger.Binds
@@ -12,4 +14,9 @@ abstract class DesktopDownloadModule {
     @Binds
     @Singleton
     abstract fun bindYtDlpRunner(impl: DesktopYtDlpRunner): YtDlpRunner
+
+    @Binds
+    @Singleton
+    abstract fun bindLocalImportCoordinator(impl: DesktopLocalImportCoordinator): LocalImportCoordinator
 }
+

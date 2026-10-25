@@ -127,8 +127,8 @@ class LocalImportCoordinatorExtensionTest {
     }
 
     private fun import(vararg uris: Uri): LocalImportState.Done = runBlocking {
-        val coordinator = LocalImportCoordinator(context, fileOrganizer, musicRepository)
-        coordinator.start(uris.toList())
+        val coordinator = RealLocalImportCoordinator(context, fileOrganizer, musicRepository)
+        coordinator.startFromUris(uris.toList())
         withTimeout(10_000) {
             coordinator.state.first { it is LocalImportState.Done } as LocalImportState.Done
         }
