@@ -77,9 +77,19 @@ compose.desktop {
             )
             packageName = "Stash"
             packageVersion = "1.0.0"
+            description = "Stash — Lossless music player & library manager"
+            vendor = "Stash"
 
             macOS {
                 bundleID = "com.stash.desktop"
+                dockName = "Stash"
+            }
+            windows {
+                menuGroup = "Stash"
+                upgradeUuid = "6b6e4e0c-512d-4560-b6c8-5089fa2d9f7a"
+            }
+            linux {
+                shortcut = true
             }
         }
     }

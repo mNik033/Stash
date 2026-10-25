@@ -1,0 +1,96 @@
+name: Desktop CI & Packaging
+
+# Builds and packages the Stash desktop application (Compose Multiplatform)
+# for macOS (Apple Silicon + Intel), Windows (MSI installer), and Linux (DEB package).
+# On release tags (`v*`), it uploads the packaged desktop binaries directly to the GitHub Release.
+
+on:
+  push:
+    branches:
+      - master
+      - desktop
+    tags:
+      - 'v*'
+    paths-ignore:
+      - 'web/**'
+      - '*.md'
+  pull_request:
+    branches:
+      - master
+      - desktop
+    paths-ignore:
+      - 'web/**'
+      - '*.md'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-desktop:
+    name: Package Desktop (${{ matrix.target }} - ${{ matrix.arch }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: macOS
+            os: macos-latest
+            arch: arm64
+            gradle-task: :desktop:packageDmg
+            artifact-path: desktop/build/compose/binaries/main/dmg/*.dmg
+            artifact-name: Stash-Desktop-macOS-arm64
+          - target: macOS
+            os: macos-13
+            arch: x64
+            gradle-task: :desktop:packageDmg
+            artifact-path: desktop/build/compose/binaries/main/dmg/*.dmg
+            artifact-name: Stash-Desktop-macOS-x64
+          - target: Windows
+            os: windows-latest
+            arch: x64
+            gradle-task: :desktop:packageMsi
+            artifact-path: desktop/build/compose/binaries/main/msi/*.msi
+            artifact-name: Stash-Desktop-Windows-x64
+          - target: Linux
+            os: ubuntu-latest
+            arch: x64
+            gradle-task: :desktop:packageDeb
+            artifact-path: desktop/build/compose/binaries/main/deb/*.deb
+            artifact-name: Stash-Desktop-Linux-x64
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Gradle cache
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Fix gradlew permissions
+        if: runner.os != 'Windows'
+        run: chmod +x gradlew
+
+      - name: Package Desktop application
+        run: ./gradlew ${{ matrix.gradle-task }} --no-daemon
+
+      - name: Upload desktop artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact-name }}
+          path: ${{ matrix.artifact-path }}
+          if-no-files-found: error
+
+      - name: Attach desktop binaries to GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ matrix.artifact-path }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
