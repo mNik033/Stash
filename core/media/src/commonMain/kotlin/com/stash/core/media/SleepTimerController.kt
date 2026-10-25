@@ -1,6 +1,5 @@
 package com.stash.core.media
 
-import androidx.annotation.VisibleForTesting
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -10,10 +9,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.drop
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -29,13 +24,12 @@ import javax.inject.Singleton
  * them.
  */
 @Singleton
-class SleepTimerController @VisibleForTesting internal constructor(
+class SleepTimerController internal constructor(
     private val playerRepository: PlayerRepository,
     private val scope: CoroutineScope,
     /**
      * Runs when the timer puts the music to sleep, after the pause. Ends an open Recap story
-     * without giving its paused music back ([com.stash.core.media.recap.RecapAudio.end] with
-     * `restoreMain = false`): during a story the main player is already paused, so the pause
+     * without giving its paused music back: during a story the main player is already paused, so the pause
      * alone did nothing, and closing the story later would have started the music again for
      * the rest of the night. It also stops the story's own song.
      */
@@ -45,18 +39,9 @@ class SleepTimerController @VisibleForTesting internal constructor(
 ) {
 
     @Inject
-    constructor(
-        playerRepository: PlayerRepository,
-        recapAudio: dagger.Lazy<com.stash.core.media.recap.RecapAudio>,
-    ) : this(
+    constructor(playerRepository: PlayerRepository) : this(
         playerRepository = playerRepository,
-        onSleep = { recapAudio.get().end(restoreMain = false) },
-        // Main, not Default: the fade ends in playerRepository.pause(), and a
-        // MediaController may only be touched on its application (main)
-        // thread — from a Default worker Media3 throws and the process dies
-        // the moment the timer fires. The loops here are a delay and a
-        // position collect: nothing that blocks the main thread.
-        scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate),
+        scope = CoroutineScope(SupervisorJob() + Dispatchers.Main),
     )
 
     sealed interface State {

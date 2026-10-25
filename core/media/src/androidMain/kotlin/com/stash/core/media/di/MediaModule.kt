@@ -73,5 +73,16 @@ abstract class MediaModule {
         fun provideLoudnessStore(
             @ApplicationContext context: Context,
         ): LoudnessStore = LoudnessStore(context.loudnessDataStore)
+
+        @Provides
+        @Singleton
+        fun provideSleepTimerController(
+            playerRepository: PlayerRepository,
+            recapAudio: dagger.Lazy<com.stash.core.media.recap.RecapAudio>,
+        ): com.stash.core.media.SleepTimerController = com.stash.core.media.SleepTimerController(
+            playerRepository = playerRepository,
+            scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Main.immediate),
+            onSleep = { recapAudio.get().end(restoreMain = false) },
+        )
     }
 }
