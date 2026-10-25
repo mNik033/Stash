@@ -54,6 +54,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -100,6 +101,17 @@ import com.stash.feature.search.AlbumDiscoveryScreen
 import com.stash.feature.search.ArtistProfileScreen
 import com.stash.feature.search.LocalAlbumDiscoveryViewModel
 import com.stash.feature.search.LocalArtistProfileViewModel
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material3.TextButton
+import com.stash.data.lyrics.LyricsRepository
+import com.stash.data.lyrics.parser.LrcLine
+import com.stash.data.lyrics.parser.LrcParser
+import com.stash.data.lyrics.source.LyricsQuery
+import com.stash.data.lyrics.source.LyricsResult
 import kotlinx.coroutines.launch
 
 enum class DesktopNavTab(val label: String, val icon: ImageVector) {
@@ -341,8 +353,11 @@ fun DesktopScaffold(
                 ) {
                     DesktopLyricsSidePanel(
                         currentTrack = playerState.currentTrack,
+                        currentPositionMs = currentPositionMs,
+                        onSeek = { pos -> scope.launch { playerRepository.seekTo(pos) } },
+                        lyricsRepository = remember { component.lyricsRepository() },
                         onClose = { showLyricsPanel = false },
-                        modifier = Modifier.width(320.dp),
+                        modifier = Modifier.width(360.dp),
                     )
                 }
             }
@@ -759,12 +774,107 @@ private fun DesktopBottomPlayerBar(
     }
 }
 
+sealed interface DesktopLyricsState {
+    data object Loading : DesktopLyricsState
+    data class Synced(val lines: List<LrcLine>) : DesktopLyricsState
+    data class Plain(val text: String) : DesktopLyricsState
+    data object Instrumental : DesktopLyricsState
+    data object None : DesktopLyricsState
+    data class Error(val message: String) : DesktopLyricsState
+}
+
 @Composable
 private fun DesktopLyricsSidePanel(
     currentTrack: Track?,
+    currentPositionMs: Long,
+    onSeek: (Long) -> Unit,
+    lyricsRepository: LyricsRepository,
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    var retryCount by remember { mutableStateOf(0) }
+    var lyricsState by remember(currentTrack?.title, currentTrack?.artist, retryCount) {
+        mutableStateOf<DesktopLyricsState>(DesktopLyricsState.Loading)
+    }
+
+    LaunchedEffect(currentTrack?.title, currentTrack?.artist, retryCount) {
+        val track = currentTrack
+        if (track == null) {
+            lyricsState = DesktopLyricsState.None
+            return@LaunchedEffect
+        }
+
+        lyricsState = DesktopLyricsState.Loading
+
+        try {
+            val query = LyricsQuery(
+                trackId = if (track.id > 0L) track.id else 0L,
+                title = track.title,
+                artist = track.artist,
+                album = track.album.ifBlank { null },
+                albumArtist = track.albumArtist.ifBlank { null },
+                durationMs = track.durationMs.takeIf { it > 0 },
+                youtubeVideoId = track.youtubeId,
+                isrc = track.isrc?.takeIf { it.isNotBlank() },
+                interactive = true,
+                onDemand = true,
+            )
+
+            // Check local database first if library track
+            val localLyrics = if (track.id > 0L) {
+                lyricsRepository.get(track.id)
+            } else null
+
+            if (localLyrics != null && (localLyrics.instrumental || !localLyrics.syncedLrc.isNullOrBlank() || !localLyrics.plainText.isNullOrBlank())) {
+                lyricsState = when {
+                    localLyrics.instrumental -> DesktopLyricsState.Instrumental
+                    !localLyrics.syncedLrc.isNullOrBlank() -> {
+                        val lines = LrcParser.parse(localLyrics.syncedLrc!!)
+                        if (lines.isNotEmpty()) DesktopLyricsState.Synced(lines)
+                        else if (!localLyrics.plainText.isNullOrBlank()) DesktopLyricsState.Plain(localLyrics.plainText!!)
+                        else DesktopLyricsState.None
+                    }
+                    !localLyrics.plainText.isNullOrBlank() -> DesktopLyricsState.Plain(localLyrics.plainText!!)
+                    else -> DesktopLyricsState.None
+                }
+            } else {
+                // Resolve online via lyrics repository
+                val result: LyricsResult? = if (track.id > 0L) {
+                    val entity = lyricsRepository.resolveAndStore(query, fresh = (retryCount > 0))
+                    if (entity != null) {
+                        LyricsResult(
+                            sourceId = entity.source.orEmpty(),
+                            plainText = entity.plainText,
+                            syncedLrc = entity.syncedLrc,
+                            instrumental = entity.instrumental,
+                            language = entity.language,
+                            sourceLyricsId = entity.sourceLyricsId,
+                            ttml = entity.ttml,
+                        )
+                    } else null
+                } else {
+                    lyricsRepository.resolveTransient(query, fresh = (retryCount > 0))
+                }
+
+                lyricsState = when {
+                    result == null -> DesktopLyricsState.None
+                    result.instrumental -> DesktopLyricsState.Instrumental
+                    !result.syncedLrc.isNullOrBlank() -> {
+                        val lines = LrcParser.parse(result.syncedLrc!!)
+                        if (lines.isNotEmpty()) DesktopLyricsState.Synced(lines)
+                        else if (!result.plainText.isNullOrBlank()) DesktopLyricsState.Plain(result.plainText!!)
+                        else DesktopLyricsState.None
+                    }
+                    !result.plainText.isNullOrBlank() -> DesktopLyricsState.Plain(result.plainText!!)
+                    else -> DesktopLyricsState.None
+                }
+            }
+        } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
+            lyricsState = DesktopLyricsState.Error(e.message ?: "Failed to load lyrics")
+        }
+    }
+
     Surface(
         modifier = modifier.fillMaxHeight(),
         color = StashSurface,
@@ -773,19 +883,41 @@ private fun DesktopLyricsSidePanel(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(20.dp),
+                .padding(horizontal = 16.dp, vertical = 20.dp),
         ) {
+            // Header: Cover + Title/Artist + Close Button
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text(
-                    text = "Lyrics",
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White,
-                )
+                if (currentTrack?.albumArtUrl != null) {
+                    AsyncImage(
+                        model = currentTrack.albumArtUrl,
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier
+                            .size(42.dp)
+                            .clip(RoundedCornerShape(8.dp)),
+                    )
+                    Spacer(modifier = Modifier.width(12.dp))
+                }
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = currentTrack?.title ?: "No track playing",
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Text(
+                        text = currentTrack?.artist ?: "Unknown artist",
+                        fontSize = 12.sp,
+                        color = Color(0xFF94A3B8),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
                 IconButton(onClick = onClose) {
                     Icon(
                         imageVector = Icons.Default.Close,
@@ -794,36 +926,178 @@ private fun DesktopLyricsSidePanel(
                     )
                 }
             }
+
             Spacer(modifier = Modifier.height(16.dp))
 
-            if (currentTrack != null) {
-                Text(
-                    text = currentTrack.title,
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = StashCyan,
-                )
-                Text(
-                    text = currentTrack.artist,
-                    fontSize = 13.sp,
-                    color = Color(0xFF94A3B8),
-                )
-                Spacer(modifier = Modifier.height(24.dp))
-                Text(
-                    text = "Synced lyrics display active.",
-                    fontSize = 14.sp,
-                    color = Color(0xFF94A3B8),
-                )
-            } else {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(
-                        text = "Play a song to view lyrics",
-                        fontSize = 14.sp,
-                        color = Color(0xFF64748B),
-                    )
+            // Body
+            when (val state = lyricsState) {
+                DesktopLyricsState.Loading -> {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            CircularProgressIndicator(
+                                color = StashCyan,
+                                modifier = Modifier.size(32.dp),
+                                strokeWidth = 3.dp,
+                            )
+                            Spacer(modifier = Modifier.height(14.dp))
+                            Text(
+                                text = "Searching lyrics...",
+                                fontSize = 13.sp,
+                                color = Color(0xFF94A3B8),
+                            )
+                        }
+                    }
+                }
+                is DesktopLyricsState.Synced -> {
+                    val lines = state.lines
+                    val activeIndex = remember(lines, currentPositionMs) {
+                        var idx = -1
+                        for (i in lines.indices) {
+                            if (lines[i].timestampMs <= currentPositionMs) {
+                                idx = i
+                            } else {
+                                break
+                            }
+                        }
+                        idx
+                    }
+
+                    val listState = rememberLazyListState()
+                    LaunchedEffect(activeIndex) {
+                        if (activeIndex >= 0) {
+                            val target = (activeIndex - 2).coerceAtLeast(0)
+                            listState.animateScrollToItem(target)
+                        }
+                    }
+
+                    LazyColumn(
+                        state = listState,
+                        modifier = Modifier.fillMaxSize(),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        itemsIndexed(lines) { index, line ->
+                            val isActive = (index == activeIndex)
+                            val isPast = (index < activeIndex)
+                            val text = line.text.ifBlank { "• • •" }
+
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(
+                                        if (isActive) StashCyan.copy(alpha = 0.14f)
+                                        else Color.Transparent,
+                                    )
+                                    .clickable { onSeek(line.timestampMs) }
+                                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                            ) {
+                                Text(
+                                    text = text,
+                                    fontSize = if (isActive) 16.sp else 14.sp,
+                                    fontWeight = if (isActive) FontWeight.Bold else FontWeight.Medium,
+                                    color = when {
+                                        isActive -> StashCyan
+                                        isPast -> Color.White.copy(alpha = 0.85f)
+                                        else -> Color(0xFF64748B)
+                                    },
+                                    lineHeight = 22.sp,
+                                )
+                            }
+                        }
+                    }
+                }
+                is DesktopLyricsState.Plain -> {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        items(state.text.lines()) { line ->
+                            Text(
+                                text = line.ifBlank { " " },
+                                fontSize = 14.sp,
+                                color = Color(0xFFE2E8F0),
+                                lineHeight = 22.sp,
+                            )
+                        }
+                    }
+                }
+                DesktopLyricsState.Instrumental -> {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(
+                                imageVector = Icons.Default.MusicNote,
+                                contentDescription = null,
+                                tint = StashCyan,
+                                modifier = Modifier.size(36.dp),
+                            )
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Text(
+                                text = "Instrumental Track",
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = Color.White,
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "This track does not have lyrics.",
+                                fontSize = 13.sp,
+                                color = Color(0xFF94A3B8),
+                            )
+                        }
+                    }
+                }
+                DesktopLyricsState.None,
+                is DesktopLyricsState.Error -> {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            modifier = Modifier.padding(16.dp),
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Lyrics,
+                                contentDescription = null,
+                                tint = Color(0xFF64748B),
+                                modifier = Modifier.size(36.dp),
+                            )
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Text(
+                                text = if (state is DesktopLyricsState.Error) "Couldn't load lyrics" else "No lyrics found",
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = Color.White,
+                            )
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(
+                                text = if (state is DesktopLyricsState.Error) state.message else "Lyrics are unavailable for this track.",
+                                fontSize = 13.sp,
+                                color = Color(0xFF94A3B8),
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            Spacer(modifier = Modifier.height(14.dp))
+                            TextButton(
+                                onClick = { retryCount++ },
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Refresh,
+                                    contentDescription = null,
+                                    tint = StashCyan,
+                                    modifier = Modifier.size(16.dp),
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Try Again", color = StashCyan)
+                            }
+                        }
+                    }
                 }
             }
         }

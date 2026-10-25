@@ -16,8 +16,10 @@ import com.stash.desktop.platform.DesktopPlatformInfo
 import com.stash.desktop.platform.DesktopScheduler
 import com.stash.desktop.platform.DesktopTokenStore
 import com.stash.desktop.platform.MpvPlaybackEngine
+import com.stash.core.common.AppVersionProvider
 import dagger.Binds
 import dagger.Module
+import dagger.Provides
 import javax.inject.Singleton
 
 @Module
@@ -54,4 +56,13 @@ abstract class DesktopPlatformModule {
     @Binds
     @Singleton
     abstract fun bindTokenManager(impl: TokenManagerImpl): TokenManager
+
+    companion object {
+        @Provides
+        @Singleton
+        fun provideAppVersionProvider(): AppVersionProvider = object : AppVersionProvider {
+            override val versionName: String = "1.0.0-desktop"
+            override val versionCode: Int = 1
+        }
+    }
 }
