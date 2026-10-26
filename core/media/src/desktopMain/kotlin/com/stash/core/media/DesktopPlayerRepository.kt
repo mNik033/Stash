@@ -238,6 +238,14 @@ class DesktopPlayerRepository @Inject constructor(
                 )
                 if (!isActive) return@launch
                 engine.play(item, playWhenReady = true)
+                val engineState = engine.playbackState.value
+                if (engineState is PlaybackEngine.State.Error) {
+                    _playerState.value = _playerState.value.copy(
+                        isPlaying = false,
+                        isBuffering = false,
+                    )
+                    return@launch
+                }
                 if (track.id > 0L) {
                     runCatching { musicRepository.recordPlay(track.id) }
                 }
@@ -476,6 +484,10 @@ class DesktopPlayerRepository @Inject constructor(
         )
 
         engine.play(playable, playWhenReady = true)
+        if (engine.playbackState.value is PlaybackEngine.State.Error) {
+            _playerState.value = _playerState.value.copy(isPlaying = false, isBuffering = false)
+            return StreamRoutingResult.NotAvailable
+        }
         if (track.id > 0L) {
             runCatching { musicRepository.recordPlay(track.id) }
         }
@@ -524,6 +536,10 @@ class DesktopPlayerRepository @Inject constructor(
             artworkUri = item.thumbnailUrl,
         )
         engine.play(playable, playWhenReady = true)
+        if (engine.playbackState.value is PlaybackEngine.State.Error) {
+            _playerState.value = _playerState.value.copy(isPlaying = false, isBuffering = false)
+            return StreamRoutingResult.NotAvailable
+        }
         _playerState.value = _playerState.value.copy(isPlaying = true, isBuffering = false)
         return StreamRoutingResult.Item(playable)
     }

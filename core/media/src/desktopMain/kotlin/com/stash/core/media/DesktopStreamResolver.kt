@@ -4,6 +4,7 @@ import com.stash.core.common.Log
 import com.stash.core.model.Track
 import com.stash.core.model.YouTubeVideoId
 import com.stash.data.download.preview.AudioUrlTailProbe
+import com.stash.data.download.ytdlp.YtDlpRunner
 import com.stash.data.ytmusic.InnerTubeClient
 import com.stash.data.ytmusic.YTMusicApiClient
 import com.stash.data.ytmusic.model.SearchResultSection
@@ -23,6 +24,7 @@ class DesktopStreamResolver @Inject constructor(
     private val innerTubeClient: InnerTubeClient,
     private val ytMusicApiClient: YTMusicApiClient,
     private val tailProbe: AudioUrlTailProbe,
+    private val ytDlpRunner: YtDlpRunner,
 ) {
     companion object {
         private const val TAG = "DesktopStreamResolver"
@@ -97,7 +99,7 @@ class DesktopStreamResolver @Inject constructor(
             null
         }
 
-        val resolved = stream?.url
+        val resolved = stream?.url ?: resolveViaYtDlpFallback(videoId)
         if (resolved != null) {
             if (streamUrlCache.size >= MAX_CACHE_ENTRIES) {
                 streamUrlCache.entries.removeIf { it.value.second < now }
@@ -106,9 +108,31 @@ class DesktopStreamResolver @Inject constructor(
                 }
             }
             streamUrlCache[videoId] = Pair(resolved, now + CACHE_TTL_MS)
-            Log.d(TAG, "Resolved stream for $videoId (variant=${stream.variant}) -> ${resolved.take(60)}...")
+            Log.i(TAG, "Resolved stream for $videoId (variant=${stream?.variant ?: "yt-dlp"}) -> ${resolved.take(60)}...")
+        } else {
+            Log.w(TAG, "Failed to resolve playable stream URL for $videoId")
         }
         resolved
+    }
+
+    private suspend fun resolveViaYtDlpFallback(videoId: String): String? {
+        val watchUrl = YouTubeVideoId.watchUrl(videoId) ?: return null
+        val resp = runCatching {
+            ytDlpRunner.execute(
+                listOf(
+                    "-f", "251/250/140/bestaudio/best",
+                    "--no-playlist",
+                    "--no-download",
+                    "--print", "urls",
+                    "--",
+                    watchUrl,
+                )
+            )
+        }.getOrNull() ?: return null
+        if (resp.exitCode != 0) return null
+        return resp.out.lineSequence()
+            .map { it.trim() }
+            .firstOrNull { it.startsWith("https://") || it.startsWith("http://") }
     }
 
     suspend fun resolveForTrack(track: Track): String? {

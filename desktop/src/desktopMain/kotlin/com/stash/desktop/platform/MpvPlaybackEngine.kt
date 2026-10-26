@@ -46,6 +46,7 @@ class MpvPlaybackEngine @Inject constructor() : PlaybackEngine, Closeable {
     init {
         val lib = MpvBinding.instance
         if (lib != null) {
+            MpvBinding.ensureNumericLocaleC()
             val h = lib.mpv_create()
             if (h != null) {
                 lib.mpv_set_option_string(h, "config", "no")
@@ -62,7 +63,7 @@ class MpvPlaybackEngine @Inject constructor() : PlaybackEngine, Closeable {
                 val status = lib.mpv_initialize(h)
                 if (status >= 0) {
                     handle = h
-                    Log.i(TAG, "libmpv initialized successfully")
+                    Log.i(TAG, "libmpv initialized successfully via '${MpvBinding.libraryName}'")
                 } else {
                     val err = lib.mpv_error_string(status)
                     lib.mpv_terminate_destroy(h)
@@ -77,6 +78,7 @@ class MpvPlaybackEngine @Inject constructor() : PlaybackEngine, Closeable {
     }
 
     fun attachWindowHandle(hwnd: Long) {
+        if (!com.sun.jna.Platform.isWindows()) return
         synchronized(nativeLock) {
             val h = handle ?: return
             val lib = MpvBinding.instance ?: return
@@ -122,9 +124,9 @@ class MpvPlaybackEngine @Inject constructor() : PlaybackEngine, Closeable {
             val h = handle
             val lib = MpvBinding.instance
             if (h == null || lib == null) {
-                _playbackState.value = PlaybackEngine.State.Error(
-                    "libmpv native library not available. Please install mpv on your system."
-                )
+                val msg = "libmpv native library not available. Please install mpv on your system (e.g., 'brew install mpv' on macOS)."
+                Log.e(TAG, "Cannot play '${item.title}': $msg")
+                _playbackState.value = PlaybackEngine.State.Error(msg)
                 return
             }
             val titleStr = if (item.artist.isNotBlank()) "${item.title} - ${item.artist}" else item.title

@@ -19,11 +19,33 @@ interface MpvLib : Library {
     fun mpv_error_string(error: Int): String
 }
 
+private interface CLib : Library {
+    fun setlocale(category: Int, locale: String?): String?
+}
+
 object MpvBinding {
     val libraryName: String?
     val instance: MpvLib?
 
+    /**
+     * libmpv requires `LC_NUMERIC` to be `"C"` and returns NULL from `mpv_create()`
+     * otherwise. On macOS and Linux, the JVM sets `LC_NUMERIC` from the system
+     * locale at startup, so we reset `LC_NUMERIC` to `"C"` before creating a handle.
+     */
+    fun ensureNumericLocaleC() {
+        if (Platform.isWindows()) return
+        try {
+            val cLib = Native.load("c", CLib::class.java)
+            // LC_NUMERIC is 4 on macOS/BSD and 1 on Linux (glibc/musl)
+            val lcNumeric = if (Platform.isMac()) 4 else 1
+            cLib.setlocale(lcNumeric, "C")
+        } catch (t: Throwable) {
+            println("MpvBinding: failed to set LC_NUMERIC=C: ${t.message}")
+        }
+    }
+
     init {
+        ensureNumericLocaleC()
         val userHome = System.getProperty("user.home")?.replace('\\', '/') ?: ""
         val localAppData = System.getenv("LOCALAPPDATA")?.replace('\\', '/') ?: "$userHome/AppData/Local"
         val explicitPath = System.getProperty("stash.mpv.path")
@@ -43,6 +65,7 @@ object MpvBinding {
                 }
                 Platform.isMac() -> {
                     candidatePaths.add("$resourcesDir/libmpv.dylib")
+                    candidatePaths.add("$resourcesDir/libmpv.2.dylib")
                 }
                 else -> {
                     candidatePaths.add("$resourcesDir/libmpv.so.2")
@@ -60,7 +83,15 @@ object MpvBinding {
             }
             Platform.isMac() -> {
                 candidatePaths.add("/opt/homebrew/lib/libmpv.dylib")
+                candidatePaths.add("/opt/homebrew/lib/libmpv.2.dylib")
+                candidatePaths.add("/opt/homebrew/opt/mpv/lib/libmpv.dylib")
+                candidatePaths.add("/opt/homebrew/opt/mpv/lib/libmpv.2.dylib")
                 candidatePaths.add("/usr/local/lib/libmpv.dylib")
+                candidatePaths.add("/usr/local/lib/libmpv.2.dylib")
+                candidatePaths.add("/usr/local/opt/mpv/lib/libmpv.dylib")
+                candidatePaths.add("/usr/local/opt/mpv/lib/libmpv.2.dylib")
+                candidatePaths.add("$userHome/Library/Application Support/Stash/data/bin/libmpv.dylib")
+                candidatePaths.add("$userHome/.stash/bin/libmpv.dylib")
             }
             else -> {
                 candidatePaths.add("/usr/lib/x86_64-linux-gnu/libmpv.so.2")
@@ -127,6 +158,7 @@ class MpvAudioPlayer {
     init {
         val lib = MpvBinding.instance
         if (lib != null) {
+            MpvBinding.ensureNumericLocaleC()
             val h = lib.mpv_create()
             if (h != null) {
                 lib.mpv_set_option_string(h, "config", "no")

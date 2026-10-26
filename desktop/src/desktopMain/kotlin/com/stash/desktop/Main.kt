@@ -52,12 +52,16 @@ fun main() {
             state = remember { WindowState(width = 1200.dp, height = 800.dp) },
         ) {
             val hwnd = remember {
-                try {
-                    Native.getWindowID(this.window)
-                } catch (_: Throwable) { 0L }
+                if (Platform.isWindows()) {
+                    try {
+                        Native.getWindowID(this.window)
+                    } catch (_: Throwable) { 0L }
+                } else {
+                    0L
+                }
             }
             LaunchedEffect(hwnd) {
-                if (hwnd != 0L) {
+                if (hwnd != 0L && Platform.isWindows()) {
                     component.mpvPlaybackEngine().attachWindowHandle(hwnd)
                 }
             }
