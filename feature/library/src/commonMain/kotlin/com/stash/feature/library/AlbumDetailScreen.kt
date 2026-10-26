@@ -5,7 +5,10 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -417,202 +420,355 @@ private fun AlbumDetailHeader(
     onToggleSearch: () -> Unit,
 ) {
     val extendedColors = StashTheme.extendedColors
-
-    // Try to find album art from the first track that has one.
     val albumArt = state.tracks.firstNotNullOfOrNull { it.albumArtPath ?: it.albumArtUrl }
 
-    Column(modifier = Modifier.fillMaxWidth()) {
-        // -- Artwork with back button and gradient scrim --
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .aspectRatio(1f),
-        ) {
-            if (albumArt != null) {
-                AsyncImage(
-                    model = albumArt,
-                    contentDescription = "${state.albumName} artwork",
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop,
-                )
-            } else {
-                // Gradient placeholder with album icon
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(
-                            Brush.linearGradient(
-                                colors = listOf(
-                                    MaterialTheme.colorScheme.primaryContainer,
-                                    MaterialTheme.colorScheme.tertiary.copy(alpha = 0.6f),
-                                ),
-                            ),
-                        ),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Album,
-                        contentDescription = null,
-                        modifier = Modifier.size(72.dp),
-                        tint = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.5f),
-                    )
-                }
-            }
-
-            // Gradient scrim at the bottom for text readability
-            Box(
+    BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+        val isWide = maxWidth >= 600.dp
+        if (isWide) {
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(160.dp)
-                    .align(Alignment.BottomCenter)
-                    .background(
-                        Brush.verticalGradient(
-                            colors = listOf(
-                                Color.Transparent,
-                                MaterialTheme.colorScheme.background,
-                            ),
-                        ),
-                    ),
-            )
-
-            // Back button
-            IconButton(
-                onClick = onBack,
-                modifier = Modifier
-                    .statusBarsPadding()
-                    .padding(start = 8.dp, top = 8.dp)
-                    .align(Alignment.TopStart)
-                    .size(48.dp)
-                    .background(
-                        color = extendedColors.glassBackground,
-                        shape = CircleShape,
-                    ),
+                    .padding(horizontal = 24.dp, vertical = 16.dp),
             ) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = "Back",
-                    tint = MaterialTheme.colorScheme.onSurface,
-                )
-            }
-        }
-
-        // -- Album info below artwork --
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 20.dp),
-        ) {
-            // Album name
-            Text(
-                text = state.albumName,
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onBackground,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-            )
-
-            Spacer(modifier = Modifier.height(4.dp))
-
-            // Artist name
-            Text(
-                text = state.artistName,
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            // Track count + total duration
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                val trackCount = state.tracks.size
-                Text(
-                    text = "$trackCount track${if (trackCount != 1) "s" else ""}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-
-                val totalDuration = state.tracks.sumOf { it.durationMs }
-                if (totalDuration > 0) {
-                    Text(
-                        text = "\u2022",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Text(
-                        text = formatTotalDuration(totalDuration),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // Action buttons: Play All + Shuffle
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                Button(
-                    onClick = onPlayAll,
-                    modifier = Modifier.weight(1f),
-                    contentPadding = PaddingValues(vertical = 12.dp),
-                    shape = RoundedCornerShape(12.dp),
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .statusBarsPadding(),
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.PlayArrow,
-                        contentDescription = null,
-                        modifier = Modifier.size(20.dp),
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(text = "Play All", style = MaterialTheme.typography.labelLarge)
-                }
-
-                BulkPlayButtonBox(
-                    modifier = Modifier.weight(1f),
-                    showProgress = bulkPlayInFlight == BulkPlayAction.SHUFFLE_ALL,
-                ) {
-                    OutlinedButton(
-                        onClick = onShuffle,
-                        modifier = Modifier.fillMaxWidth(),
-                        contentPadding = PaddingValues(vertical = 12.dp),
-                        shape = RoundedCornerShape(12.dp),
+                    IconButton(
+                        onClick = onBack,
+                        modifier = Modifier
+                            .size(42.dp)
+                            .background(color = extendedColors.glassBackground, shape = CircleShape),
                     ) {
                         Icon(
-                            imageVector = Icons.Default.Shuffle,
-                            contentDescription = null,
-                            modifier = Modifier.size(20.dp),
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back",
+                            tint = MaterialTheme.colorScheme.onSurface,
                         )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(text = "Shuffle", style = MaterialTheme.typography.labelLarge)
                     }
                 }
 
-                Spacer(modifier = Modifier.width(8.dp))
-                IconButton(
-                    onClick = onToggleSearch,
-                    modifier = Modifier
-                        .size(48.dp)
-                        .background(
-                            color = extendedColors.glassBackground,
-                            shape = RoundedCornerShape(12.dp),
-                        ),
+                Spacer(modifier = Modifier.height(16.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.Bottom,
+                    horizontalArrangement = Arrangement.spacedBy(24.dp),
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.Search,
-                        contentDescription = "Filter tracks",
-                        tint = MaterialTheme.colorScheme.onSurface,
-                    )
+                    Box(
+                        modifier = Modifier
+                            .size(180.dp)
+                            .clip(RoundedCornerShape(16.dp)),
+                    ) {
+                        if (albumArt != null) {
+                            AsyncImage(
+                                model = albumArt,
+                                contentDescription = "${state.albumName} artwork",
+                                modifier = Modifier.fillMaxSize(),
+                                contentScale = ContentScale.Crop,
+                            )
+                        } else {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .background(
+                                        Brush.linearGradient(
+                                            colors = listOf(
+                                                MaterialTheme.colorScheme.primaryContainer,
+                                                MaterialTheme.colorScheme.tertiary.copy(alpha = 0.6f),
+                                            ),
+                                        ),
+                                    ),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Album,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(64.dp),
+                                    tint = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.5f),
+                                )
+                            }
+                        }
+                    }
+
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = state.albumName,
+                            style = MaterialTheme.typography.headlineMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onBackground,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = state.artistName,
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            val trackCount = state.tracks.size
+                            Text(
+                                text = "$trackCount track${if (trackCount != 1) "s" else ""}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            val totalDuration = state.tracks.sumOf { it.durationMs }
+                            if (totalDuration > 0) {
+                                Text(
+                                    text = "\u2022",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                                Text(
+                                    text = formatTotalDuration(totalDuration),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        ) {
+                            Button(
+                                onClick = onPlayAll,
+                                modifier = Modifier.widthIn(min = 130.dp),
+                                contentPadding = PaddingValues(horizontal = 20.dp, vertical = 12.dp),
+                                shape = RoundedCornerShape(12.dp),
+                            ) {
+                                Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(20.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(text = "Play All", style = MaterialTheme.typography.labelLarge)
+                            }
+                            BulkPlayButtonBox(
+                                modifier = Modifier.widthIn(min = 130.dp),
+                                showProgress = bulkPlayInFlight == BulkPlayAction.SHUFFLE_ALL,
+                            ) {
+                                OutlinedButton(
+                                    onClick = onShuffle,
+                                    contentPadding = PaddingValues(horizontal = 20.dp, vertical = 12.dp),
+                                    shape = RoundedCornerShape(12.dp),
+                                ) {
+                                    Icon(Icons.Default.Shuffle, contentDescription = null, modifier = Modifier.size(20.dp))
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(text = "Shuffle", style = MaterialTheme.typography.labelLarge)
+                                }
+                            }
+                            IconButton(
+                                onClick = onToggleSearch,
+                                modifier = Modifier
+                                    .size(44.dp)
+                                    .background(
+                                        color = extendedColors.glassBackground,
+                                        shape = RoundedCornerShape(12.dp),
+                                    ),
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Search,
+                                    contentDescription = "Filter tracks",
+                                    tint = MaterialTheme.colorScheme.onSurface,
+                                )
+                            }
+                        }
+                    }
                 }
             }
+        } else {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .aspectRatio(1f),
+                ) {
+                    if (albumArt != null) {
+                        AsyncImage(
+                            model = albumArt,
+                            contentDescription = "${state.albumName} artwork",
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = ContentScale.Crop,
+                        )
+                    } else {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(
+                                    Brush.linearGradient(
+                                        colors = listOf(
+                                            MaterialTheme.colorScheme.primaryContainer,
+                                            MaterialTheme.colorScheme.tertiary.copy(alpha = 0.6f),
+                                        ),
+                                    ),
+                                ),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Album,
+                                contentDescription = null,
+                                modifier = Modifier.size(72.dp),
+                                tint = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.5f),
+                            )
+                        }
+                    }
 
-            Spacer(modifier = Modifier.height(16.dp))
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(160.dp)
+                            .align(Alignment.BottomCenter)
+                            .background(
+                                Brush.verticalGradient(
+                                    colors = listOf(
+                                        Color.Transparent,
+                                        MaterialTheme.colorScheme.background,
+                                    ),
+                                ),
+                            ),
+                    )
+
+                    IconButton(
+                        onClick = onBack,
+                        modifier = Modifier
+                            .statusBarsPadding()
+                            .padding(start = 8.dp, top = 8.dp)
+                            .align(Alignment.TopStart)
+                            .size(48.dp)
+                            .background(
+                                color = extendedColors.glassBackground,
+                                shape = CircleShape,
+                            ),
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back",
+                            tint = MaterialTheme.colorScheme.onSurface,
+                        )
+                    }
+                }
+
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp),
+                ) {
+                    Text(
+                        text = state.albumName,
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onBackground,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    Text(
+                        text = state.artistName,
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        val trackCount = state.tracks.size
+                        Text(
+                            text = "$trackCount track${if (trackCount != 1) "s" else ""}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+
+                        val totalDuration = state.tracks.sumOf { it.durationMs }
+                        if (totalDuration > 0) {
+                            Text(
+                                text = "\u2022",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            Text(
+                                text = formatTotalDuration(totalDuration),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        Button(
+                            onClick = onPlayAll,
+                            modifier = Modifier.weight(1f),
+                            contentPadding = PaddingValues(vertical = 12.dp),
+                            shape = RoundedCornerShape(12.dp),
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.PlayArrow,
+                                contentDescription = null,
+                                modifier = Modifier.size(20.dp),
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(text = "Play All", style = MaterialTheme.typography.labelLarge)
+                        }
+
+                        BulkPlayButtonBox(
+                            modifier = Modifier.weight(1f),
+                            showProgress = bulkPlayInFlight == BulkPlayAction.SHUFFLE_ALL,
+                        ) {
+                            OutlinedButton(
+                                onClick = onShuffle,
+                                modifier = Modifier.fillMaxWidth(),
+                                contentPadding = PaddingValues(vertical = 12.dp),
+                                shape = RoundedCornerShape(12.dp),
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Shuffle,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(20.dp),
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(text = "Shuffle", style = MaterialTheme.typography.labelLarge)
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.width(8.dp))
+                        IconButton(
+                            onClick = onToggleSearch,
+                            modifier = Modifier
+                                .size(48.dp)
+                                .background(
+                                    color = extendedColors.glassBackground,
+                                    shape = RoundedCornerShape(12.dp),
+                                ),
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Search,
+                                contentDescription = "Filter tracks",
+                                tint = MaterialTheme.colorScheme.onSurface,
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+                }
+            }
         }
     }
 }

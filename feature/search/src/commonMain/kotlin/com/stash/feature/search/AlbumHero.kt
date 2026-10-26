@@ -3,11 +3,15 @@ package com.stash.feature.search
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -108,234 +112,386 @@ fun AlbumHero(
 ) {
     val extendedColors = StashTheme.extendedColors
 
-    Column(modifier = modifier.fillMaxWidth()) {
-        // -- Square artwork with back button + bottom scrim --
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .aspectRatio(1f),
-        ) {
-            if (hero.thumbnailUrl != null) {
-                AsyncImage(
-                    model = hero.thumbnailUrl,
-                    contentDescription = "${hero.title} artwork",
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize(),
-                )
-            } else {
-                // Gradient placeholder with album icon
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(
-                            Brush.linearGradient(
-                                colors = listOf(
-                                    MaterialTheme.colorScheme.primaryContainer,
-                                    MaterialTheme.colorScheme.tertiary.copy(alpha = 0.6f),
-                                ),
-                            ),
-                        ),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Album,
-                        contentDescription = null,
-                        modifier = Modifier.size(72.dp),
-                        tint = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.5f),
-                    )
-                }
-            }
-
-            // Bottom gradient scrim for text readability
-            Box(
+    BoxWithConstraints(modifier = modifier.fillMaxWidth()) {
+        val isWide = maxWidth >= 600.dp
+        if (isWide) {
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(160.dp)
-                    .align(Alignment.BottomCenter)
-                    .background(
-                        Brush.verticalGradient(
-                            colors = listOf(
-                                Color.Transparent,
-                                MaterialTheme.colorScheme.background,
-                            ),
-                        ),
-                    ),
-            )
-
-            // Back button (glass-background circle, top-left)
-            IconButton(
-                onClick = onBack,
-                modifier = Modifier
-                    .statusBarsPadding()
-                    .padding(8.dp)
-                    .align(Alignment.TopStart)
-                    .size(48.dp)
-                    .background(
-                        color = extendedColors.glassBackground,
-                        shape = CircleShape,
-                    ),
+                    .padding(horizontal = 24.dp, vertical = 16.dp),
             ) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = "Back",
-                    tint = MaterialTheme.colorScheme.onSurface,
-                )
-            }
-
-            // Top-right Online/Offline chip — flip playback mode from the album page.
-            if (com.stash.core.common.constants.StashConstants.STREAMING_ENGINE_ENABLED) {
-                com.stash.core.ui.components.streaming.StreamingModeChip(
-                    streamingEnabled = streamingEnabled,
-                    onClick = onStreamingClick,
+                // Top navigation + streaming mode bar
+                Row(
                     modifier = Modifier
-                        .statusBarsPadding()
-                        .padding(8.dp)
-                        .align(Alignment.TopEnd),
-                )
-            }
-        }
-
-        // -- Metadata + action chips --
-        Column(modifier = Modifier.padding(horizontal = 20.dp)) {
-            Text(
-                text = hero.title,
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onBackground,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-            )
-
-            Spacer(Modifier.height(4.dp))
-
-            Text(
-                text = buildString {
-                    append(hero.artist)
-                    if (hero.year != null) {
-                        append(" \u2022 ")
-                        append(hero.year)
+                        .fillMaxWidth()
+                        .statusBarsPadding(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    IconButton(
+                        onClick = onBack,
+                        modifier = Modifier
+                            .size(42.dp)
+                            .background(color = extendedColors.glassBackground, shape = CircleShape),
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back",
+                            tint = MaterialTheme.colorScheme.onSurface,
+                        )
                     }
-                },
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
+                    if (com.stash.core.common.constants.StashConstants.STREAMING_ENGINE_ENABLED) {
+                        com.stash.core.ui.components.streaming.StreamingModeChip(
+                            streamingEnabled = streamingEnabled,
+                            onClick = onStreamingClick,
+                        )
+                    }
+                }
 
-            if (hero.trackCount > 0) {
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    text = buildString {
-                        append(hero.trackCount)
-                        append(" track")
-                        if (hero.trackCount != 1) append("s")
-                        if (hero.totalDurationMs > 0) {
-                            append(" \u2022 ")
-                            append(formatTotalDuration(hero.totalDurationMs))
+                Spacer(Modifier.height(16.dp))
+
+                // Side-by-side artwork + metadata/actions
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.Bottom,
+                    horizontalArrangement = Arrangement.spacedBy(24.dp),
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(180.dp)
+                            .clip(RoundedCornerShape(16.dp)),
+                    ) {
+                        if (hero.thumbnailUrl != null) {
+                            AsyncImage(
+                                model = hero.thumbnailUrl,
+                                contentDescription = "${hero.title} artwork",
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier.fillMaxSize(),
+                            )
+                        } else {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .background(
+                                        Brush.linearGradient(
+                                            colors = listOf(
+                                                MaterialTheme.colorScheme.primaryContainer,
+                                                MaterialTheme.colorScheme.tertiary.copy(alpha = 0.6f),
+                                            ),
+                                        ),
+                                    ),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Album,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(64.dp),
+                                    tint = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.5f),
+                                )
+                            }
                         }
-                    },
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                    }
+
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = hero.title,
+                            style = MaterialTheme.typography.headlineMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onBackground,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Spacer(Modifier.height(6.dp))
+                        Text(
+                            text = buildString {
+                                append(hero.artist)
+                                if (hero.year != null) {
+                                    append(" \u2022 ")
+                                    append(hero.year)
+                                }
+                            },
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        if (hero.trackCount > 0) {
+                            Spacer(Modifier.height(4.dp))
+                            Text(
+                                text = buildString {
+                                    append(hero.trackCount)
+                                    append(" track")
+                                    if (hero.trackCount != 1) append("s")
+                                    if (hero.totalDurationMs > 0) {
+                                        append(" \u2022 ")
+                                        append(formatTotalDuration(hero.totalDurationMs))
+                                    }
+                                },
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Spacer(Modifier.height(16.dp))
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            Button(
+                                onClick = onPlayAlbum,
+                                enabled = actionsEnabled,
+                                contentPadding = PaddingValues(horizontal = 20.dp, vertical = 10.dp),
+                                shape = RoundedCornerShape(12.dp),
+                            ) {
+                                Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(Modifier.width(6.dp))
+                                Text("Play", style = MaterialTheme.typography.labelLarge)
+                            }
+                            OutlinedButton(
+                                onClick = onAddToQueue,
+                                enabled = actionsEnabled,
+                                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp),
+                                shape = RoundedCornerShape(12.dp),
+                            ) {
+                                Icon(Icons.AutoMirrored.Filled.PlaylistAdd, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(Modifier.width(6.dp))
+                                Text("Queue", style = MaterialTheme.typography.labelLarge)
+                            }
+                            OutlinedButton(
+                                onClick = onSave,
+                                enabled = actionsEnabled,
+                                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp),
+                                shape = RoundedCornerShape(12.dp),
+                            ) {
+                                Icon(
+                                    imageVector = if (isSaved) Icons.Default.LibraryAddCheck else Icons.Default.LibraryAdd,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(18.dp),
+                                )
+                                Spacer(Modifier.width(6.dp))
+                                Text(if (isSaved) "Saved" else "Save", style = MaterialTheme.typography.labelLarge)
+                            }
+                            if (hasDownloaded) {
+                                OutlinedButton(
+                                    onClick = onShuffle,
+                                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp),
+                                    shape = RoundedCornerShape(12.dp),
+                                ) {
+                                    Icon(Icons.Default.Shuffle, contentDescription = null, modifier = Modifier.size(18.dp))
+                                    Spacer(Modifier.width(6.dp))
+                                    Text("Shuffle", style = MaterialTheme.typography.labelLarge)
+                                }
+                            }
+                            if (downloadSupported) {
+                                OutlinedButton(
+                                    onClick = onDownloadAll,
+                                    enabled = actionsEnabled,
+                                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp),
+                                    shape = RoundedCornerShape(12.dp),
+                                ) {
+                                    Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(18.dp))
+                                    Spacer(Modifier.width(6.dp))
+                                    Text("Download all", style = MaterialTheme.typography.labelLarge)
+                                }
+                            }
+                        }
+                    }
+                }
             }
+        } else {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                // -- Square artwork with back button + bottom scrim --
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .aspectRatio(1f),
+                ) {
+                    if (hero.thumbnailUrl != null) {
+                        AsyncImage(
+                            model = hero.thumbnailUrl,
+                            contentDescription = "${hero.title} artwork",
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.fillMaxSize(),
+                        )
+                    } else {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(
+                                    Brush.linearGradient(
+                                        colors = listOf(
+                                            MaterialTheme.colorScheme.primaryContainer,
+                                            MaterialTheme.colorScheme.tertiary.copy(alpha = 0.6f),
+                                        ),
+                                    ),
+                                ),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Album,
+                                contentDescription = null,
+                                modifier = Modifier.size(72.dp),
+                                tint = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.5f),
+                            )
+                        }
+                    }
 
-            Spacer(Modifier.height(16.dp))
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(160.dp)
+                            .align(Alignment.BottomCenter)
+                            .background(
+                                Brush.verticalGradient(
+                                    colors = listOf(
+                                        Color.Transparent,
+                                        MaterialTheme.colorScheme.background,
+                                    ),
+                                ),
+                            ),
+                    )
 
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Button(
-                    onClick = onPlayAlbum,
-                    enabled = actionsEnabled,
-                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp),
-                    shape = RoundedCornerShape(12.dp),
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.PlayArrow,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp),
-                    )
-                    Spacer(Modifier.width(6.dp))
-                    Text(
-                        text = "Play",
-                        style = MaterialTheme.typography.labelLarge,
-                    )
-                }
-                OutlinedButton(
-                    onClick = onAddToQueue,
-                    enabled = actionsEnabled,
-                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp),
-                    shape = RoundedCornerShape(12.dp),
-                ) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.PlaylistAdd,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp),
-                    )
-                    Spacer(Modifier.width(6.dp))
-                    Text(
-                        text = "Queue",
-                        style = MaterialTheme.typography.labelLarge,
-                    )
-                }
-                OutlinedButton(
-                    onClick = onSave,
-                    enabled = actionsEnabled,
-                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp),
-                    shape = RoundedCornerShape(12.dp),
-                ) {
-                    Icon(
-                        imageVector = if (isSaved) Icons.Default.LibraryAddCheck else Icons.Default.LibraryAdd,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp),
-                    )
-                    Spacer(Modifier.width(6.dp))
-                    Text(
-                        text = if (isSaved) "Saved" else "Save",
-                        style = MaterialTheme.typography.labelLarge,
-                    )
-                }
-                if (hasDownloaded) {
-                    OutlinedButton(
-                        onClick = onShuffle,
-                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp),
-                        shape = RoundedCornerShape(12.dp),
+                    IconButton(
+                        onClick = onBack,
+                        modifier = Modifier
+                            .statusBarsPadding()
+                            .padding(8.dp)
+                            .align(Alignment.TopStart)
+                            .size(48.dp)
+                            .background(
+                                color = extendedColors.glassBackground,
+                                shape = CircleShape,
+                            ),
                     ) {
                         Icon(
-                            imageVector = Icons.Default.Shuffle,
-                            contentDescription = null,
-                            modifier = Modifier.size(18.dp),
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back",
+                            tint = MaterialTheme.colorScheme.onSurface,
                         )
-                        Spacer(Modifier.width(6.dp))
-                        Text(
-                            text = "Shuffle",
-                            style = MaterialTheme.typography.labelLarge,
+                    }
+
+                    if (com.stash.core.common.constants.StashConstants.STREAMING_ENGINE_ENABLED) {
+                        com.stash.core.ui.components.streaming.StreamingModeChip(
+                            streamingEnabled = streamingEnabled,
+                            onClick = onStreamingClick,
+                            modifier = Modifier
+                                .statusBarsPadding()
+                                .padding(8.dp)
+                                .align(Alignment.TopEnd),
                         )
                     }
                 }
-                if (downloadSupported) {
-                    OutlinedButton(
-                        onClick = onDownloadAll,
-                        enabled = actionsEnabled,
-                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp),
-                        shape = RoundedCornerShape(12.dp),
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Download,
-                            contentDescription = null,
-                            modifier = Modifier.size(18.dp),
-                        )
-                        Spacer(Modifier.width(6.dp))
+
+                Column(modifier = Modifier.padding(horizontal = 20.dp)) {
+                    Text(
+                        text = hero.title,
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onBackground,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+
+                    Spacer(Modifier.height(4.dp))
+
+                    Text(
+                        text = buildString {
+                            append(hero.artist)
+                            if (hero.year != null) {
+                                append(" \u2022 ")
+                                append(hero.year)
+                            }
+                        },
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+
+                    if (hero.trackCount > 0) {
+                        Spacer(Modifier.height(4.dp))
                         Text(
-                            text = "Download all",
-                            style = MaterialTheme.typography.labelLarge,
+                            text = buildString {
+                                append(hero.trackCount)
+                                append(" track")
+                                if (hero.trackCount != 1) append("s")
+                                if (hero.totalDurationMs > 0) {
+                                    append(" \u2022 ")
+                                    append(formatTotalDuration(hero.totalDurationMs))
+                                }
+                            },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
+
+                    Spacer(Modifier.height(16.dp))
+
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Button(
+                            onClick = onPlayAlbum,
+                            enabled = actionsEnabled,
+                            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp),
+                            shape = RoundedCornerShape(12.dp),
+                        ) {
+                            Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("Play", style = MaterialTheme.typography.labelLarge)
+                        }
+                        OutlinedButton(
+                            onClick = onAddToQueue,
+                            enabled = actionsEnabled,
+                            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp),
+                            shape = RoundedCornerShape(12.dp),
+                        ) {
+                            Icon(Icons.AutoMirrored.Filled.PlaylistAdd, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("Queue", style = MaterialTheme.typography.labelLarge)
+                        }
+                        OutlinedButton(
+                            onClick = onSave,
+                            enabled = actionsEnabled,
+                            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp),
+                            shape = RoundedCornerShape(12.dp),
+                        ) {
+                            Icon(
+                                imageVector = if (isSaved) Icons.Default.LibraryAddCheck else Icons.Default.LibraryAdd,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp),
+                            )
+                            Spacer(Modifier.width(6.dp))
+                            Text(if (isSaved) "Saved" else "Save", style = MaterialTheme.typography.labelLarge)
+                        }
+                        if (hasDownloaded) {
+                            OutlinedButton(
+                                onClick = onShuffle,
+                                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp),
+                                shape = RoundedCornerShape(12.dp),
+                            ) {
+                                Icon(Icons.Default.Shuffle, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(Modifier.width(6.dp))
+                                Text("Shuffle", style = MaterialTheme.typography.labelLarge)
+                            }
+                        }
+                        if (downloadSupported) {
+                            OutlinedButton(
+                                onClick = onDownloadAll,
+                                enabled = actionsEnabled,
+                                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp),
+                                shape = RoundedCornerShape(12.dp),
+                            ) {
+                                Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(Modifier.width(6.dp))
+                                Text("Download all", style = MaterialTheme.typography.labelLarge)
+                            }
+                        }
+                    }
+
+                    Spacer(Modifier.height(16.dp))
                 }
             }
-
-            Spacer(Modifier.height(16.dp))
         }
     }
 }
