@@ -426,6 +426,7 @@ open class AlbumDiscoveryViewModel @Inject constructor(
                 title = t.title,
                 artist = t.artist.ifBlank { albumArtist },
                 album = albumTitle,
+                albumArtist = albumArtist,
                 durationMs = (t.durationSeconds * 1000L).toLong(),
                 albumArtUrl = t.thumbnailUrl ?: albumArt,
                 youtubeId = if (qobuz) null else t.videoId,

@@ -185,13 +185,14 @@ class DesktopTrackActionsDelegate @Inject constructor(
 
     private fun TrackItem.toDomainTrack(): Track =
         Track(
-            id = -kotlin.math.abs(videoId.hashCode().toLong()).coerceAtLeast(1L),
+            id = if (videoId.isBlank()) 0L else -kotlin.math.abs(videoId.hashCode().toLong()).coerceAtLeast(1L),
             title = title,
             artist = artist,
             album = album.orEmpty(),
+            albumArtist = albumArtist.orEmpty(),
             durationMs = (durationSeconds * 1000).toLong(),
             albumArtUrl = thumbnailUrl,
-            youtubeId = videoId,
+            youtubeId = videoId.ifBlank { null },
             source = MusicSource.YOUTUBE,
             isStreamable = true,
         )

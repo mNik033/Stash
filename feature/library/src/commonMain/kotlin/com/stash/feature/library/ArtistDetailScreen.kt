@@ -149,6 +149,7 @@ fun ArtistDetailScreen(
                         onBack = onBack,
                         onPlayAll = {
                             val firstTrack = state.tracks.firstOrNull { it.filePath != null }
+                                ?: state.tracks.firstOrNull()
                             if (firstTrack != null) viewModel.playTrack(firstTrack.id)
                         },
                         onShuffle = { viewModel.shuffleAll() },

@@ -1,5 +1,6 @@
 package com.stash.core.data.repository
 
+import com.stash.core.common.matchesArtistCredits
 import com.stash.core.data.blocklist.BlocklistGuard
 import com.stash.core.data.db.dao.AlbumSummary
 import com.stash.core.data.db.dao.ArtistSummary
@@ -17,6 +18,7 @@ import com.stash.core.data.db.entity.PlaylistTrackCrossRef
 import com.stash.core.data.db.entity.SyncHistoryEntity
 import com.stash.core.data.db.entity.TrackEntity
 import com.stash.core.data.library.canonicalWordsForSave
+import com.stash.core.data.library.findReusableByWords
 import com.stash.core.data.mapper.toDomain
 import com.stash.core.data.mapper.toEntity
 import com.stash.core.data.prefs.LibraryScopePreference
@@ -30,6 +32,7 @@ import com.stash.core.model.Track
 import com.stash.core.model.share.SharedTrack
 import com.stash.core.model.share.toTrack
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -38,6 +41,7 @@ import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.withContext
 import java.io.File
 import java.time.Instant
 import javax.inject.Inject
@@ -72,12 +76,23 @@ class DesktopMusicRepository @Inject constructor(
 
     override fun getTracksByArtist(artist: String): Flow<List<Track>> =
         trackDao.getByArtist(artist, includeNotDownloaded = true, libraryOnly = false)
-            .map { entities -> entities.map { it.toDomain() } }
+            .map { entities ->
+                entities
+                    .filter { matchesArtistCredits(it.artist, it.albumArtist, artist) }
+                    .map { it.toDomain() }
+            }
             .flowOn(Dispatchers.Default)
 
     override fun getTracksByAlbum(album: String, artist: String): Flow<List<Track>> =
         trackDao.getByAlbum(album, includeNotDownloaded = true, libraryOnly = false)
-            .map { entities -> entities.map { it.toDomain() } }
+            .map { entities ->
+                entities
+                    .filter {
+                        it.album.equals(album, ignoreCase = true) &&
+                            matchesArtistCredits(it.artist, it.albumArtist, artist)
+                    }
+                    .map { it.toDomain() }
+            }
             .flowOn(Dispatchers.Default)
 
     override fun getTracksByPlaylist(playlistId: Long): Flow<List<Track>> =
@@ -182,17 +197,36 @@ class DesktopMusicRepository @Inject constructor(
             (track.id == track.youtubeId.hashCode().toLong() || track.id < 0L)
         if (track.id > 0L && !syntheticId) {
             val existing = trackDao.getById(track.id)
-            if (existing != null) return existing.id
+            if (existing != null) {
+                backfillFrom(existing, track)
+                return existing.id
+            }
         }
         val ytId = track.youtubeId
         if (!ytId.isNullOrBlank()) {
             val byYt = trackDao.findByYoutubeId(ytId)
-            if (byYt != null) return byYt.id
+            if (byYt != null) {
+                backfillFrom(byYt, track)
+                return byYt.id
+            }
         }
         val spUri = track.spotifyUri
         if (!spUri.isNullOrBlank()) {
             val bySp = trackDao.findBySpotifyUri(spUri)
-            if (bySp != null) return bySp.id
+            if (bySp != null) {
+                backfillFrom(bySp, track)
+                return bySp.id
+            }
+        }
+        trackDao.findReusableByWords(
+            title = track.title,
+            artist = track.artist,
+            youtubeId = track.youtubeId,
+            spotifyUri = track.spotifyUri,
+            forDownload = false,
+        )?.let { existing ->
+            backfillFrom(existing, track, trustIsrc = false)
+            return existing.id
         }
         val (cTitle, cArtist) = blocklistGuard.canonicalWordsForSave(track.title, track.artist)
         return trackDao.insert(
@@ -203,6 +237,30 @@ class DesktopMusicRepository @Inject constructor(
                 isStreamable = true,
             )
         )
+    }
+
+    private suspend fun backfillFrom(
+        existing: TrackEntity,
+        incoming: Track,
+        trustIsrc: Boolean = true,
+    ) {
+        if (existing.durationMs <= 0L && incoming.durationMs > 0L) {
+            trackDao.backfillDurationIfMissing(existing.id, incoming.durationMs)
+        }
+        if (trustIsrc) {
+            incoming.isrc?.takeIf { it.isNotBlank() }?.let {
+                trackDao.backfillIsrcIfMissing(existing.id, it)
+            }
+        }
+        if (existing.album.isBlank() && incoming.album.isNotBlank() && incoming.albumArtist.isNotBlank()) {
+            trackDao.updateAlbumIfEmpty(existing.id, incoming.album)
+        }
+        if (existing.albumArtist.isBlank() && incoming.albumArtist.isNotBlank()) {
+            trackDao.updateAlbumArtistIfEmpty(existing.id, incoming.albumArtist)
+        }
+        if (existing.albumArtUrl.isNullOrBlank() && !incoming.albumArtUrl.isNullOrBlank()) {
+            trackDao.fillMissingAlbumArtUrl(existing.id, incoming.albumArtUrl!!)
+        }
     }
 
     override suspend fun ensureExactTrackPersisted(track: SharedTrack): Long {
@@ -351,22 +409,27 @@ class DesktopMusicRepository @Inject constructor(
     }
 
     override suspend fun addTracksToPlaylist(trackIds: List<Long>, playlistId: Long) {
-        if (playlistDao.getById(playlistId) == null) return
-        var pos = playlistDao.getNextPosition(playlistId)
-        trackIds.forEach { trackId ->
-            if (trackDao.getById(trackId) != null) {
-                playlistDao.insertCrossRef(
+        withContext(NonCancellable) {
+            if (playlistDao.getById(playlistId) == null) return@withContext
+            val present = trackIds.filter { id ->
+                runCatching { trackDao.getById(id) != null }.getOrDefault(false)
+            }
+            if (present.isNotEmpty()) {
+                val start = playlistDao.getNextPosition(playlistId)
+                val now = Instant.now()
+                val refs = present.mapIndexed { i, trackId ->
                     PlaylistTrackCrossRef(
                         playlistId = playlistId,
                         trackId = trackId,
-                        position = pos++,
-                        addedAt = Instant.now(),
+                        position = start + i,
+                        addedAt = now,
                         locallyAdded = true,
                     )
-                )
+                }
+                playlistDao.insertAllCrossRefs(refs)
+                recountPlaylistTracks(playlistId)
             }
         }
-        recountPlaylistTracks(playlistId)
     }
 
     override suspend fun createPlaylistWithTracks(name: String, trackIds: List<Long>): Long {

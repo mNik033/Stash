@@ -642,12 +642,21 @@ class MusicRepositoryImpl @Inject constructor(
     }
 
     /**
-     * Fills a matched row's blanks from the incoming track. Album is deliberately not backfilled:
-     * without album_artist it would split the Albums tab's (album, album_artist) grouping.
+     * Fills a matched row's blanks from the incoming track. Album is only backfilled when
+     * album_artist is also known, so it never splits the Albums tab's (album, album_artist) grouping.
      */
     private suspend fun backfillFrom(existing: com.stash.core.data.db.entity.TrackEntity, incoming: Track, trustIsrc: Boolean = true) {
         if (existing.durationMs <= 0L && incoming.durationMs > 0L) trackDao.backfillDurationIfMissing(existing.id, incoming.durationMs)
         if (trustIsrc) incoming.isrc?.takeIf { it.isNotBlank() }?.let { trackDao.backfillIsrcIfMissing(existing.id, it) }
+        if (existing.album.isBlank() && incoming.album.isNotBlank() && incoming.albumArtist.isNotBlank()) {
+            trackDao.updateAlbumIfEmpty(existing.id, incoming.album)
+        }
+        if (existing.albumArtist.isBlank() && incoming.albumArtist.isNotBlank()) {
+            trackDao.updateAlbumArtistIfEmpty(existing.id, incoming.albumArtist)
+        }
+        if (existing.albumArtUrl.isNullOrBlank() && !incoming.albumArtUrl.isNullOrBlank()) {
+            trackDao.fillMissingAlbumArtUrl(existing.id, incoming.albumArtUrl!!)
+        }
     }
 
     override suspend fun deleteTrack(track: Track): Boolean {

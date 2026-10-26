@@ -758,7 +758,24 @@ interface TrackDao {
           AND album != ''
           AND (is_downloaded = 1 OR source = 'CLOUD' OR :includeNotDownloaded)
           AND (:libraryOnly = 0 OR (""" + IN_LIBRARY + """))
-        ORDER BY date_added DESC, id DESC
+        ORDER BY
+          COALESCE(
+              (
+                  SELECT MIN(pt.position)
+                  FROM playlist_tracks pt
+                  INNER JOIN playlists p ON p.id = pt.playlist_id
+                  WHERE pt.track_id = t.id
+                    AND pt.removed_at IS NULL
+                    AND p.is_active = 1
+                    AND (
+                        p.source_id LIKE 'album:%'
+                        OR p.source_id LIKE 'MPREb%'
+                        OR p.name = :album COLLATE NOCASE
+                    )
+              ),
+              2147483647
+          ) ASC,
+          t.id ASC
         """,
     )
     fun getByAlbum(album: String, includeNotDownloaded: Boolean, libraryOnly: Boolean): Flow<List<TrackEntity>>
