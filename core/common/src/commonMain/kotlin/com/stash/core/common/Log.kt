@@ -31,6 +31,11 @@ object Log {
     }
 
     object ConsoleLogger : Logger {
+        private val debugEnabled: Boolean = System.getProperty("stash.debug")?.toBoolean() == true
+
+        override fun isLoggable(tag: String, level: Int): Boolean =
+            level >= INFO || debugEnabled
+
         override fun v(tag: String, msg: String) = log("V", tag, msg, null)
         override fun v(tag: String, msg: String, tr: Throwable?) = log("V", tag, msg, tr)
         override fun d(tag: String, msg: String) = log("D", tag, msg, null)
@@ -42,9 +47,17 @@ object Log {
         override fun w(tag: String, msg: String, tr: Throwable?) = log("W", tag, msg, tr)
         override fun e(tag: String, msg: String) = log("E", tag, msg, null)
         override fun e(tag: String, msg: String, tr: Throwable?) = log("E", tag, msg, tr)
-        override fun isLoggable(tag: String, level: Int) = true
 
         private fun log(level: String, tag: String, msg: String, tr: Throwable?): Int {
+            val levelInt = when (level) {
+                "V" -> VERBOSE
+                "D" -> DEBUG
+                "I" -> INFO
+                "W" -> WARN
+                "E" -> ERROR
+                else -> INFO
+            }
+            if (!isLoggable(tag, levelInt)) return 0
             val out = if (level == "E" || level == "W") System.err else System.out
             out.println("[$level/$tag] $msg")
             tr?.printStackTrace(out)

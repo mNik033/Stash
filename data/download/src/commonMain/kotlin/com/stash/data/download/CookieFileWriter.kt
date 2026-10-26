@@ -59,17 +59,32 @@ object CookieFileWriter {
      */
     fun write(cookieString: String, outputFile: File) {
         outputFile.parentFile?.mkdirs()
-        outputFile.bufferedWriter().use { writer ->
-            writer.write(HEADER)
-            writer.newLine()
-            writer.newLine()
+        val tmpFile = File.createTempFile("cookies_", ".tmp", outputFile.parentFile)
+        try {
+            tmpFile.setReadable(false, false)
+            tmpFile.setReadable(true, true)
+            tmpFile.setWritable(false, false)
+            tmpFile.setWritable(true, true)
 
-            for ((name, value) in parseCookies(cookieString)) {
-                val secure = if (name.startsWith("__Secure-")) "TRUE" else "FALSE"
-                // Format: domain \t flag \t path \t secure \t expiry \t name \t value
-                writer.write("$DOMAIN\tTRUE\t/\t$secure\t$FAR_FUTURE_EXPIRY\t$name\t$value")
+            tmpFile.bufferedWriter().use { writer ->
+                writer.write(HEADER)
                 writer.newLine()
+                writer.newLine()
+
+                for ((name, value) in parseCookies(cookieString)) {
+                    val secure = if (name.startsWith("__Secure-")) "TRUE" else "FALSE"
+                    // Format: domain \t flag \t path \t secure \t expiry \t name \t value
+                    writer.write("$DOMAIN\tTRUE\t/\t$secure\t$FAR_FUTURE_EXPIRY\t$name\t$value")
+                    writer.newLine()
+                }
             }
+            if (outputFile.exists()) outputFile.delete()
+            if (!tmpFile.renameTo(outputFile)) {
+                outputFile.writeBytes(tmpFile.readBytes())
+                tmpFile.delete()
+            }
+        } finally {
+            if (tmpFile.exists()) tmpFile.delete()
         }
     }
 
@@ -83,7 +98,10 @@ object CookieFileWriter {
             val eqIndex = trimmed.indexOf('=')
             if (eqIndex <= 0) return@mapNotNull null
             val name = trimmed.substring(0, eqIndex).trim()
+                .replace("\r", "").replace("\n", "").replace("\t", "")
             val value = trimmed.substring(eqIndex + 1).trim()
+                .replace("\r", "").replace("\n", "").replace("\t", "")
+            if (name.isEmpty() || name.any { it.isISOControl() || it.isWhitespace() }) return@mapNotNull null
             name to value
         }
     }

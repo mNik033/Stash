@@ -1,12 +1,14 @@
 package com.stash.core.media
 
 import com.stash.core.data.radio.RadioSeed
+import com.stash.core.data.repository.MusicRepository
 import com.stash.core.media.engine.PlaybackEngine
 import com.stash.core.media.handoff.HandoffQueuePlan
 import com.stash.core.model.PlayableItem
 import com.stash.core.model.PlaybackSource
 import com.stash.core.model.PlayerState
 import com.stash.core.model.RadioStartResult
+import com.stash.core.model.RepeatMode
 import com.stash.core.model.Track
 import com.stash.core.model.TrackItem
 import kotlinx.coroutines.CancellationException
@@ -32,9 +34,11 @@ import javax.inject.Singleton
 class DesktopPlayerRepository @Inject constructor(
     private val engine: PlaybackEngine,
     private val streamResolver: DesktopStreamResolver,
+    private val musicRepository: MusicRepository,
 ) : PlayerRepository {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-    private var activePlaybackJob: Job? = null
+    private var playJob: Job? = null
+    private var unshuffledQueue: List<Track> = emptyList()
 
     private val _playerState = MutableStateFlow(PlayerState())
     override val playerState: StateFlow<PlayerState> = _playerState.asStateFlow()
@@ -47,13 +51,14 @@ class DesktopPlayerRepository @Inject constructor(
 
             val durationChanged = dur > 0L && state.durationMs != dur
             val positionChanged = state.positionMs != pos
+            val trackNeedsDuration = dur > 0L && state.currentTrack?.let { it.durationMs <= 0L } == true
 
-            if (durationChanged || positionChanged) {
+            if (durationChanged || positionChanged || trackNeedsDuration) {
                 _playerState.value = state.copy(
                     positionMs = pos,
                     durationMs = if (dur > 0L) dur else state.durationMs,
                     currentTrack = state.currentTrack?.let { track ->
-                        if (dur > 0L && track.durationMs != dur) track.copy(durationMs = dur) else track
+                        if (dur > 0L && (track.durationMs != dur || track.durationMs <= 0L)) track.copy(durationMs = dur) else track
                     }
                 )
             }
@@ -88,15 +93,16 @@ class DesktopPlayerRepository @Inject constructor(
                         _playerState.value = _playerState.value.copy(isBuffering = true)
                     }
                     is PlaybackEngine.State.Ended -> {
-                        if (_playerState.value.repeatMode == com.stash.core.model.RepeatMode.ONE) {
-                            seekTo(0L)
-                            engine.resume()
+                        val current = _playerState.value.currentTrack
+                        if (_playerState.value.repeatMode == RepeatMode.ONE && current != null) {
+                            playTrackItem(current)
                         } else {
-                            skipNext()
+                            advanceOnTrackEnded()
                         }
                     }
                     is PlaybackEngine.State.Error -> {
                         _playerState.value = _playerState.value.copy(isPlaying = false, isBuffering = false)
+                        _playerState.value.currentTrack?.let { streamResolver.invalidate(it) }
                         _userMessages.emit(state.message)
                     }
                     else -> Unit
@@ -105,9 +111,30 @@ class DesktopPlayerRepository @Inject constructor(
         }
     }
 
+    private suspend fun advanceOnTrackEnded() {
+        val s = _playerState.value
+        val nextIndex = s.currentIndex + 1
+        if (nextIndex < s.queue.size) {
+            skipToQueueIndex(nextIndex)
+        } else if (s.repeatMode == RepeatMode.ALL && s.queue.isNotEmpty()) {
+            skipToQueueIndex(0)
+        } else {
+            playJob?.cancel()
+            engine.stop()
+            _playerState.value = s.copy(isPlaying = false, isBuffering = false)
+        }
+    }
+
     override suspend fun play() {
-        engine.resume()
-        _playerState.value = _playerState.value.copy(isPlaying = true)
+        val s = _playerState.value
+        val state = engine.playbackState.value
+        val track = s.currentTrack
+        if ((state is PlaybackEngine.State.Idle || state is PlaybackEngine.State.Ended) && track != null) {
+            playTrackItem(track)
+        } else {
+            engine.resume()
+            _playerState.value = s.copy(isPlaying = true)
+        }
     }
 
     override suspend fun pause() {
@@ -121,31 +148,25 @@ class DesktopPlayerRepository @Inject constructor(
 
     override fun setPlaybackSpeed(speed: Float) {
         _playbackSpeed.value = speed
+        engine.setPlaybackSpeed(speed)
     }
 
     override suspend fun skipNext() {
         val s = _playerState.value
         if (s.queue.isEmpty()) {
-            activePlaybackJob?.cancel()
+            playJob?.cancel()
             engine.stop()
             _playerState.value = s.copy(isPlaying = false, isBuffering = false)
-            return
-        }
-
-        if (s.isShuffleEnabled && s.queue.size > 1) {
-            val unplayed = s.queue.indices.filter { it != s.currentIndex }
-            val nextIndex = unplayed.random()
-            skipToQueueIndex(nextIndex)
             return
         }
 
         val nextIndex = s.currentIndex + 1
         if (nextIndex < s.queue.size) {
             skipToQueueIndex(nextIndex)
-        } else if (s.repeatMode == com.stash.core.model.RepeatMode.ALL) {
+        } else if (s.repeatMode == RepeatMode.ALL && s.queue.isNotEmpty()) {
             skipToQueueIndex(0)
         } else {
-            activePlaybackJob?.cancel()
+            playJob?.cancel()
             engine.stop()
             _playerState.value = s.copy(isPlaying = false, isBuffering = false)
         }
@@ -176,8 +197,7 @@ class DesktopPlayerRepository @Inject constructor(
         val safeIndex = startIndex.coerceIn(0, (tracks.size - 1).coerceAtLeast(0))
         val current = tracks.getOrNull(safeIndex)
 
-        // Cancel previous track resolution and immediately stop old audio
-        activePlaybackJob?.cancel()
+        playJob?.cancel()
         engine.stop()
 
         _playerState.value = _playerState.value.copy(
@@ -196,8 +216,8 @@ class DesktopPlayerRepository @Inject constructor(
     }
 
     private fun playTrackItem(track: Track) {
-        activePlaybackJob?.cancel()
-        activePlaybackJob = scope.launch {
+        playJob?.cancel()
+        playJob = scope.launch {
             try {
                 val uri = streamResolver.resolveForTrack(track)
                 if (!isActive) return@launch
@@ -218,6 +238,9 @@ class DesktopPlayerRepository @Inject constructor(
                 )
                 if (!isActive) return@launch
                 engine.play(item, playWhenReady = true)
+                if (track.id > 0L) {
+                    runCatching { musicRepository.recordPlay(track.id) }
+                }
                 _playerState.value = _playerState.value.copy(
                     isPlaying = true,
                     isBuffering = false,
@@ -279,15 +302,38 @@ class DesktopPlayerRepository @Inject constructor(
 
     override suspend fun toggleShuffle() {
         val s = _playerState.value
-        _playerState.value = s.copy(isShuffleEnabled = !s.isShuffleEnabled)
+        val newShuffle = !s.isShuffleEnabled
+        if (newShuffle) {
+            unshuffledQueue = s.queue
+            val current = s.currentTrack
+            val shuffled = if (current != null) {
+                listOf(current) + s.queue.filterIndexed { i, _ -> i != s.currentIndex }.shuffled()
+            } else {
+                s.queue.shuffled()
+            }
+            _playerState.value = s.copy(
+                isShuffleEnabled = true,
+                queue = shuffled,
+                currentIndex = 0,
+            )
+        } else {
+            val restored = if (unshuffledQueue.isNotEmpty()) unshuffledQueue else s.queue
+            val newIdx = restored.indexOfFirst { it.id == s.currentTrack?.id }.coerceAtLeast(0)
+            _playerState.value = s.copy(
+                isShuffleEnabled = false,
+                queue = restored,
+                currentIndex = newIdx,
+            )
+            unshuffledQueue = emptyList()
+        }
     }
 
     override suspend fun cycleRepeatMode() {
         val s = _playerState.value
         val nextMode = when (s.repeatMode) {
-            com.stash.core.model.RepeatMode.OFF -> com.stash.core.model.RepeatMode.ALL
-            com.stash.core.model.RepeatMode.ALL -> com.stash.core.model.RepeatMode.ONE
-            com.stash.core.model.RepeatMode.ONE -> com.stash.core.model.RepeatMode.OFF
+            RepeatMode.OFF -> RepeatMode.ALL
+            RepeatMode.ALL -> RepeatMode.ONE
+            RepeatMode.ONE -> RepeatMode.OFF
         }
         _playerState.value = s.copy(repeatMode = nextMode)
     }
@@ -297,16 +343,32 @@ class DesktopPlayerRepository @Inject constructor(
         if (index !in s.queue.indices) return
         val newQueue = s.queue.toMutableList()
         newQueue.removeAt(index)
+        if (newQueue.isEmpty()) {
+            playJob?.cancel()
+            engine.stop()
+            _playerState.value = s.copy(
+                queue = emptyList(),
+                currentIndex = 0,
+                currentTrack = null,
+                isPlaying = false,
+                isBuffering = false,
+            )
+            return
+        }
         val newIndex = when {
             index < s.currentIndex -> s.currentIndex - 1
             index == s.currentIndex -> s.currentIndex.coerceAtMost(newQueue.size - 1)
             else -> s.currentIndex
         }
+        val newTrack = newQueue[newIndex]
         _playerState.value = s.copy(
             queue = newQueue,
             currentIndex = newIndex,
-            currentTrack = newQueue.getOrNull(newIndex),
+            currentTrack = newTrack,
         )
+        if (index == s.currentIndex) {
+            playTrackItem(newTrack)
+        }
     }
 
     override suspend fun insertInQueue(index: Int, track: Track): Boolean {
@@ -314,7 +376,7 @@ class DesktopPlayerRepository @Inject constructor(
         val newQueue = s.queue.toMutableList()
         val clampedIndex = index.coerceIn(0, newQueue.size)
         newQueue.add(clampedIndex, track)
-        val newCurrentIndex = if (clampedIndex <= s.currentIndex) s.currentIndex + 1 else s.currentIndex
+        val newCurrentIndex = newQueue.indexOfFirst { it.id == s.currentTrack?.id }.coerceAtLeast(0)
         _playerState.value = s.copy(queue = newQueue, currentIndex = newCurrentIndex)
         return true
     }
@@ -322,7 +384,34 @@ class DesktopPlayerRepository @Inject constructor(
     override fun evictFromQueue(trackIds: Set<Long>) {
         val s = _playerState.value
         val newQueue = s.queue.filterNot { it.id in trackIds }
-        _playerState.value = s.copy(queue = newQueue)
+        if (newQueue.isEmpty()) {
+            playJob?.cancel()
+            engine.stop()
+            _playerState.value = s.copy(
+                queue = emptyList(),
+                currentIndex = 0,
+                currentTrack = null,
+                isPlaying = false,
+                isBuffering = false,
+            )
+            return
+        }
+        val currentTrack = s.currentTrack
+        val currentEvicted = currentTrack != null && currentTrack.id in trackIds
+        val newIndex = if (currentEvicted) {
+            s.currentIndex.coerceAtMost(newQueue.size - 1)
+        } else {
+            newQueue.indexOfFirst { it.id == currentTrack?.id }.coerceAtLeast(0)
+        }
+        val nextTrack = newQueue[newIndex]
+        _playerState.value = s.copy(
+            queue = newQueue,
+            currentIndex = newIndex,
+            currentTrack = nextTrack,
+        )
+        if (currentEvicted) {
+            playTrackItem(nextTrack)
+        }
     }
 
     override suspend fun moveInQueue(from: Int, to: Int) {
@@ -331,7 +420,8 @@ class DesktopPlayerRepository @Inject constructor(
         val newQueue = s.queue.toMutableList()
         val item = newQueue.removeAt(from)
         newQueue.add(to, item)
-        _playerState.value = s.copy(queue = newQueue)
+        val newIdx = newQueue.indexOfFirst { it.id == s.currentTrack?.id }.coerceAtLeast(0)
+        _playerState.value = s.copy(queue = newQueue, currentIndex = newIdx)
     }
 
     override suspend fun skipToQueueIndex(index: Int) {
@@ -339,8 +429,7 @@ class DesktopPlayerRepository @Inject constructor(
         if (index !in s.queue.indices) return
         val track = s.queue[index]
 
-        // Immediately stop old audio
-        activePlaybackJob?.cancel()
+        playJob?.cancel()
         engine.stop()
 
         _playerState.value = s.copy(
@@ -356,8 +445,25 @@ class DesktopPlayerRepository @Inject constructor(
     }
 
     override suspend fun playTrack(track: Track): StreamRoutingResult {
-        setQueue(listOf(track), 0, PlaybackSource.Unknown)
-        val uri = streamResolver.resolveForTrack(track) ?: return StreamRoutingResult.NotAvailable
+        playJob?.cancel()
+        engine.stop()
+
+        _playerState.value = _playerState.value.copy(
+            queue = listOf(track),
+            currentIndex = 0,
+            currentTrack = track,
+            positionMs = 0L,
+            durationMs = track.durationMs,
+            isPlaying = true,
+            isBuffering = true,
+        )
+
+        val uri = streamResolver.resolveForTrack(track)
+        if (uri.isNullOrBlank()) {
+            _playerState.value = _playerState.value.copy(isPlaying = false, isBuffering = false)
+            return StreamRoutingResult.NotAvailable
+        }
+
         val playable = PlayableItem(
             mediaId = track.id.toString(),
             uri = uri,
@@ -368,22 +474,29 @@ class DesktopPlayerRepository @Inject constructor(
             isLocal = track.isDownloaded,
             artworkUri = track.albumArtUrl ?: track.albumArtPath,
         )
+
+        engine.play(playable, playWhenReady = true)
+        if (track.id > 0L) {
+            runCatching { musicRepository.recordPlay(track.id) }
+        }
+        _playerState.value = _playerState.value.copy(isPlaying = true, isBuffering = false)
         return StreamRoutingResult.Item(playable)
     }
 
     override suspend fun playFromStream(item: TrackItem): StreamRoutingResult {
-        activePlaybackJob?.cancel()
+        playJob?.cancel()
         engine.stop()
 
         val durationMs = (item.durationSeconds * 1000).toLong()
         val track = Track(
-            id = item.videoId.hashCode().toLong(),
+            id = -kotlin.math.abs(item.videoId.hashCode().toLong()).coerceAtLeast(1L),
             title = item.title,
             artist = item.artist,
             album = item.album.orEmpty(),
             durationMs = durationMs,
             albumArtUrl = item.thumbnailUrl,
             youtubeId = item.videoId,
+            isStreamable = true,
         )
         _playerState.value = _playerState.value.copy(
             queue = listOf(track),
@@ -413,5 +526,13 @@ class DesktopPlayerRepository @Inject constructor(
         engine.play(playable, playWhenReady = true)
         _playerState.value = _playerState.value.copy(isPlaying = true, isBuffering = false)
         return StreamRoutingResult.Item(playable)
+    }
+
+    override fun updateCurrentTrack(track: Track) {
+        val state = _playerState.value
+        if (state.currentTrack?.id == track.id) {
+            val updatedQueue = state.queue.map { if (it.id == track.id) track else it }
+            _playerState.value = state.copy(currentTrack = track, queue = updatedQueue)
+        }
     }
 }

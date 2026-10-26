@@ -16,13 +16,20 @@ class DesktopAllSongsScanner @Inject constructor(
     private val covers: ScannedCoverStore,
 ) : AllSongsScanner {
 
+    private fun fileFromUri(uri: String): File {
+        if (uri.startsWith("file:")) {
+            runCatching { return File(java.net.URI(uri)) }
+        }
+        return File(uri.removePrefix("file://").removePrefix("file:"))
+    }
+
     override suspend fun displayName(treeUri: String): String = withContext(Dispatchers.IO) {
-        val f = File(treeUri.removePrefix("file://"))
+        val f = fileFromUri(treeUri)
         f.name.ifBlank { f.path }
     }
 
     override fun deleteFile(uri: String): FileDeletion {
-        val file = File(uri.removePrefix("file://"))
+        val file = fileFromUri(uri)
         return if (!file.exists()) {
             FileDeletion.GONE
         } else if (file.delete()) {
@@ -35,9 +42,9 @@ class DesktopAllSongsScanner @Inject constructor(
     override suspend fun downloadTreeUri(): String? = null
 
     override suspend fun conflictFor(treeUri: String, folders: List<ScanFolderEntity>): FolderConflict? {
-        val targetPath = File(treeUri.removePrefix("file://")).canonicalPath
+        val targetPath = fileFromUri(treeUri).canonicalPath
         for (f in folders) {
-            val existingPath = File(f.treeUri.removePrefix("file://")).canonicalPath
+            val existingPath = fileFromUri(f.treeUri).canonicalPath
             if (targetPath == existingPath || targetPath.startsWith(existingPath + File.separator)) {
                 return FolderConflict.InsideAdded(f.displayName)
             }
@@ -49,7 +56,7 @@ class DesktopAllSongsScanner @Inject constructor(
     }
 
     override suspend fun scan(folder: ScanFolderEntity): ScanResult = withContext(Dispatchers.IO) {
-        val root = File(folder.treeUri.removePrefix("file://"))
+        val root = fileFromUri(folder.treeUri)
         if (!root.exists() || !root.isDirectory) {
             return@withContext ScanResult(0, 0, 0, incomplete = true)
         }
@@ -58,7 +65,7 @@ class DesktopAllSongsScanner @Inject constructor(
 
         val listed = files.map { f ->
             ListedFile(
-                uri = "file://${f.canonicalPath}",
+                uri = f.canonicalFile.toURI().toString(),
                 name = f.name,
                 ext = f.extension.lowercase(),
                 size = f.length(),

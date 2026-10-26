@@ -54,9 +54,19 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.withContext
+import com.stash.feature.library.AlbumDetailScreen
+import com.stash.feature.library.ArtistDetailScreen
+import com.stash.feature.library.LocalAlbumDetailViewModel
+import com.stash.feature.library.LocalArtistDetailViewModel
+import com.stash.feature.library.LocalPlaylistDetailViewModel
+import com.stash.feature.library.PlaylistDetailScreen
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -112,6 +122,7 @@ import com.stash.data.lyrics.parser.LrcLine
 import com.stash.data.lyrics.parser.LrcParser
 import com.stash.data.lyrics.source.LyricsQuery
 import com.stash.data.lyrics.source.LyricsResult
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
 enum class DesktopNavTab(val label: String, val icon: ImageVector) {
@@ -126,6 +137,14 @@ sealed interface DesktopScreen {
     data object Search : DesktopScreen
     data object Sync : DesktopScreen
     data object Settings : DesktopScreen
+    data class PlaylistDetail(val playlistId: Long) : DesktopScreen
+    data class AlbumDetail(
+        val albumId: String,
+        val albumName: String,
+        val artUrl: String?,
+        val artistName: String,
+    ) : DesktopScreen
+    data class ArtistDetail(val artistName: String) : DesktopScreen
     data class ArtistProfile(
         val artistId: String,
         val name: String,
@@ -156,12 +175,15 @@ fun DesktopScaffold(
     var showLyricsPanel by remember { mutableStateOf(false) }
 
     val activeNavTab = when (currentScreen) {
-        DesktopScreen.Library -> DesktopNavTab.Library
-        DesktopScreen.Search -> DesktopNavTab.Search
-        DesktopScreen.Sync -> DesktopNavTab.Sync
-        DesktopScreen.Settings -> DesktopNavTab.Settings
+        DesktopScreen.Library,
+        is DesktopScreen.PlaylistDetail,
+        is DesktopScreen.AlbumDetail,
+        is DesktopScreen.ArtistDetail -> DesktopNavTab.Library
+        DesktopScreen.Search,
         is DesktopScreen.ArtistProfile,
         is DesktopScreen.AlbumDiscovery -> DesktopNavTab.Search
+        DesktopScreen.Sync -> DesktopNavTab.Sync
+        DesktopScreen.Settings -> DesktopNavTab.Settings
     }
 
     val playerRepository = remember { component.playerRepository() }
@@ -221,7 +243,95 @@ fun DesktopScaffold(
                 ) {
                     when (val screen = currentScreen) {
                         DesktopScreen.Library -> {
-                            LibraryScreen()
+                            LibraryScreen(
+                                onNavigateToPlaylist = { playlistId ->
+                                    backStack.add(DesktopScreen.PlaylistDetail(playlistId))
+                                },
+                                onNavigateToArtist = { artistName ->
+                                    backStack.add(DesktopScreen.ArtistDetail(artistName))
+                                },
+                                onNavigateToAlbum = { albumId, name, artUrl, artistName ->
+                                    backStack.add(
+                                        DesktopScreen.AlbumDetail(
+                                            albumId = albumId,
+                                            albumName = name,
+                                            artUrl = artUrl,
+                                            artistName = artistName,
+                                        )
+                                    )
+                                },
+                                onNavigateToRemoteAlbum = { albumId, name, artUrl, artistName ->
+                                    backStack.add(
+                                        DesktopScreen.AlbumDiscovery(
+                                            browseId = albumId,
+                                            title = name,
+                                            artist = artistName,
+                                            thumbnailUrl = artUrl,
+                                            year = null,
+                                        )
+                                    )
+                                },
+                                onNavigateToSync = {
+                                    backStack.clear()
+                                    backStack.add(DesktopScreen.Sync)
+                                },
+                                onNavigateToSearch = {
+                                    backStack.clear()
+                                    backStack.add(DesktopScreen.Search)
+                                },
+                                onNavigateToAccounts = {
+                                    backStack.clear()
+                                    backStack.add(DesktopScreen.Settings)
+                                },
+                            )
+                        }
+                        is DesktopScreen.PlaylistDetail -> {
+                            val playlistVm = remember(screen.playlistId) {
+                                component.playlistDetailViewModelFactory().create(screen.playlistId)
+                            }
+                            DisposableEffect(playlistVm) {
+                                onDispose { playlistVm.viewModelScope.cancel() }
+                            }
+                            CompositionLocalProvider(LocalPlaylistDetailViewModel provides playlistVm) {
+                                PlaylistDetailScreen(
+                                    onBack = {
+                                        if (backStack.size > 1) backStack.removeAt(backStack.lastIndex)
+                                    },
+                                )
+                            }
+                        }
+                        is DesktopScreen.AlbumDetail -> {
+                            val albumDetailVm = remember(screen.albumName, screen.artistName) {
+                                component.albumDetailViewModelFactory().create(
+                                    albumName = screen.albumName,
+                                    artistName = screen.artistName,
+                                )
+                            }
+                            DisposableEffect(albumDetailVm) {
+                                onDispose { albumDetailVm.viewModelScope.cancel() }
+                            }
+                            CompositionLocalProvider(LocalAlbumDetailViewModel provides albumDetailVm) {
+                                AlbumDetailScreen(
+                                    onBack = {
+                                        if (backStack.size > 1) backStack.removeAt(backStack.lastIndex)
+                                    },
+                                )
+                            }
+                        }
+                        is DesktopScreen.ArtistDetail -> {
+                            val artistDetailVm = remember(screen.artistName) {
+                                component.artistDetailViewModelFactory().create(screen.artistName)
+                            }
+                            DisposableEffect(artistDetailVm) {
+                                onDispose { artistDetailVm.viewModelScope.cancel() }
+                            }
+                            CompositionLocalProvider(LocalArtistDetailViewModel provides artistDetailVm) {
+                                ArtistDetailScreen(
+                                    onBack = {
+                                        if (backStack.size > 1) backStack.removeAt(backStack.lastIndex)
+                                    },
+                                )
+                            }
                         }
                         DesktopScreen.Search -> {
                             SearchScreen(
@@ -260,7 +370,7 @@ fun DesktopScaffold(
                                     "libmpv initialized and active"
                                 } else {
                                     "libmpv not detected (fallback mode)"
-                                },
+                                } ,
                                 isDarkTheme = isDarkTheme,
                                 isAmoledTheme = isAmoledTheme,
                                 onThemeChanged = onThemeChanged,
@@ -274,6 +384,9 @@ fun DesktopScaffold(
                                     avatarUrl = screen.avatarUrl,
                                     focusAlbum = screen.focusAlbum,
                                 )
+                            }
+                            DisposableEffect(vm) {
+                                onDispose { vm.viewModelScope.cancel() }
                             }
                             CompositionLocalProvider(
                                 LocalArtistProfileViewModel provides vm,
@@ -319,6 +432,9 @@ fun DesktopScaffold(
                                     qobuzTrackCount = screen.qobuzTrackCount,
                                 )
                             }
+                            DisposableEffect(vm) {
+                                onDispose { vm.viewModelScope.cancel() }
+                            }
                             CompositionLocalProvider(
                                 LocalAlbumDiscoveryViewModel provides vm,
                             ) {
@@ -356,6 +472,7 @@ fun DesktopScaffold(
                         currentPositionMs = currentPositionMs,
                         onSeek = { pos -> scope.launch { playerRepository.seekTo(pos) } },
                         lyricsRepository = remember { component.lyricsRepository() },
+                        trackDao = component.database().trackDao(),
                         onClose = { showLyricsPanel = false },
                         modifier = Modifier.width(360.dp),
                     )
@@ -376,6 +493,22 @@ fun DesktopScaffold(
                 onSetVolume = { vol -> playerRepository.setVolume(vol) },
                 showLyrics = showLyricsPanel,
                 onToggleLyrics = { showLyricsPanel = !showLyricsPanel },
+                onToggleLike = {
+                    val track = playerState.currentTrack ?: return@DesktopBottomPlayerBar
+                    val isCurrentlyLiked = track.stashLikedAt != null
+                    val newLikedAt = if (isCurrentlyLiked) null else System.currentTimeMillis()
+                    scope.launch(Dispatchers.IO) {
+                        val persistedId = component.musicRepository().ensureTrackPersisted(track)
+                        val dao = component.database().trackDao()
+                        if (isCurrentlyLiked) {
+                            dao.clearStashLiked(persistedId)
+                        } else {
+                            dao.markStashLiked(persistedId, newLikedAt ?: System.currentTimeMillis())
+                        }
+                    }
+                    val updated = track.copy(stashLikedAt = newLikedAt)
+                    playerRepository.updateCurrentTrack(updated)
+                },
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(88.dp),
@@ -506,6 +639,7 @@ private fun DesktopBottomPlayerBar(
     onSetVolume: (Float) -> Unit,
     showLyrics: Boolean,
     onToggleLyrics: () -> Unit,
+    onToggleLike: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val track = playerState.currentTrack
@@ -583,7 +717,7 @@ private fun DesktopBottomPlayerBar(
                     )
                 }
                 Spacer(modifier = Modifier.width(8.dp))
-                IconButton(onClick = {}) {
+                IconButton(onClick = onToggleLike) {
                     Icon(
                         imageVector = if (track?.stashLikedAt != null) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
                         contentDescription = "Like",
@@ -716,10 +850,18 @@ private fun DesktopBottomPlayerBar(
                 horizontalArrangement = Arrangement.End,
             ) {
                 // Quality badge pill
-                val qualityLabel = when {
-                    track?.fileFormat?.lowercase() == "flac" -> "FLAC 24/96"
-                    track?.fileFormat?.lowercase() == "opus" -> "Opus"
-                    else -> "Lossless"
+                val qualityLabel = when (val fmt = track?.fileFormat?.lowercase()) {
+                    "flac" -> {
+                        val depth = track.bitsPerSample
+                        val rateKhz = track.sampleRateHz?.let { it / 1000 }
+                        if (depth != null && rateKhz != null) "FLAC $depth/$rateKhz" else "FLAC"
+                    }
+                    "wav" -> "WAV"
+                    "opus" -> "Opus"
+                    "mp3" -> "MP3"
+                    "m4a", "aac" -> "AAC"
+                    "ogg" -> "OGG"
+                    else -> if (track?.isDownloaded == true) fmt?.uppercase() ?: "Local" else "Stream"
                 }
                 Box(
                     modifier = Modifier
@@ -797,6 +939,7 @@ private fun DesktopLyricsSidePanel(
     currentPositionMs: Long,
     onSeek: (Long) -> Unit,
     lyricsRepository: LyricsRepository,
+    trackDao: com.stash.core.data.db.dao.TrackDao,
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -815,8 +958,18 @@ private fun DesktopLyricsSidePanel(
         lyricsState = DesktopLyricsState.Loading
 
         try {
+            val persistedTrackId = withContext(Dispatchers.IO) {
+                if (track.id > 0L && trackDao.getById(track.id) != null) {
+                    track.id
+                } else if (!track.youtubeId.isNullOrBlank()) {
+                    trackDao.findByYoutubeId(track.youtubeId!!)?.id ?: 0L
+                } else {
+                    0L
+                }
+            }
+
             val query = LyricsQuery(
-                trackId = if (track.id > 0L) track.id else 0L,
+                trackId = persistedTrackId,
                 title = track.title,
                 artist = track.artist,
                 album = track.album.ifBlank { null },
@@ -829,8 +982,8 @@ private fun DesktopLyricsSidePanel(
             )
 
             // Check local database first if library track
-            val localLyrics = if (track.id > 0L) {
-                lyricsRepository.get(track.id)
+            val localLyrics = if (persistedTrackId > 0L) {
+                withContext(Dispatchers.IO) { lyricsRepository.get(persistedTrackId) }
             } else null
 
             if (localLyrics != null && (localLyrics.instrumental || !localLyrics.syncedLrc.isNullOrBlank() || !localLyrics.plainText.isNullOrBlank())) {
@@ -847,8 +1000,10 @@ private fun DesktopLyricsSidePanel(
                 }
             } else {
                 // Resolve online via lyrics repository
-                val result: LyricsResult? = if (track.id > 0L) {
-                    val entity = lyricsRepository.resolveAndStore(query, fresh = (retryCount > 0))
+                val result: LyricsResult? = if (persistedTrackId > 0L) {
+                    val entity = withContext(Dispatchers.IO) {
+                        lyricsRepository.resolveAndStore(query, fresh = (retryCount > 0))
+                    }
                     if (entity != null) {
                         LyricsResult(
                             sourceId = entity.source.orEmpty(),
@@ -861,7 +1016,9 @@ private fun DesktopLyricsSidePanel(
                         )
                     } else null
                 } else {
-                    lyricsRepository.resolveTransient(query, fresh = (retryCount > 0))
+                    withContext(Dispatchers.IO) {
+                        lyricsRepository.resolveTransient(query, fresh = (retryCount > 0))
+                    }
                 }
 
                 lyricsState = when {

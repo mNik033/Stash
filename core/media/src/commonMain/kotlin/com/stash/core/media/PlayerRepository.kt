@@ -252,4 +252,5 @@ interface PlayerRepository {
      * the Search ViewModel can render the same set of snackbars.
      */
     suspend fun playFromStream(item: TrackItem): StreamRoutingResult
+    fun updateCurrentTrack(track: Track) {}
 }

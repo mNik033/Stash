@@ -16,11 +16,11 @@ class DesktopLyricsPreference @Inject constructor() : LyricsPreference {
     override val sourcePreference: Flow<LyricsSourcePreference> = _sourcePreference.asStateFlow()
     override suspend fun setSourcePreference(value: LyricsSourcePreference) { _sourcePreference.value = value }
 
-    private val outputOffsets = mutableMapOf<String, MutableStateFlow<Long>>()
+    private val outputOffsets = java.util.concurrent.ConcurrentHashMap<String, MutableStateFlow<Long>>()
     override fun outputOffsetMs(outputKey: String): Flow<Long> =
-        outputOffsets.getOrPut(outputKey) { MutableStateFlow(0L) }.asStateFlow()
+        outputOffsets.computeIfAbsent(outputKey) { MutableStateFlow(0L) }.asStateFlow()
     override suspend fun setOutputOffsetMs(outputKey: String, offsetMs: Long) {
-        outputOffsets.getOrPut(outputKey) { MutableStateFlow(0L) }.value = offsetMs
+        outputOffsets.computeIfAbsent(outputKey) { MutableStateFlow(0L) }.value = offsetMs
     }
 
     private val _bulkFetchCursor = MutableStateFlow(0L)

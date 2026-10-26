@@ -12,7 +12,7 @@ class DesktopConnectivity @Inject constructor() : Connectivity {
         val interfaces = NetworkInterface.getNetworkInterfaces() ?: return true
         interfaces.asSequence().any { iface ->
             try {
-                iface.isUp && !iface.isLoopback && !iface.isPointToPoint && iface.hardwareAddress != null
+                iface.isUp && !iface.isLoopback && iface.inetAddresses.asSequence().any { !it.isLoopbackAddress && !it.isLinkLocalAddress }
             } catch (_: Exception) {
                 false
             }

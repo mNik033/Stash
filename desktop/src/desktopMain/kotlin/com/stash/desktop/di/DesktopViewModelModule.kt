@@ -151,6 +151,56 @@ object DesktopViewModelModule {
         delegateProvider = delegateProvider,
         losslessPrefetcher = losslessPrefetcher,
     )
+
+    @Provides
+    @Singleton
+    fun providePlaylistDetailViewModelFactory(
+        musicRepository: MusicRepository,
+        playerRepository: PlayerRepository,
+        playlistImageHelper: PlaylistImageHelper,
+        streamingPreference: StreamingPreference,
+        connectivityMonitor: com.stash.core.media.streaming.ConnectivityMonitor,
+        recipeDao: com.stash.core.data.db.dao.StashMixRecipeDao,
+        discoveryQueueDao: com.stash.core.data.db.dao.DiscoveryQueueDao,
+        sharedMixRepository: SharedMixRepository,
+        downloadQueueDao: com.stash.core.data.db.dao.DownloadQueueDao,
+    ): DesktopPlaylistDetailViewModelFactory = DesktopPlaylistDetailViewModelFactory(
+        musicRepository = musicRepository,
+        playerRepository = playerRepository,
+        playlistImageHelper = playlistImageHelper,
+        streamingPreference = streamingPreference,
+        connectivityMonitor = connectivityMonitor,
+        recipeDao = recipeDao,
+        discoveryQueueDao = discoveryQueueDao,
+        sharedMixRepository = sharedMixRepository,
+        downloadQueueDao = downloadQueueDao,
+    )
+
+    @Provides
+    @Singleton
+    fun provideAlbumDetailViewModelFactory(
+        musicRepository: MusicRepository,
+        playerRepository: PlayerRepository,
+        connectivityMonitor: com.stash.core.media.streaming.ConnectivityMonitor,
+    ): DesktopAlbumDetailViewModelFactory = DesktopAlbumDetailViewModelFactory(
+        musicRepository = musicRepository,
+        playerRepository = playerRepository,
+        connectivityMonitor = connectivityMonitor,
+    )
+
+    @Provides
+    @Singleton
+    fun provideArtistDetailViewModelFactory(
+        musicRepository: MusicRepository,
+        playerRepository: PlayerRepository,
+        artistImageDao: ArtistImageDao,
+        connectivityMonitor: com.stash.core.media.streaming.ConnectivityMonitor,
+    ): DesktopArtistDetailViewModelFactory = DesktopArtistDetailViewModelFactory(
+        musicRepository = musicRepository,
+        playerRepository = playerRepository,
+        artistImageDao = artistImageDao,
+        connectivityMonitor = connectivityMonitor,
+    )
 }
 
 class DesktopArtistProfileViewModelFactory(
@@ -224,6 +274,68 @@ class DesktopAlbumDiscoveryViewModelFactory(
             streamingPreference = streamingPreference,
             delegate = delegateProvider.get(),
             losslessPrefetcher = losslessPrefetcher,
+        )
+    }
+}
+
+class DesktopPlaylistDetailViewModelFactory(
+    private val musicRepository: MusicRepository,
+    private val playerRepository: PlayerRepository,
+    private val playlistImageHelper: PlaylistImageHelper,
+    private val streamingPreference: StreamingPreference,
+    private val connectivityMonitor: com.stash.core.media.streaming.ConnectivityMonitor,
+    private val recipeDao: com.stash.core.data.db.dao.StashMixRecipeDao,
+    private val discoveryQueueDao: com.stash.core.data.db.dao.DiscoveryQueueDao,
+    private val sharedMixRepository: SharedMixRepository,
+    private val downloadQueueDao: com.stash.core.data.db.dao.DownloadQueueDao,
+) {
+    fun create(playlistId: Long): com.stash.feature.library.PlaylistDetailViewModel {
+        val handle = SavedStateHandle(mapOf("playlistId" to playlistId))
+        return com.stash.feature.library.PlaylistDetailViewModel(
+            savedStateHandle = handle,
+            musicRepository = musicRepository,
+            playerRepository = playerRepository,
+            playlistImageHelper = playlistImageHelper,
+            streamingPreference = streamingPreference,
+            connectivityMonitor = connectivityMonitor,
+            recipeDao = recipeDao,
+            discoveryQueueDao = discoveryQueueDao,
+            sharedMixRepository = sharedMixRepository,
+            downloadQueueDao = downloadQueueDao,
+        )
+    }
+}
+
+class DesktopAlbumDetailViewModelFactory(
+    private val musicRepository: MusicRepository,
+    private val playerRepository: PlayerRepository,
+    private val connectivityMonitor: com.stash.core.media.streaming.ConnectivityMonitor,
+) {
+    fun create(albumName: String, artistName: String): com.stash.feature.library.AlbumDetailViewModel {
+        val handle = SavedStateHandle(mapOf("albumName" to albumName, "artistName" to artistName))
+        return com.stash.feature.library.AlbumDetailViewModel(
+            savedStateHandle = handle,
+            musicRepository = musicRepository,
+            playerRepository = playerRepository,
+            connectivityMonitor = connectivityMonitor,
+        )
+    }
+}
+
+class DesktopArtistDetailViewModelFactory(
+    private val musicRepository: MusicRepository,
+    private val playerRepository: PlayerRepository,
+    private val artistImageDao: ArtistImageDao,
+    private val connectivityMonitor: com.stash.core.media.streaming.ConnectivityMonitor,
+) {
+    fun create(artistName: String): com.stash.feature.library.ArtistDetailViewModel {
+        val handle = SavedStateHandle(mapOf("artistName" to artistName))
+        return com.stash.feature.library.ArtistDetailViewModel(
+            savedStateHandle = handle,
+            musicRepository = musicRepository,
+            playerRepository = playerRepository,
+            artistImageDao = artistImageDao,
+            connectivityMonitor = connectivityMonitor,
         )
     }
 }

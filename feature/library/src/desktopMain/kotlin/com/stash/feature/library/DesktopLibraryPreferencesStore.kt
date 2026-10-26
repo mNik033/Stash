@@ -6,6 +6,8 @@ import java.util.Properties
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 @Singleton
@@ -15,6 +17,7 @@ class DesktopLibraryPreferencesStore @Inject constructor(
 
     private val file: File get() = File(appPaths.filesDir, "library_prefs.properties")
     private val props = Properties()
+    private val mutex = Mutex()
 
     private fun load() {
         if (file.exists()) {
@@ -32,24 +35,34 @@ class DesktopLibraryPreferencesStore @Inject constructor(
     }
 
     override suspend fun getSortOrder(): SortOrder = withContext(Dispatchers.IO) {
-        load()
-        val stored = props.getProperty("sort_order")
-        stored?.let { runCatching { SortOrder.valueOf(it) }.getOrNull() } ?: SortOrder.RECENT
+        mutex.withLock {
+            load()
+            val stored = props.getProperty("sort_order")
+            stored?.let { runCatching { SortOrder.valueOf(it) }.getOrNull() } ?: SortOrder.RECENT
+        }
     }
 
     override suspend fun getSourceFilter(): SourceFilter = withContext(Dispatchers.IO) {
-        load()
-        val stored = props.getProperty("source_filter")
-        stored?.let { runCatching { SourceFilter.valueOf(it) }.getOrNull() } ?: SourceFilter.ALL
+        mutex.withLock {
+            load()
+            val stored = props.getProperty("source_filter")
+            stored?.let { runCatching { SourceFilter.valueOf(it) }.getOrNull() } ?: SourceFilter.ALL
+        }
     }
 
     override suspend fun setSortOrder(order: SortOrder) = withContext(Dispatchers.IO) {
-        props.setProperty("sort_order", order.name)
-        save()
+        mutex.withLock {
+            load()
+            props.setProperty("sort_order", order.name)
+            save()
+        }
     }
 
     override suspend fun setSourceFilter(filter: SourceFilter) = withContext(Dispatchers.IO) {
-        props.setProperty("source_filter", filter.name)
-        save()
+        mutex.withLock {
+            load()
+            props.setProperty("source_filter", filter.name)
+            save()
+        }
     }
 }

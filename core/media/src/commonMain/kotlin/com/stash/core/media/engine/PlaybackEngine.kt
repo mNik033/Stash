@@ -47,4 +47,7 @@ interface PlaybackEngine {
 
     /** Set linear audio volume in the range [0.0f, 1.0f]. */
     fun setVolume(volume: Float)
+
+    /** Set playback speed multiplier (e.g. 1.0f). */
+    fun setPlaybackSpeed(speed: Float) {}
 }

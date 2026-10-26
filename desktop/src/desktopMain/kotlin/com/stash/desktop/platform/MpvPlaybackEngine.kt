@@ -1,5 +1,6 @@
 package com.stash.desktop.platform
 
+import com.stash.core.common.Log
 import com.stash.core.media.engine.PlaybackEngine
 import com.stash.core.model.PlayableItem
 import com.stash.desktop.spike.MpvBinding
@@ -15,6 +16,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import java.io.Closeable
+import java.io.File
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -22,20 +24,21 @@ import javax.inject.Singleton
 class MpvPlaybackEngine @Inject constructor() : PlaybackEngine, Closeable {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    private val nativeLock = Any()
 
-    private var handle: Pointer? = null
+    @Volatile private var handle: Pointer? = null
     private var pollerJob: Job? = null
 
     private val _playbackState = MutableStateFlow<PlaybackEngine.State>(PlaybackEngine.State.Idle)
     override val playbackState: StateFlow<PlaybackEngine.State> = _playbackState.asStateFlow()
 
-    private var _currentPositionMs: Long = 0L
+    @Volatile private var _currentPositionMs: Long = 0L
     override val currentPositionMs: Long get() = _currentPositionMs
 
-    private var _durationMs: Long = 0L
+    @Volatile private var _durationMs: Long = 0L
     override val durationMs: Long get() = _durationMs
 
-    private var _currentItem: PlayableItem? = null
+    @Volatile private var _currentItem: PlayableItem? = null
     override val currentItem: PlayableItem? get() = _currentItem
 
     val isNativeEngineAvailable: Boolean get() = handle != null
@@ -45,34 +48,55 @@ class MpvPlaybackEngine @Inject constructor() : PlaybackEngine, Closeable {
         if (lib != null) {
             val h = lib.mpv_create()
             if (h != null) {
+                lib.mpv_set_option_string(h, "config", "no")
+                lib.mpv_set_option_string(h, "load-scripts", "no")
+                lib.mpv_set_option_string(h, "ytdl", "no")
+                lib.mpv_set_option_string(h, "load-unsafe-playlists", "no")
                 lib.mpv_set_option_string(h, "vo", "null")
+                lib.mpv_set_option_string(h, "vid", "no")
                 lib.mpv_set_option_string(h, "terminal", "no")
                 lib.mpv_set_option_string(h, "audio-display", "no")
                 lib.mpv_set_option_string(h, "gapless-audio", "yes")
-                lib.mpv_set_option_string(h, "ytdl", "yes")
                 lib.mpv_set_option_string(h, "media-controls", "yes")
                 lib.mpv_set_option_string(h, "input-media-keys", "yes")
                 val status = lib.mpv_initialize(h)
                 if (status >= 0) {
                     handle = h
-                    println("MpvPlaybackEngine: libmpv handle initialized successfully with media-controls (handle=$h)")
+                    Log.i(TAG, "libmpv initialized successfully")
                 } else {
                     val err = lib.mpv_error_string(status)
-                    println("MpvPlaybackEngine: mpv_initialize failed: $err ($status)")
+                    lib.mpv_terminate_destroy(h)
+                    Log.e(TAG, "mpv_initialize failed: $err ($status)")
                 }
             } else {
-                println("MpvPlaybackEngine: mpv_create returned null")
+                Log.e(TAG, "mpv_create returned null")
             }
         } else {
-            println("MpvPlaybackEngine: MpvBinding.instance is null (libmpv not found)")
+            Log.w(TAG, "MpvBinding.instance is null (libmpv not found)")
         }
     }
 
     fun attachWindowHandle(hwnd: Long) {
-        val h = handle ?: return
-        val lib = MpvBinding.instance ?: return
-        val res = lib.mpv_set_property_string(h, "wid", hwnd.toString())
-        println("MpvPlaybackEngine: attached to window handle wid=$hwnd (res=$res)")
+        synchronized(nativeLock) {
+            val h = handle ?: return
+            val lib = MpvBinding.instance ?: return
+            lib.mpv_set_property_string(h, "wid", hwnd.toString())
+            Log.i(TAG, "attached to window handle wid=$hwnd")
+        }
+    }
+
+    private fun isSafeUriOrPath(uri: String): Boolean {
+        if (uri.startsWith("https://", ignoreCase = true) || uri.startsWith("http://", ignoreCase = true)) {
+            return true
+        }
+        val cleanPath = if (uri.startsWith("file:")) {
+            val stripped = uri.substringBefore('?')
+            runCatching { File(java.net.URI(stripped)).absolutePath }
+                .getOrElse { stripped.removePrefix("file://").removePrefix("file:") }
+        } else {
+            uri
+        }
+        return File(cleanPath).exists()
     }
 
     override fun play(item: PlayableItem, playWhenReady: Boolean) {
@@ -81,174 +105,197 @@ class MpvPlaybackEngine @Inject constructor() : PlaybackEngine, Closeable {
         _currentPositionMs = 0L
         _durationMs = item.durationMs
 
-        println("MpvPlaybackEngine: playing item='${item.title}' uri='${item.uri}' playWhenReady=$playWhenReady")
-
-        val h = handle
-        val lib = MpvBinding.instance
-        if (h == null || lib == null) {
-            val msg = "libmpv native library not available. Please install mpv on your system or place libmpv-2.dll in ~/.stash/bin/"
-            println("MpvPlaybackEngine: $msg")
-            _playbackState.value = PlaybackEngine.State.Error(msg)
+        if (!isSafeUriOrPath(item.uri)) {
+            _playbackState.value = PlaybackEngine.State.Error("Unsupported or missing media URI")
             return
         }
 
-        val code = lib.mpv_command(h, arrayOf("loadfile", item.uri, "replace", null))
-        if (code >= 0) {
+        val cleanUri = if (item.uri.startsWith("file:")) {
+            val stripped = item.uri.substringBefore('?')
+            runCatching { File(java.net.URI(stripped)).absolutePath }
+                .getOrElse { stripped.removePrefix("file://").removePrefix("file:") }
+        } else {
+            item.uri
+        }
+
+        val code = synchronized(nativeLock) {
+            val h = handle
+            val lib = MpvBinding.instance
+            if (h == null || lib == null) {
+                _playbackState.value = PlaybackEngine.State.Error(
+                    "libmpv native library not available. Please install mpv on your system."
+                )
+                return
+            }
             val titleStr = if (item.artist.isNotBlank()) "${item.title} - ${item.artist}" else item.title
             lib.mpv_set_property_string(h, "force-media-title", titleStr)
             lib.mpv_set_property_string(h, "title", titleStr)
+            lib.mpv_set_property_string(h, "pause", if (playWhenReady) "no" else "yes")
+            lib.mpv_command(h, arrayOf("loadfile", cleanUri, "replace", null))
+        }
 
+        if (code >= 0) {
             if (!playWhenReady) {
-                lib.mpv_set_property_string(h, "pause", "yes")
                 _playbackState.value = PlaybackEngine.State.Paused
             } else {
-                lib.mpv_set_property_string(h, "pause", "no")
-                _playbackState.value = PlaybackEngine.State.Playing
+                _playbackState.value = PlaybackEngine.State.Buffering
+                startPoller()
             }
-            startPoller()
         } else {
-            val err = lib.mpv_error_string(code)
-            println("MpvPlaybackEngine: loadfile failed with code=$code, error='$err'")
-            _playbackState.value = PlaybackEngine.State.Error("Failed to load file in mpv: $err")
+            val err = MpvBinding.instance?.mpv_error_string(code) ?: "code $code"
+            Log.w(TAG, "loadfile failed: $err")
+            _playbackState.value = PlaybackEngine.State.Error("Failed to load media in mpv: $err")
         }
     }
 
     override fun pause() {
-        val h = handle
-        val lib = MpvBinding.instance
-        if (h != null && lib != null) {
-            lib.mpv_set_property_string(h, "pause", "yes")
+        synchronized(nativeLock) {
+            val h = handle
+            val lib = MpvBinding.instance
+            if (h != null && lib != null) {
+                lib.mpv_set_property_string(h, "pause", "yes")
+            }
         }
         _playbackState.value = PlaybackEngine.State.Paused
+        // Keep poller running while Paused so external resume via Windows SMTC /
+        // hardware media keys is detected and updates _playbackState back to Playing.
+        startPoller()
     }
 
     override fun resume() {
-        val h = handle
-        val lib = MpvBinding.instance
-        if (h != null && lib != null) {
-            lib.mpv_set_property_string(h, "pause", "no")
+        val canResume = synchronized(nativeLock) {
+            val h = handle
+            val lib = MpvBinding.instance
+            if (h != null && lib != null) {
+                lib.mpv_set_property_string(h, "pause", "no")
+                true
+            } else {
+                false
+            }
+        }
+        if (canResume) {
             _playbackState.value = PlaybackEngine.State.Playing
             startPoller()
         }
     }
 
     override fun stop() {
-        val h = handle
-        val lib = MpvBinding.instance
-        if (h != null && lib != null) {
-            lib.mpv_command(h, arrayOf("stop", null))
-        }
         stopPoller()
+        synchronized(nativeLock) {
+            val h = handle
+            val lib = MpvBinding.instance
+            if (h != null && lib != null) {
+                lib.mpv_command(h, arrayOf("stop", null))
+            }
+        }
         _currentPositionMs = 0L
         _playbackState.value = PlaybackEngine.State.Idle
     }
 
     override fun seekTo(positionMs: Long) {
-        _currentPositionMs = positionMs
-        val h = handle
-        val lib = MpvBinding.instance
-        if (h != null && lib != null) {
-            val seconds = positionMs / 1000.0
-            lib.mpv_command(h, arrayOf("seek", seconds.toString(), "absolute", null))
+        val clamped = positionMs.coerceAtLeast(0L)
+        _currentPositionMs = clamped
+        synchronized(nativeLock) {
+            val h = handle
+            val lib = MpvBinding.instance
+            if (h != null && lib != null) {
+                val seconds = clamped / 1000.0
+                lib.mpv_command(h, arrayOf("seek", seconds.toString(), "absolute", null))
+            }
         }
     }
 
     override fun setVolume(volume: Float) {
-        val h = handle
-        val lib = MpvBinding.instance
-        if (h != null && lib != null) {
-            val intVol = (volume * 100f).coerceIn(0f, 100f).toInt()
-            lib.mpv_set_property_string(h, "volume", intVol.toString())
+        synchronized(nativeLock) {
+            val h = handle
+            val lib = MpvBinding.instance
+            if (h != null && lib != null) {
+                val intVol = (volume * 100f).coerceIn(0f, 100f).toInt()
+                lib.mpv_set_property_string(h, "volume", intVol.toString())
+            }
+        }
+    }
+
+    override fun setPlaybackSpeed(speed: Float) {
+        synchronized(nativeLock) {
+            val h = handle
+            val lib = MpvBinding.instance
+            if (h != null && lib != null) {
+                val clamped = speed.coerceIn(0.25f, 4.0f)
+                lib.mpv_set_property_string(h, "speed", clamped.toString())
+            }
+        }
+    }
+
+    private fun readProperty(lib: com.stash.desktop.spike.MpvLib, h: Pointer, name: String): String? {
+        val ptr = lib.mpv_get_property_string(h, name) ?: return null
+        return try {
+            ptr.getString(0, "UTF-8")
+        } finally {
+            lib.mpv_free(ptr)
         }
     }
 
     private fun startPoller() {
-        if (pollerJob?.isActive == true) return
+        pollerJob?.cancel()
         pollerJob = scope.launch {
-            val h = handle ?: return@launch
-            val lib = MpvBinding.instance ?: return@launch
             var hasStartedPlaying = false
+            var idleTicksBeforeStart = 0
 
             while (isActive) {
-                delay(250)
-                try {
-                    // Sync external play/pause from Windows System Media Transport Controls or keyboard
-                    val pausePtr = lib.mpv_get_property_string(h, "pause")
-                    if (pausePtr != null) {
-                        val pauseStr = pausePtr.getString(0, "UTF-8")
-                        lib.mpv_free(pausePtr)
-                        val isPaused = (pauseStr == "yes")
-                        if (isPaused && _playbackState.value is PlaybackEngine.State.Playing) {
-                            println("MpvPlaybackEngine: external pause detected")
-                            _playbackState.value = PlaybackEngine.State.Paused
-                        } else if (!isPaused && _playbackState.value is PlaybackEngine.State.Paused) {
-                            println("MpvPlaybackEngine: external resume detected")
+                delay(if (_playbackState.value is PlaybackEngine.State.Paused) 400L else 200L)
+                var shouldBreak = false
+                synchronized(nativeLock) {
+                    val h = handle ?: run { shouldBreak = true; return@synchronized }
+                    val lib = MpvBinding.instance ?: run { shouldBreak = true; return@synchronized }
+
+                    // Sync external play/pause from SMTC or keyboard
+                    val pauseStr = readProperty(lib, h, "pause")
+                    val isPaused = (pauseStr == "yes")
+                    if (isPaused && _playbackState.value is PlaybackEngine.State.Playing) {
+                        _playbackState.value = PlaybackEngine.State.Paused
+                    } else if (!isPaused && _playbackState.value is PlaybackEngine.State.Paused) {
+                        _playbackState.value = PlaybackEngine.State.Playing
+                    }
+
+                    val posStr = readProperty(lib, h, "time-pos")
+                    val posSec = posStr?.toDoubleOrNull()
+                    if (posSec != null) {
+                        _currentPositionMs = (posSec * 1000).toLong().coerceAtLeast(0L)
+                        if (!hasStartedPlaying) {
+                            hasStartedPlaying = true
                             _playbackState.value = PlaybackEngine.State.Playing
                         }
                     }
 
-                    // Query time-pos
-                    val posPtr = lib.mpv_get_property_string(h, "time-pos")
-                    if (posPtr != null) {
-                        val posStr = posPtr.getString(0, "UTF-8")
-                        lib.mpv_free(posPtr)
-                        posStr.toDoubleOrNull()?.let { sec ->
-                            val posMs = (sec * 1000).toLong()
-                            _currentPositionMs = posMs
-                            if (posMs > 0L) {
-                                hasStartedPlaying = true
-                            }
+                    val durStr = readProperty(lib, h, "duration")
+                    durStr?.toDoubleOrNull()?.let { sec ->
+                        val parsedDurMs = (sec * 1000).toLong()
+                        if (parsedDurMs > 0L) {
+                            _durationMs = parsedDurMs
                         }
                     }
 
-                    // Query duration
-                    val durPtr = lib.mpv_get_property_string(h, "duration")
-                    if (durPtr != null) {
-                        val durStr = durPtr.getString(0, "UTF-8")
-                        lib.mpv_free(durPtr)
-                        durStr.toDoubleOrNull()?.let { sec ->
-                            val parsedDurMs = (sec * 1000).toLong()
-                            if (parsedDurMs > 0L) {
-                                _durationMs = parsedDurMs
-                            }
-                        }
-                    }
-
-                    // Query eof-reached
-                    val eofPtr = lib.mpv_get_property_string(h, "eof-reached")
-                    var isEof = false
-                    if (eofPtr != null) {
-                        val eofStr = eofPtr.getString(0, "UTF-8")
-                        lib.mpv_free(eofPtr)
-                        if (eofStr == "yes") {
-                            isEof = true
-                        }
-                    }
-
-                    // Query idle-active (true when playback ended or idle)
-                    val idlePtr = lib.mpv_get_property_string(h, "idle-active")
-                    var isIdle = false
-                    if (idlePtr != null) {
-                        val idleStr = idlePtr.getString(0, "UTF-8")
-                        lib.mpv_free(idlePtr)
-                        if (idleStr == "yes") {
-                            isIdle = true
+                    val idleStr = readProperty(lib, h, "idle-active")
+                    if (idleStr == "yes") {
+                        if (hasStartedPlaying) {
+                            _playbackState.value = PlaybackEngine.State.Ended
+                            shouldBreak = true
                         } else {
-                            hasStartedPlaying = true
+                            idleTicksBeforeStart++
+                            // Wait up to ~3 seconds (15 * 200ms) for async loadfile to begin before declaring failure
+                            if (idleTicksBeforeStart >= 15) {
+                                _playbackState.value = PlaybackEngine.State.Error(
+                                    "Playback failed to start for '${_currentItem?.title.orEmpty()}'"
+                                )
+                                shouldBreak = true
+                            }
                         }
+                    } else {
+                        idleTicksBeforeStart = 0
                     }
-
-                    // Only transition to Ended if playback had actively started,
-                    // and either reached EOF or returned to idle state.
-                    if (hasStartedPlaying && (isEof || isIdle) && _playbackState.value is PlaybackEngine.State.Playing) {
-                        println("MpvPlaybackEngine: playback ended (isEof=$isEof, isIdle=$isIdle)")
-                        _playbackState.value = PlaybackEngine.State.Ended
-                        stopPoller()
-                        break
-                    }
-                } catch (t: Throwable) {
-                    println("MpvPlaybackEngine poller warning: ${t.message}")
                 }
+                if (shouldBreak) break
             }
         }
     }
@@ -259,8 +306,19 @@ class MpvPlaybackEngine @Inject constructor() : PlaybackEngine, Closeable {
     }
 
     override fun close() {
-        stop()
-        handle?.let { MpvBinding.instance?.mpv_terminate_destroy(it) }
-        handle = null
+        stopPoller()
+        synchronized(nativeLock) {
+            val h = handle
+            val lib = MpvBinding.instance
+            if (h != null && lib != null) {
+                lib.mpv_command(h, arrayOf("stop", null))
+                lib.mpv_terminate_destroy(h)
+            }
+            handle = null
+        }
+    }
+
+    companion object {
+        private const val TAG = "MpvPlaybackEngine"
     }
 }

@@ -48,8 +48,8 @@ class DesktopAppPaths @Inject constructor() : AppPaths {
     override val noBackupFilesDir: File by lazy {
         val dir = when {
             os.contains("win") -> {
-                val appData = System.getenv("APPDATA") ?: "$userHome/AppData/Roaming"
-                File(appData, "Stash/secure")
+                val localAppData = System.getenv("LOCALAPPDATA") ?: "$userHome/AppData/Local"
+                File(localAppData, "Stash/secure")
             }
             os.contains("mac") -> {
                 File(userHome, "Library/Application Support/Stash/secure")
@@ -59,7 +59,21 @@ class DesktopAppPaths @Inject constructor() : AppPaths {
                 File(xdgData, "stash/secure")
             }
         }
-        dir.apply { mkdirs() }
+        dir.apply {
+            mkdirs()
+            if (!os.contains("win")) {
+                runCatching {
+                    java.nio.file.Files.setPosixFilePermissions(
+                        toPath(),
+                        setOf(
+                            java.nio.file.attribute.PosixFilePermission.OWNER_READ,
+                            java.nio.file.attribute.PosixFilePermission.OWNER_WRITE,
+                            java.nio.file.attribute.PosixFilePermission.OWNER_EXECUTE,
+                        ),
+                    )
+                }
+            }
+        }
     }
 
     override fun getDatabasePath(name: String): File {

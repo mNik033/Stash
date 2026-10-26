@@ -48,12 +48,22 @@ class DesktopLyricsSidecarWriter @Inject constructor(
     override suspend fun deleteTtmlSidecar(trackId: Long): Unit = withContext(Dispatchers.IO) {
         val track = trackDao.getById(trackId) ?: return@withContext
         val path = track.filePath ?: return@withContext
-        runCatching { deleteFilesystemSidecar(path, "ttml") }
+        val audio = getValidAudioFile(path) ?: return@withContext
+        runCatching { deleteFilesystemSidecar(audio, "ttml") }
             .onFailure { e -> Log.w(TAG, "Couldn't delete .ttml sidecar for track $trackId", e) }
     }
 
+    private fun getValidAudioFile(filePath: String): File? {
+        val audio = runCatching { File(filePath).canonicalFile }.getOrNull() ?: return null
+        if (!audio.isFile || audio.extension.lowercase() !in allowedAudioExts) return null
+        return audio
+    }
+
     private fun writeFilesystemSidecar(audioPath: String, body: String, ext: String) {
-        val audio = File(audioPath)
+        val audio = getValidAudioFile(audioPath) ?: run {
+            Log.w(TAG, "Invalid audio file path or extension: $audioPath")
+            throw IOException("Invalid audio file path or extension: $audioPath")
+        }
         val parent = audio.parentFile ?: run {
             Log.w(TAG, "Cannot resolve parent directory for $audioPath; sidecar skipped")
             throw IOException("Cannot resolve parent directory for $audioPath")
@@ -61,8 +71,7 @@ class DesktopLyricsSidecarWriter @Inject constructor(
         File(parent, "${audio.nameWithoutExtension}.$ext").writeText(body, Charsets.UTF_8)
     }
 
-    private fun deleteFilesystemSidecar(audioPath: String, ext: String) {
-        val audio = File(audioPath)
+    private fun deleteFilesystemSidecar(audio: File, ext: String) {
         val parent = audio.parentFile ?: return
         File(parent, "${audio.nameWithoutExtension}.$ext").takeIf { it.exists() }?.delete()
     }
@@ -71,5 +80,6 @@ class DesktopLyricsSidecarWriter @Inject constructor(
 
     private companion object {
         private const val TAG = "DesktopLyricsSidecarWriter"
+        private val allowedAudioExts = setOf("mp3", "flac", "m4a", "aac", "ogg", "opus", "wav", "wv")
     }
 }

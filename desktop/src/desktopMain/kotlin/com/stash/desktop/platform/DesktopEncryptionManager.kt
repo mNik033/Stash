@@ -2,7 +2,11 @@ package com.stash.desktop.platform
 
 import com.stash.core.auth.crypto.EncryptionManager
 import com.stash.core.common.platform.AppPaths
+import com.sun.jna.Platform
+import com.sun.jna.platform.win32.Crypt32Util
 import java.io.File
+import java.nio.file.Files
+import java.nio.file.attribute.PosixFilePermission
 import java.security.SecureRandom
 import javax.crypto.Cipher
 import javax.crypto.spec.GCMParameterSpec
@@ -18,18 +22,51 @@ class DesktopEncryptionManager @Inject constructor(
     private val keyFile = File(appPaths.noBackupFilesDir, "stash_desktop.key")
     private val secretKey: SecretKeySpec
     private val secureRandom = SecureRandom()
+    @Volatile private var keysetWasReset = false
 
     init {
-        val keyBytes = if (keyFile.exists() && keyFile.length() == 32L) {
-            keyFile.readBytes()
+        val keyBytes = loadOrGenerateKey()
+        secretKey = SecretKeySpec(keyBytes, "AES")
+    }
+
+    private fun loadOrGenerateKey(): ByteArray {
+        if (keyFile.exists()) {
+            val raw = runCatching {
+                val bytes = keyFile.readBytes()
+                if (Platform.isWindows() && bytes.size > 32) {
+                    Crypt32Util.cryptUnprotectData(bytes)
+                } else {
+                    bytes
+                }
+            }.getOrNull()
+            if (raw != null && raw.size == 32) {
+                return raw
+            }
+            keysetWasReset = true
+        }
+
+        val generated = ByteArray(32)
+        secureRandom.nextBytes(generated)
+        keyFile.parentFile?.mkdirs()
+        val toStore = if (Platform.isWindows()) {
+            runCatching { Crypt32Util.cryptProtectData(generated) }.getOrDefault(generated)
         } else {
-            val generated = ByteArray(32)
-            secureRandom.nextBytes(generated)
-            keyFile.parentFile?.mkdirs()
-            keyFile.writeBytes(generated)
             generated
         }
-        secretKey = SecretKeySpec(keyBytes, "AES")
+        keyFile.writeBytes(toStore)
+        restrictPermissions(keyFile)
+        return generated
+    }
+
+    private fun restrictPermissions(file: File) {
+        if (!Platform.isWindows()) {
+            runCatching {
+                Files.setPosixFilePermissions(
+                    file.toPath(),
+                    setOf(PosixFilePermission.OWNER_READ, PosixFilePermission.OWNER_WRITE),
+                )
+            }
+        }
     }
 
     override fun encrypt(plaintext: ByteArray): ByteArray {
@@ -62,7 +99,11 @@ class DesktopEncryptionManager @Inject constructor(
         return cipher.doFinal(encryptedPayload)
     }
 
-    override fun consumeKeysetReset(): Boolean = false
+    override fun consumeKeysetReset(): Boolean {
+        val reset = keysetWasReset
+        keysetWasReset = false
+        return reset
+    }
 
     companion object {
         private const val AES_GCM_TRANSFORMATION = "AES/GCM/NoPadding"

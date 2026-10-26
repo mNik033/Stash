@@ -16,6 +16,7 @@ import com.stash.core.data.db.entity.PlaylistEntity
 import com.stash.core.data.db.entity.PlaylistTrackCrossRef
 import com.stash.core.data.db.entity.SyncHistoryEntity
 import com.stash.core.data.db.entity.TrackEntity
+import com.stash.core.data.library.canonicalWordsForSave
 import com.stash.core.data.mapper.toDomain
 import com.stash.core.data.mapper.toEntity
 import com.stash.core.data.prefs.LibraryScopePreference
@@ -177,7 +178,9 @@ class DesktopMusicRepository @Inject constructor(
         trackDao.insert(track.toEntity())
 
     override suspend fun ensureTrackPersisted(track: Track): Long {
-        if (track.id != 0L) {
+        val syntheticId = !track.youtubeId.isNullOrBlank() &&
+            (track.id == track.youtubeId.hashCode().toLong() || track.id < 0L)
+        if (track.id > 0L && !syntheticId) {
             val existing = trackDao.getById(track.id)
             if (existing != null) return existing.id
         }
@@ -191,7 +194,15 @@ class DesktopMusicRepository @Inject constructor(
             val bySp = trackDao.findBySpotifyUri(spUri)
             if (bySp != null) return bySp.id
         }
-        return trackDao.insert(track.toEntity())
+        val (cTitle, cArtist) = blocklistGuard.canonicalWordsForSave(track.title, track.artist)
+        return trackDao.insert(
+            track.toEntity().copy(
+                id = 0L,
+                canonicalTitle = cTitle,
+                canonicalArtist = cArtist,
+                isStreamable = true,
+            )
+        )
     }
 
     override suspend fun ensureExactTrackPersisted(track: SharedTrack): Long {
@@ -205,7 +216,16 @@ class DesktopMusicRepository @Inject constructor(
         val isrcMatch = track.isrc?.takeIf { it.isNotBlank() }?.let { trackDao.findByIsrc(it) }
         if (isrcMatch != null) return isrcMatch.id
 
-        return trackDao.insert(track.toTrack().toEntity())
+        val domainTrack = track.toTrack()
+        val (cTitle, cArtist) = blocklistGuard.canonicalWordsForSave(domainTrack.title, domainTrack.artist)
+        return trackDao.insert(
+            domainTrack.toEntity().copy(
+                id = 0L,
+                canonicalTitle = cTitle,
+                canonicalArtist = cArtist,
+                isStreamable = true,
+            )
+        )
     }
 
     override suspend fun deleteTrack(track: Track): Boolean {
@@ -285,10 +305,11 @@ class DesktopMusicRepository @Inject constructor(
         playlistDao.insert(
             PlaylistEntity(
                 name = name,
+                sourceId = "custom_${java.util.UUID.randomUUID()}",
                 type = PlaylistType.CUSTOM,
                 source = MusicSource.BOTH,
                 isActive = true,
-                syncEnabled = false,
+                syncEnabled = true,
                 keepOffline = false,
             )
         )
@@ -302,12 +323,20 @@ class DesktopMusicRepository @Inject constructor(
                 type = PlaylistType.CUSTOM,
                 source = MusicSource.BOTH,
                 isActive = true,
-                syncEnabled = false,
+                syncEnabled = true,
                 keepOffline = false,
             )
         )
 
+    private suspend fun recountPlaylistTracks(playlistId: Long) {
+        playlistDao.updateTrackCount(
+            playlistId,
+            trackDao.countByPlaylist(playlistId, includeStreamable = true),
+        )
+    }
+
     override suspend fun addTrackToPlaylist(trackId: Long, playlistId: Long) {
+        if (trackDao.getById(trackId) == null || playlistDao.getById(playlistId) == null) return
         val pos = playlistDao.getNextPosition(playlistId)
         playlistDao.insertCrossRef(
             PlaylistTrackCrossRef(
@@ -315,22 +344,29 @@ class DesktopMusicRepository @Inject constructor(
                 trackId = trackId,
                 position = pos,
                 addedAt = Instant.now(),
+                locallyAdded = true,
             )
         )
+        recountPlaylistTracks(playlistId)
     }
 
     override suspend fun addTracksToPlaylist(trackIds: List<Long>, playlistId: Long) {
+        if (playlistDao.getById(playlistId) == null) return
         var pos = playlistDao.getNextPosition(playlistId)
         trackIds.forEach { trackId ->
-            playlistDao.insertCrossRef(
-                PlaylistTrackCrossRef(
-                    playlistId = playlistId,
-                    trackId = trackId,
-                    position = pos++,
-                    addedAt = Instant.now(),
+            if (trackDao.getById(trackId) != null) {
+                playlistDao.insertCrossRef(
+                    PlaylistTrackCrossRef(
+                        playlistId = playlistId,
+                        trackId = trackId,
+                        position = pos++,
+                        addedAt = Instant.now(),
+                        locallyAdded = true,
+                    )
                 )
-            )
+            }
         }
+        recountPlaylistTracks(playlistId)
     }
 
     override suspend fun createPlaylistWithTracks(name: String, trackIds: List<Long>): Long {
@@ -341,6 +377,7 @@ class DesktopMusicRepository @Inject constructor(
 
     override suspend fun removeTrackFromPlaylist(trackId: Long, playlistId: Long) {
         playlistDao.softDeleteTrackFromPlaylist(playlistId, trackId)
+        recountPlaylistTracks(playlistId)
     }
 
     override fun getUserCreatedPlaylists(): Flow<List<Playlist>> =
@@ -368,6 +405,7 @@ class DesktopMusicRepository @Inject constructor(
         alsoBlacklist: Boolean,
     ): MusicRepository.CascadeRemovalSummary {
         playlistDao.softDeleteTrackFromPlaylist(fromPlaylistId, trackId)
+        recountPlaylistTracks(fromPlaylistId)
         return MusicRepository.CascadeRemovalSummary(
             deleted = 0,
             keptProtected = 1,

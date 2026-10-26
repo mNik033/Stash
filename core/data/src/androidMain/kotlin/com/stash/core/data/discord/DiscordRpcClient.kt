@@ -1,4 +1,4 @@
-﻿package com.stash.core.data.discord
+package com.stash.core.data.discord
 
 import com.stash.core.common.Log
 import com.stash.core.auth.discord.DiscordHeaders
@@ -257,8 +257,8 @@ class DiscordRpcClient(
         private val SCOPES = DiscordRpcConfig.SCOPES
         private const val DEBOUNCE_MS = 1200L
         private const val CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
-
-        private fun randomVerifier() = (1..128).map { CHARS.random() }.joinToString("")
+        private val SECURE_RANDOM = java.security.SecureRandom()
+        private fun randomVerifier() = (1..128).map { CHARS[SECURE_RANDOM.nextInt(CHARS.length)] }.joinToString("")
         private fun codeChallenge(verifier: String): String {
             val digest = MessageDigest.getInstance("SHA-256").digest(verifier.toByteArray())
             return Base64.getUrlEncoder().withoutPadding().encodeToString(digest)

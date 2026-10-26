@@ -22,4 +22,8 @@ abstract class DesktopMediaModule {
     @Binds
     @Singleton
     abstract fun bindPlayerRepository(impl: DesktopPlayerRepository): PlayerRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindConnectivityMonitor(impl: com.stash.core.media.streaming.DesktopConnectivityMonitor): com.stash.core.media.streaming.ConnectivityMonitor
 }

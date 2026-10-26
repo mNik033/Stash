@@ -136,6 +136,16 @@ object DesktopDatabaseModule {
         db.listeningHistoryDao()
 
     @Provides
+    fun provideMirrorDao(db: StashDatabase): MirrorDao = db.mirrorDao()
+
+    @Provides
+    fun provideWebLibraryExportDao(db: StashDatabase): WebLibraryExportDao = db.webLibraryExportDao()
+
+    @Provides
+    @Singleton
+    fun provideLikeCoordinator(impl: com.stash.core.data.social.DesktopLikeCoordinator): com.stash.core.data.social.LikeCoordinator = impl
+
+    @Provides
     @Singleton
     fun provideLyricsPreference(impl: com.stash.core.data.prefs.DesktopLyricsPreference): com.stash.core.data.prefs.LyricsPreference =
         impl

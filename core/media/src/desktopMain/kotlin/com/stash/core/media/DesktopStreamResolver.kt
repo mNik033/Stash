@@ -27,10 +27,22 @@ class DesktopStreamResolver @Inject constructor(
     companion object {
         private const val TAG = "DesktopStreamResolver"
         private const val CACHE_TTL_MS = 2 * 60 * 60 * 1000L // 2 hours
+        private const val MAX_CACHE_ENTRIES = 256
     }
 
     private val streamUrlCache = java.util.concurrent.ConcurrentHashMap<String, Pair<String, Long>>()
     private val canonicalIdCache = java.util.concurrent.ConcurrentHashMap<String, String>()
+
+    fun invalidate(track: Track) {
+        val rawId = track.youtubeId
+        if (!rawId.isNullOrBlank()) {
+            streamUrlCache.remove(rawId)
+        }
+        val artist = track.artist.trim().lowercase()
+        val title = track.title.trim().lowercase()
+        val matchKey = "$artist::$title"
+        canonicalIdCache.remove(matchKey)?.let { streamUrlCache.remove(it) }
+    }
 
     suspend fun resolveStreamUrl(videoId: String, forceFresh: Boolean = false): String? = withContext(Dispatchers.IO) {
         require(YouTubeVideoId.isValid(videoId)) { "Invalid YouTube video id: $videoId" }
@@ -59,34 +71,43 @@ class DesktopStreamResolver @Inject constructor(
             }
             if (audioFormats.isEmpty()) return@playerForAudio null
 
-            // Prefer Opus itag 251/250, otherwise highest bitrate audio
-            val bestFormat = audioFormats.filter {
-                (it["mimeType"]?.jsonPrimitive?.content ?: "").contains("opus")
-            }.maxByOrNull {
-                it["bitrate"]?.jsonPrimitive?.content?.toLongOrNull() ?: 0L
-            } ?: audioFormats.maxByOrNull {
-                it["bitrate"]?.jsonPrimitive?.content?.toLongOrNull() ?: 0L
-            } ?: return@playerForAudio null
+            val sortedFormats = audioFormats.sortedWith(
+                compareByDescending<JsonObject> {
+                    (it["mimeType"]?.jsonPrimitive?.content ?: "").contains("opus")
+                }.thenByDescending {
+                    it["bitrate"]?.jsonPrimitive?.content?.toLongOrNull() ?: 0L
+                }
+            )
 
-            val rawUrl = bestFormat["url"]?.jsonPrimitive?.content ?: return@playerForAudio null
-            val streamUrl = if (streamPot != null && !rawUrl.contains("pot=")) {
-                if ('?' in rawUrl) "$rawUrl&pot=$streamPot" else "$rawUrl?pot=$streamPot"
-            } else {
-                rawUrl
-            }
+            for (fmt in sortedFormats) {
+                val rawUrl = fmt["url"]?.jsonPrimitive?.content ?: continue
+                val streamUrl = if (streamPot != null && !rawUrl.contains("pot=")) {
+                    if ('?' in rawUrl) "$rawUrl&pot=$streamPot" else "$rawUrl?pot=$streamPot"
+                } else {
+                    rawUrl
+                }
 
-            val contentLength = bestFormat["contentLength"]?.jsonPrimitive?.content?.toLongOrNull()
-            if (!tailProbe.servesFullFile(streamUrl, contentLength)) {
+                val contentLength = fmt["contentLength"]?.jsonPrimitive?.content?.toLongOrNull()
+                if (tailProbe.servesFullFile(streamUrl, contentLength)) {
+                    return@playerForAudio streamUrl
+                }
                 Log.i(TAG, "tail probe rejected URL for $videoId; testing next format/variant")
-                return@playerForAudio null
             }
 
-            streamUrl
+            null
         }
 
-        val resolved = stream?.url ?: "https://www.youtube.com/watch?v=$videoId"
-        streamUrlCache[videoId] = Pair(resolved, now + CACHE_TTL_MS)
-        Log.d(TAG, "Resolved stream for $videoId (variant=${stream?.variant}) -> ${resolved.take(60)}...")
+        val resolved = stream?.url
+        if (resolved != null) {
+            if (streamUrlCache.size >= MAX_CACHE_ENTRIES) {
+                streamUrlCache.entries.removeIf { it.value.second < now }
+                if (streamUrlCache.size >= MAX_CACHE_ENTRIES) {
+                    streamUrlCache.keys.firstOrNull()?.let { streamUrlCache.remove(it) }
+                }
+            }
+            streamUrlCache[videoId] = Pair(resolved, now + CACHE_TTL_MS)
+            Log.d(TAG, "Resolved stream for $videoId (variant=${stream.variant}) -> ${resolved.take(60)}...")
+        }
         resolved
     }
 

@@ -60,7 +60,11 @@ interface DesktopComponent {
     fun syncViewModel(): SyncViewModel
     fun artistProfileViewModelFactory(): DesktopArtistProfileViewModelFactory
     fun albumDiscoveryViewModelFactory(): DesktopAlbumDiscoveryViewModelFactory
+    fun playlistDetailViewModelFactory(): DesktopPlaylistDetailViewModelFactory
+    fun albumDetailViewModelFactory(): DesktopAlbumDetailViewModelFactory
+    fun artistDetailViewModelFactory(): DesktopArtistDetailViewModelFactory
     fun lyricsRepository(): com.stash.data.lyrics.LyricsRepository
+    fun likeCoordinator(): com.stash.core.data.social.LikeCoordinator
 
     @Component.Factory
     interface Factory {

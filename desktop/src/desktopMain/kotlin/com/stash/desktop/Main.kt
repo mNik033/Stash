@@ -44,7 +44,10 @@ fun main() {
         var isAmoledTheme by remember { mutableStateOf(false) }
 
         Window(
-            onCloseRequest = ::exitApplication,
+            onCloseRequest = {
+                runCatching { component.mpvPlaybackEngine().close() }
+                exitApplication()
+            },
             title = "Stash",
             state = remember { WindowState(width = 1200.dp, height = 800.dp) },
         ) {

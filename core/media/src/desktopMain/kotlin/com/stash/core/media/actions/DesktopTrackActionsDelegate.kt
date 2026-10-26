@@ -143,23 +143,8 @@ class DesktopTrackActionsDelegate @Inject constructor(
         }
     }
 
-    private suspend fun ensureTrackPersisted(item: TrackItem): Long? {
-        val existing = trackDao.findByYoutubeId(item.videoId)
-        return existing?.id ?: trackDao.insert(
-            TrackEntity(
-                title = item.title,
-                artist = item.artist,
-                album = item.album.orEmpty(),
-                albumArtist = item.albumArtist.orEmpty(),
-                youtubeId = item.videoId,
-                canonicalTitle = TrackCanonical.title(item.title),
-                canonicalArtist = TrackCanonical.artist(item.artist),
-                durationMs = (item.durationSeconds * 1000).toLong(),
-                source = MusicSource.YOUTUBE,
-                albumArtUrl = item.thumbnailUrl,
-            )
-        )
-    }
+    private suspend fun ensureTrackPersisted(item: TrackItem): Long? =
+        runCatching { musicRepository.ensureTrackPersisted(item.toDomainTrack()) }.getOrNull()
 
     override fun addToPlaylist(item: TrackItem, playlistId: Long) {
         scope().launch {
@@ -200,7 +185,7 @@ class DesktopTrackActionsDelegate @Inject constructor(
 
     private fun TrackItem.toDomainTrack(): Track =
         Track(
-            id = videoId.hashCode().toLong(),
+            id = -kotlin.math.abs(videoId.hashCode().toLong()).coerceAtLeast(1L),
             title = title,
             artist = artist,
             album = album.orEmpty(),

@@ -12,8 +12,12 @@ class DesktopPlaylistImageHelper @Inject constructor(
 
     override fun savePlaylistCoverImage(playlistId: Long, imageUri: String): String? {
         return try {
-            val cleanPath = imageUri.removePrefix("file://")
-            val sourceFile = File(cleanPath)
+            val sourceFile = if (imageUri.startsWith("file:")) {
+                runCatching { File(java.net.URI(imageUri)) }
+                    .getOrElse { File(imageUri.removePrefix("file://").removePrefix("file:")) }
+            } else {
+                File(imageUri)
+            }
             if (!sourceFile.exists()) return null
 
             val dir = File(appPaths.filesDir, "playlist_covers")
@@ -21,7 +25,7 @@ class DesktopPlaylistImageHelper @Inject constructor(
             val destFile = File(dir, "$playlistId.jpg")
             sourceFile.copyTo(destFile, overwrite = true)
 
-            "file://${destFile.absolutePath}?v=${System.currentTimeMillis()}"
+            "${destFile.toURI()}?v=${System.currentTimeMillis()}"
         } catch (e: Exception) {
             null
         }
