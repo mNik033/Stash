@@ -8,6 +8,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -21,6 +22,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.MenuOpen
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.automirrored.filled.VolumeMute
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
@@ -28,6 +30,8 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.LibraryMusic
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Lyrics
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Pause
@@ -92,6 +96,7 @@ import com.stash.core.ui.theme.StashGlassBorder
 import com.stash.core.ui.theme.StashPurple
 import com.stash.core.ui.theme.StashSurface
 import com.stash.desktop.di.DesktopComponent
+import com.stash.desktop.ui.home.DesktopHomeScreen
 import com.stash.feature.library.LibraryScreen
 import com.stash.feature.library.LocalAllSongsViewModel
 import com.stash.feature.library.LocalLibraryViewModel
@@ -126,13 +131,15 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
 enum class DesktopNavTab(val label: String, val icon: ImageVector) {
-    Library("Library", Icons.Default.Home),
+    Home("Home", Icons.Default.Home),
+    Library("Library", Icons.Default.LibraryMusic),
     Search("Search", Icons.Default.Search),
     Sync("Sync", Icons.Default.Sync),
     Settings("Settings", Icons.Default.Settings),
 }
 
 sealed interface DesktopScreen {
+    data object Home : DesktopScreen
     data object Library : DesktopScreen
     data object Search : DesktopScreen
     data object Sync : DesktopScreen
@@ -170,11 +177,13 @@ fun DesktopScaffold(
     onThemeChanged: (dark: Boolean, amoled: Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val backStack = remember { mutableStateListOf<DesktopScreen>(DesktopScreen.Library) }
-    val currentScreen = backStack.lastOrNull() ?: DesktopScreen.Library
+    val backStack = remember { mutableStateListOf<DesktopScreen>(DesktopScreen.Home) }
+    val currentScreen = backStack.lastOrNull() ?: DesktopScreen.Home
     var showLyricsPanel by remember { mutableStateOf(false) }
+    var userCollapsedRail by remember { mutableStateOf<Boolean?>(null) }
 
     val activeNavTab = when (currentScreen) {
+        DesktopScreen.Home -> DesktopNavTab.Home
         DesktopScreen.Library,
         is DesktopScreen.PlaylistDetail,
         is DesktopScreen.AlbumDetail,
@@ -239,36 +248,75 @@ fun DesktopScaffold(
                 },
         ) {
             // Main workspace (Navigation rail + Content stage + optional lyrics panel)
-            Row(
+            BoxWithConstraints(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth(),
             ) {
-                // ── Left Navigation Rail ──────────────────────────────────────────
-                DesktopNavRail(
-                    currentTab = activeNavTab,
-                    onTabSelected = { tab ->
-                        val target = when (tab) {
-                            DesktopNavTab.Library -> DesktopScreen.Library
-                            DesktopNavTab.Search -> DesktopScreen.Search
-                            DesktopNavTab.Sync -> DesktopScreen.Sync
-                            DesktopNavTab.Settings -> DesktopScreen.Settings
-                        }
-                        backStack.clear()
-                        backStack.add(target)
-                    },
-                    isConnected = isConnected,
-                    modifier = Modifier.width(220.dp),
-                )
+                val autoCollapse = maxWidth < 1050.dp || (showLyricsPanel && maxWidth < 1220.dp)
+                val isRailCollapsed = userCollapsedRail ?: autoCollapse
+                val railWidth = if (isRailCollapsed) 72.dp else 210.dp
+                val lyricsWidth = if (maxWidth < 1050.dp) 290.dp else 350.dp
 
-                // ── Center Stage ──────────────────────────────────────────────────
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxHeight(),
-                ) {
-                    when (val screen = currentScreen) {
-                        DesktopScreen.Library -> {
+                Row(modifier = Modifier.fillMaxSize()) {
+                    // ── Left Navigation Rail ──────────────────────────────────────────
+                    DesktopNavRail(
+                        currentTab = activeNavTab,
+                        isCollapsed = isRailCollapsed,
+                        onToggleCollapse = { userCollapsedRail = !isRailCollapsed },
+                        onTabSelected = { tab ->
+                            val target = when (tab) {
+                                DesktopNavTab.Home -> DesktopScreen.Home
+                                DesktopNavTab.Library -> DesktopScreen.Library
+                                DesktopNavTab.Search -> DesktopScreen.Search
+                                DesktopNavTab.Sync -> DesktopScreen.Sync
+                                DesktopNavTab.Settings -> DesktopScreen.Settings
+                            }
+                            backStack.clear()
+                            backStack.add(target)
+                        },
+                        isConnected = isConnected,
+                        modifier = Modifier.width(railWidth),
+                    )
+
+                    // ── Center Stage ──────────────────────────────────────────────────
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxHeight(),
+                    ) {
+                        when (val screen = currentScreen) {
+                            DesktopScreen.Home -> {
+                                val homeVm = remember { component.homeViewModel() }
+                                DesktopHomeScreen(
+                                    viewModel = homeVm,
+                                    onNavigateToPlaylist = { playlistId ->
+                                        backStack.add(DesktopScreen.PlaylistDetail(playlistId))
+                                    },
+                                    onNavigateToAlbumDiscovery = { album ->
+                                        backStack.add(
+                                            DesktopScreen.AlbumDiscovery(
+                                                browseId = album.id,
+                                                title = album.title,
+                                                artist = album.artist,
+                                                thumbnailUrl = album.thumbnailUrl,
+                                                year = album.year,
+                                                source = album.source,
+                                                qobuzTrackCount = null,
+                                            ),
+                                        )
+                                    },
+                                    onNavigateToSearch = {
+                                        backStack.clear()
+                                        backStack.add(DesktopScreen.Search)
+                                    },
+                                    onNavigateToSync = {
+                                        backStack.clear()
+                                        backStack.add(DesktopScreen.Sync)
+                                    },
+                                )
+                            }
+                            DesktopScreen.Library -> {
                             LibraryScreen(
                                 onNavigateToPlaylist = { playlistId ->
                                     backStack.add(DesktopScreen.PlaylistDetail(playlistId))
@@ -500,10 +548,11 @@ fun DesktopScaffold(
                         lyricsRepository = remember { component.lyricsRepository() },
                         trackDao = component.database().trackDao(),
                         onClose = { showLyricsPanel = false },
-                        modifier = Modifier.width(360.dp),
+                        modifier = Modifier.width(lyricsWidth),
                     )
                 }
             }
+        }
 
             // ── Persistent Bottom Player Bar ──────────────────────────────────────
             DesktopBottomPlayerBar(
@@ -552,6 +601,8 @@ fun DesktopScaffold(
 @Composable
 private fun DesktopNavRail(
     currentTab: DesktopNavTab,
+    isCollapsed: Boolean,
+    onToggleCollapse: () -> Unit,
     onTabSelected: (DesktopNavTab) -> Unit,
     isConnected: Boolean,
     modifier: Modifier = Modifier,
@@ -564,41 +615,62 @@ private fun DesktopNavRail(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(16.dp),
+                .padding(horizontal = if (isCollapsed) 10.dp else 16.dp, vertical = 16.dp),
             verticalArrangement = Arrangement.SpaceBetween,
+            horizontalAlignment = if (isCollapsed) Alignment.CenterHorizontally else Alignment.Start,
         ) {
-            Column {
-                // Brand Header
+            Column(
+                horizontalAlignment = if (isCollapsed) Alignment.CenterHorizontally else Alignment.Start,
+            ) {
+                // Brand Header + Collapse Toggle
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 12.dp),
+                    horizontalArrangement = if (isCollapsed) Arrangement.Center else Arrangement.SpaceBetween,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = if (isCollapsed) 0.dp else 8.dp, vertical = 8.dp),
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .size(32.dp)
-                            .background(
-                                brush = Brush.linearGradient(listOf(StashPurple, StashCyan)),
-                                shape = RoundedCornerShape(8.dp),
-                            ),
-                        contentAlignment = Alignment.Center,
+                    if (!isCollapsed) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier
+                                    .size(32.dp)
+                                    .background(
+                                        brush = Brush.linearGradient(listOf(StashPurple, StashCyan)),
+                                        shape = RoundedCornerShape(8.dp),
+                                    ),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.MusicNote,
+                                    contentDescription = null,
+                                    tint = Color.White,
+                                    modifier = Modifier.size(18.dp),
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Text(
+                                text = "STASH",
+                                fontSize = 20.sp,
+                                fontWeight = FontWeight.Black,
+                                letterSpacing = 2.sp,
+                                color = Color.White,
+                            )
+                        }
+                    }
+                    IconButton(
+                        onClick = onToggleCollapse,
+                        modifier = Modifier.size(32.dp),
                     ) {
                         Icon(
-                            imageVector = Icons.Default.MusicNote,
-                            contentDescription = null,
-                            tint = Color.White,
+                            imageVector = if (isCollapsed) Icons.Default.Menu else Icons.AutoMirrored.Filled.MenuOpen,
+                            contentDescription = if (isCollapsed) "Expand sidebar" else "Collapse sidebar",
+                            tint = Color(0xFF94A3B8),
                             modifier = Modifier.size(18.dp),
                         )
                     }
-                    Spacer(modifier = Modifier.width(10.dp))
-                    Text(
-                        text = "STASH",
-                        fontSize = 20.sp,
-                        fontWeight = FontWeight.Black,
-                        letterSpacing = 2.sp,
-                        color = Color.White,
-                    )
                 }
-                Spacer(modifier = Modifier.height(20.dp))
+                Spacer(modifier = Modifier.height(16.dp))
 
                 // Navigation Items
                 DesktopNavTab.values().forEach { tab ->
@@ -608,13 +680,14 @@ private fun DesktopNavRail(
 
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = if (isCollapsed) Arrangement.Center else Arrangement.Start,
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(vertical = 3.dp)
                             .clip(RoundedCornerShape(10.dp))
                             .background(bg)
                             .clickable { onTabSelected(tab) }
-                            .padding(horizontal = 12.dp, vertical = 11.dp),
+                            .padding(horizontal = if (isCollapsed) 8.dp else 12.dp, vertical = 11.dp),
                     ) {
                         Icon(
                             imageVector = tab.icon,
@@ -622,13 +695,16 @@ private fun DesktopNavRail(
                             tint = contentColor,
                             modifier = Modifier.size(20.dp),
                         )
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Text(
-                            text = tab.label,
-                            fontSize = 14.sp,
-                            fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
-                            color = if (isSelected) Color.White else Color(0xFF94A3B8),
-                        )
+                        if (!isCollapsed) {
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Text(
+                                text = tab.label,
+                                fontSize = 14.sp,
+                                fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
+                                color = if (isSelected) Color.White else Color(0xFF94A3B8),
+                                maxLines = 1,
+                            )
+                        }
                     }
                 }
             }
@@ -636,22 +712,25 @@ private fun DesktopNavRail(
             // Bottom Rail Info
             Row(
                 verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = if (isCollapsed) Arrangement.Center else Arrangement.Start,
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 8.dp, vertical = 6.dp),
             ) {
                 Icon(
                     imageVector = if (isConnected) Icons.Default.Wifi else Icons.Default.WifiOff,
-                    contentDescription = null,
+                    contentDescription = if (isConnected) "Online" else "Offline",
                     tint = if (isConnected) Color(0xFF34D399) else Color(0xFFF87171),
                     modifier = Modifier.size(14.dp),
                 )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = if (isConnected) "Online" else "Offline",
-                    fontSize = 12.sp,
-                    color = Color(0xFF94A3B8),
-                )
+                if (!isCollapsed) {
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = if (isConnected) "Online" else "Offline",
+                        fontSize = 12.sp,
+                        color = Color(0xFF94A3B8),
+                    )
+                }
             }
         }
     }

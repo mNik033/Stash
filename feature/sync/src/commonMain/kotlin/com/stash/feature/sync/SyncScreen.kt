@@ -6,7 +6,9 @@ import androidx.compose.foundation.clickable
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -100,14 +102,19 @@ fun SyncScreen(
     // the screen's state because LazyListScope isn't a composable context.
     val lastFmState by viewModel.lastFmState.collectAsStateWithLifecycle()
 
-    LazyColumn(
-        modifier = modifier
-            .fillMaxSize()
-            .padding(horizontal = 16.dp),
-        // Edge to edge under the glass mini player + tab bar.
-        contentPadding = PaddingValues(bottom = bottomChromePadding()),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
+    Box(
+        modifier = modifier.fillMaxSize(),
+        contentAlignment = Alignment.TopCenter,
     ) {
+        LazyColumn(
+            modifier = Modifier
+                .widthIn(max = 920.dp)
+                .fillMaxSize()
+                .padding(horizontal = 16.dp),
+            // Edge to edge under the glass mini player + tab bar.
+            contentPadding = PaddingValues(bottom = bottomChromePadding()),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
         // -- Auth expiry banner ----------------------------------------------
         // Mounted ABOVE the SyncStatusCard so users see "session expired"
         // before anything else when probes flag expired Spotify/YouTube
@@ -410,6 +417,7 @@ fun SyncScreen(
 
         // Bottom spacing so content isn't hidden behind nav bar
         item { Spacer(Modifier.height(80.dp)) }
+    }
     }
 
     // Refresh-confirm dialog. Sibling to the LazyColumn (NOT inside an

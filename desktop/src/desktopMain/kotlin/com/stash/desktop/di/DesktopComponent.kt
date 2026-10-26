@@ -56,6 +56,7 @@ interface DesktopComponent {
     fun tokenManager(): TokenManager
     fun okHttpClient(): OkHttpClient
 
+    fun homeViewModel(): com.stash.desktop.ui.home.DesktopHomeViewModel
     fun libraryViewModel(): LibraryViewModel
     fun allSongsViewModel(): AllSongsViewModel
     fun searchViewModel(): SearchViewModel

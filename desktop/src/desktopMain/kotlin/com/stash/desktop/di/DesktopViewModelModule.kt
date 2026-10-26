@@ -38,6 +38,20 @@ object DesktopViewModelModule {
 
     @Provides
     @Singleton
+    fun provideDesktopHomeViewModel(
+        musicRepository: MusicRepository,
+        playerRepository: PlayerRepository,
+        streamingPreference: StreamingPreference,
+        ytMusicApiClient: YTMusicApiClient,
+    ): com.stash.desktop.ui.home.DesktopHomeViewModel = com.stash.desktop.ui.home.DesktopHomeViewModel(
+        musicRepository = musicRepository,
+        playerRepository = playerRepository,
+        streamingPreference = streamingPreference,
+        ytMusicApiClient = ytMusicApiClient,
+    )
+
+    @Provides
+    @Singleton
     fun provideLibraryViewModel(
         musicRepository: MusicRepository,
         playerRepository: PlayerRepository,
