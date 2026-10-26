@@ -332,16 +332,21 @@ class DesktopMusicRepository @Inject constructor(
         )
 
     override suspend fun linkTrackToDownloadsMix(trackId: Long) {
+        if (trackId <= 0L || trackDao.getById(trackId) == null) return
         val playlistId = ensureDownloadsMixSeeded()
         val pos = playlistDao.getNextPosition(playlistId)
-        playlistDao.insertCrossRef(
-            PlaylistTrackCrossRef(
-                playlistId = playlistId,
-                trackId = trackId,
-                position = pos,
-                addedAt = Instant.now(),
+        try {
+            playlistDao.insertCrossRef(
+                PlaylistTrackCrossRef(
+                    playlistId = playlistId,
+                    trackId = trackId,
+                    position = pos,
+                    addedAt = Instant.now(),
+                )
             )
-        )
+        } catch (e: Exception) {
+            com.stash.core.common.Log.w("DesktopMusicRepo", "linkTrackToDownloadsMix failed for trackId=$trackId", e)
+        }
     }
 
     override suspend fun updatePlaylistArtUrl(playlistId: Long, artUrl: String?) {
@@ -394,25 +399,29 @@ class DesktopMusicRepository @Inject constructor(
     }
 
     override suspend fun addTrackToPlaylist(trackId: Long, playlistId: Long) {
-        if (trackDao.getById(trackId) == null || playlistDao.getById(playlistId) == null) return
+        if (trackId <= 0L || trackDao.getById(trackId) == null || playlistDao.getById(playlistId) == null) return
         val pos = playlistDao.getNextPosition(playlistId)
-        playlistDao.insertCrossRef(
-            PlaylistTrackCrossRef(
-                playlistId = playlistId,
-                trackId = trackId,
-                position = pos,
-                addedAt = Instant.now(),
-                locallyAdded = true,
+        try {
+            playlistDao.insertCrossRef(
+                PlaylistTrackCrossRef(
+                    playlistId = playlistId,
+                    trackId = trackId,
+                    position = pos,
+                    addedAt = Instant.now(),
+                    locallyAdded = true,
+                )
             )
-        )
-        recountPlaylistTracks(playlistId)
+            recountPlaylistTracks(playlistId)
+        } catch (e: Exception) {
+            com.stash.core.common.Log.w("DesktopMusicRepo", "addTrackToPlaylist failed for trackId=$trackId", e)
+        }
     }
 
     override suspend fun addTracksToPlaylist(trackIds: List<Long>, playlistId: Long) {
         withContext(NonCancellable) {
             if (playlistDao.getById(playlistId) == null) return@withContext
             val present = trackIds.filter { id ->
-                runCatching { trackDao.getById(id) != null }.getOrDefault(false)
+                id > 0L && runCatching { trackDao.getById(id) != null }.getOrDefault(false)
             }
             if (present.isNotEmpty()) {
                 val start = playlistDao.getNextPosition(playlistId)
@@ -426,8 +435,12 @@ class DesktopMusicRepository @Inject constructor(
                         locallyAdded = true,
                     )
                 }
-                playlistDao.insertAllCrossRefs(refs)
-                recountPlaylistTracks(playlistId)
+                try {
+                    playlistDao.insertAllCrossRefs(refs)
+                    recountPlaylistTracks(playlistId)
+                } catch (e: Exception) {
+                    com.stash.core.common.Log.w("DesktopMusicRepo", "addTracksToPlaylist batch failed", e)
+                }
             }
         }
     }

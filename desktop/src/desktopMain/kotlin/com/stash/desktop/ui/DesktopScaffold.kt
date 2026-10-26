@@ -524,12 +524,18 @@ fun DesktopScaffold(
                     val isCurrentlyLiked = track.stashLikedAt != null
                     val newLikedAt = if (isCurrentlyLiked) null else System.currentTimeMillis()
                     scope.launch(Dispatchers.IO) {
-                        val persistedId = component.musicRepository().ensureTrackPersisted(track)
-                        val dao = component.database().trackDao()
-                        if (isCurrentlyLiked) {
-                            dao.clearStashLiked(persistedId)
-                        } else {
-                            dao.markStashLiked(persistedId, newLikedAt ?: System.currentTimeMillis())
+                        try {
+                            val persistedId = component.musicRepository().ensureTrackPersisted(track)
+                            if (persistedId > 0L) {
+                                val dao = component.database().trackDao()
+                                if (isCurrentlyLiked) {
+                                    dao.clearStashLiked(persistedId)
+                                } else {
+                                    dao.markStashLiked(persistedId, newLikedAt ?: System.currentTimeMillis())
+                                }
+                            }
+                        } catch (e: Exception) {
+                            com.stash.core.common.Log.w("DesktopScaffold", "onToggleLike failed", e)
                         }
                     }
                     val updated = track.copy(stashLikedAt = newLikedAt)
@@ -880,13 +886,13 @@ private fun DesktopBottomPlayerBar(
                     "flac" -> {
                         val depth = track.bitsPerSample
                         val rateKhz = track.sampleRateHz?.let { it / 1000 }
-                        if (depth != null && rateKhz != null) "FLAC $depth/$rateKhz" else "FLAC"
+                        if (depth != null && rateKhz != null) "FLAC $depth/${rateKhz}kHz" else "FLAC Lossless"
                     }
-                    "wav" -> "WAV"
-                    "opus" -> "Opus"
-                    "mp3" -> "MP3"
-                    "m4a", "aac" -> "AAC"
-                    "ogg" -> "OGG"
+                    "wav" -> "WAV Lossless"
+                    "opus" -> if (track.qualityKbps > 0) "Opus ${track.qualityKbps}k" else "Opus"
+                    "mp3" -> if (track.qualityKbps > 0) "MP3 ${track.qualityKbps}k" else "MP3"
+                    "m4a", "aac" -> if (track.qualityKbps > 0) "AAC ${track.qualityKbps}k" else "AAC"
+                    "ogg" -> if (track.qualityKbps > 0) "OGG ${track.qualityKbps}k" else "OGG"
                     else -> if (track?.isDownloaded == true) fmt?.uppercase() ?: "Local" else "Stream"
                 }
                 Box(
@@ -989,6 +995,8 @@ private fun DesktopLyricsSidePanel(
                     track.id
                 } else if (!track.youtubeId.isNullOrBlank()) {
                     trackDao.findByYoutubeId(track.youtubeId!!)?.id ?: 0L
+                } else if (!track.spotifyUri.isNullOrBlank()) {
+                    trackDao.findBySpotifyUri(track.spotifyUri!!)?.id ?: 0L
                 } else {
                     0L
                 }
@@ -1009,7 +1017,7 @@ private fun DesktopLyricsSidePanel(
 
             // Check local database first if library track
             val localLyrics = if (persistedTrackId > 0L) {
-                withContext(Dispatchers.IO) { lyricsRepository.get(persistedTrackId) }
+                withContext(Dispatchers.IO) { runCatching { lyricsRepository.get(persistedTrackId) }.getOrNull() }
             } else null
 
             if (localLyrics != null && (localLyrics.instrumental || !localLyrics.syncedLrc.isNullOrBlank() || !localLyrics.plainText.isNullOrBlank())) {
@@ -1028,7 +1036,9 @@ private fun DesktopLyricsSidePanel(
                 // Resolve online via lyrics repository
                 val result: LyricsResult? = if (persistedTrackId > 0L) {
                     val entity = withContext(Dispatchers.IO) {
-                        lyricsRepository.resolveAndStore(query, fresh = (retryCount > 0))
+                        runCatching {
+                            lyricsRepository.resolveAndStore(query, fresh = (retryCount > 0))
+                        }.getOrNull()
                     }
                     if (entity != null) {
                         LyricsResult(
@@ -1040,10 +1050,14 @@ private fun DesktopLyricsSidePanel(
                             sourceLyricsId = entity.sourceLyricsId,
                             ttml = entity.ttml,
                         )
-                    } else null
+                    } else {
+                        withContext(Dispatchers.IO) {
+                            runCatching { lyricsRepository.resolveTransient(query, fresh = (retryCount > 0)) }.getOrNull()
+                        }
+                    }
                 } else {
                     withContext(Dispatchers.IO) {
-                        lyricsRepository.resolveTransient(query, fresh = (retryCount > 0))
+                        runCatching { lyricsRepository.resolveTransient(query, fresh = (retryCount > 0)) }.getOrNull()
                     }
                 }
 

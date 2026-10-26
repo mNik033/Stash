@@ -190,11 +190,11 @@ class LyricsRepository @Inject constructor(
         skipIfStamped: Boolean = false,
         onDemandFollowUp: Boolean = true,
     ): LyricsEntity? {
-        if (skipIfStamped && isStamped(query.trackId)) return lyricsDao.get(query.trackId)
+        if (skipIfStamped && query.trackId > 0L && isStamped(query.trackId)) return lyricsDao.get(query.trackId)
         val outcome = sharedWalk(query, fresh)
         val written = withContext(NonCancellable) {
             writeLock(query.trackId).withLock {
-                if (skipIfStamped && isStamped(query.trackId)) Written(lyricsDao.get(query.trackId), wantsOnDemandUpgrade = false)
+                if (skipIfStamped && query.trackId > 0L && isStamped(query.trackId)) Written(lyricsDao.get(query.trackId), wantsOnDemandUpgrade = false)
                 else write(query, outcome)
             }
         }
@@ -205,7 +205,8 @@ class LyricsRepository @Inject constructor(
     /** What [write] stored, and whether the on-demand sources should get their one follow-up try. */
     private class Written(val entity: LyricsEntity?, val wantsOnDemandUpgrade: Boolean)
 
-    private suspend fun isStamped(trackId: Long): Boolean = trackDao.observeLyricsFetchedAt(trackId).first() != null
+    private suspend fun isStamped(trackId: Long): Boolean =
+        if (trackId <= 0L) false else trackDao.observeLyricsFetchedAt(trackId).first() != null
 
     private suspend fun write(query: LyricsQuery, outcome: WalkOutcome): Written {
         // TTML only while a TTML source is active: a walk that started before a switch to LRC-only
@@ -214,8 +215,26 @@ class LyricsRepository @Inject constructor(
         val result = outcome.result?.let { if (!ttmlActive && it.ttml != null) it.copy(ttml = null) else it }
         val appleCleanMiss = outcome.appleCleanMiss
         if (result == null) {
-            trackDao.setLyricsFetchedAt(query.trackId, 0L)
+            if (query.trackId > 0L) {
+                runCatching { trackDao.setLyricsFetchedAt(query.trackId, 0L) }
+            }
             return Written(null, wantsOnDemandUpgrade = false)
+        }
+        if (query.trackId <= 0L) {
+            val entity = LyricsEntity(
+                trackId = query.trackId,
+                plainText = result.plainText,
+                syncedLrc = result.syncedLrc,
+                instrumental = result.instrumental,
+                language = result.language,
+                source = result.sourceId,
+                sourceLyricsId = result.sourceLyricsId,
+                fetchedAt = clock.now(),
+                ttml = result.ttml,
+                ttmlCheckedAt = null,
+                syncOffsetMs = 0L,
+            )
+            return Written(entity, wantsOnDemandUpgrade = false)
         }
         // Carries over any sync offset the user already set: upsert replaces the whole row, so
         // without this a rewrite (an Apple upgrade, or Retry) silently reset a manually-tuned
@@ -242,8 +261,12 @@ class LyricsRepository @Inject constructor(
             },
             syncOffsetMs = previousRow?.syncOffsetMs ?: 0L,
         )
-        lyricsDao.upsert(entity)
-        trackDao.setLyricsFetchedAt(query.trackId, now)
+        try {
+            lyricsDao.upsert(entity)
+            trackDao.setLyricsFetchedAt(query.trackId, now)
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to persist lyrics for trackId=${query.trackId}", e)
+        }
         if (!result.instrumental) {
             runCatching { sidecarWriter.write(query.trackId, entity) }
                 .onFailure { e ->

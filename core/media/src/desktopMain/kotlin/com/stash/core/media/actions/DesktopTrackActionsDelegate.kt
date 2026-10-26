@@ -144,7 +144,9 @@ class DesktopTrackActionsDelegate @Inject constructor(
     }
 
     private suspend fun ensureTrackPersisted(item: TrackItem): Long? =
-        runCatching { musicRepository.ensureTrackPersisted(item.toDomainTrack()) }.getOrNull()
+        runCatching { musicRepository.ensureTrackPersisted(item.toDomainTrack()) }
+            .getOrNull()
+            ?.takeIf { it > 0L }
 
     override fun addToPlaylist(item: TrackItem, playlistId: Long) {
         scope().launch {

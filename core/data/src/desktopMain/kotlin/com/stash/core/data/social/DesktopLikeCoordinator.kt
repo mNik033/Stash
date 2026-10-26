@@ -12,6 +12,7 @@ class DesktopLikeCoordinator @Inject constructor(
 ) : LikeCoordinator {
     override val mirrorFailures: SharedFlow<String> = MutableSharedFlow()
     override suspend fun setLiked(trackId: Long, liked: Boolean) {
+        if (trackId <= 0L || trackDao.getById(trackId) == null) return
         if (liked) {
             trackDao.markStashLiked(trackId, System.currentTimeMillis())
         } else {
