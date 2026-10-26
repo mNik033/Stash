@@ -237,7 +237,8 @@ class DesktopPlayerRepository @Inject constructor(
                     artworkUri = track.albumArtUrl ?: track.albumArtPath,
                 )
                 if (!isActive) return@launch
-                engine.play(item, playWhenReady = true)
+                val shouldPlay = _playerState.value.isPlaying
+                engine.play(item, playWhenReady = shouldPlay)
                 val engineState = engine.playbackState.value
                 if (engineState is PlaybackEngine.State.Error) {
                     _playerState.value = _playerState.value.copy(
@@ -250,7 +251,7 @@ class DesktopPlayerRepository @Inject constructor(
                     runCatching { musicRepository.recordPlay(track.id) }
                 }
                 _playerState.value = _playerState.value.copy(
-                    isPlaying = true,
+                    isPlaying = shouldPlay,
                     isBuffering = false,
                 )
             } catch (e: Exception) {

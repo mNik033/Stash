@@ -45,6 +45,7 @@ fun main() {
 
         Window(
             onCloseRequest = {
+                runCatching { component.macOsMediaControls().close() }
                 runCatching { component.mpvPlaybackEngine().close() }
                 exitApplication()
             },
@@ -63,6 +64,9 @@ fun main() {
             LaunchedEffect(hwnd) {
                 if (hwnd != 0L && Platform.isWindows()) {
                     component.mpvPlaybackEngine().attachWindowHandle(hwnd)
+                }
+                if (Platform.isMac()) {
+                    component.macOsMediaControls().start()
                 }
             }
 

@@ -15,6 +15,7 @@ import com.stash.data.download.di.DesktopDownloadModule
 import com.stash.data.lyrics.di.DesktopLyricsModule
 import com.stash.data.spotify.di.DesktopSpotifyDataModule
 import com.stash.data.ytmusic.di.DesktopYTMusicDataModule
+import com.stash.desktop.platform.MacOsMediaControls
 import com.stash.desktop.platform.MpvPlaybackEngine
 import com.stash.feature.library.DesktopLibraryModule
 import com.stash.feature.library.LibraryViewModel
@@ -51,6 +52,7 @@ interface DesktopComponent {
     fun playerRepository(): PlayerRepository
     fun playbackEngine(): PlaybackEngine
     fun mpvPlaybackEngine(): MpvPlaybackEngine
+    fun macOsMediaControls(): MacOsMediaControls
     fun tokenManager(): TokenManager
     fun okHttpClient(): OkHttpClient
 

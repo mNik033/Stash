@@ -204,11 +204,37 @@ fun DesktopScaffold(
                 .fillMaxSize()
                 .background(MaterialTheme.colorScheme.background)
                 .onKeyEvent { keyEvent ->
-                    if (keyEvent.key == Key.Escape && keyEvent.type == KeyEventType.KeyUp && backStack.size > 1) {
-                        backStack.removeAt(backStack.lastIndex)
-                        true
-                    } else {
-                        false
+                    if (keyEvent.type != KeyEventType.KeyUp) return@onKeyEvent false
+                    when (keyEvent.key) {
+                        Key.Escape -> if (backStack.size > 1) {
+                            backStack.removeAt(backStack.lastIndex)
+                            true
+                        } else {
+                            false
+                        }
+                        Key.MediaPlayPause -> if (!com.sun.jna.Platform.isMac()) {
+                            scope.launch {
+                                if (playerState.isPlaying) playerRepository.pause() else playerRepository.play()
+                            }
+                            true
+                        } else false
+                        Key.MediaPlay -> if (!com.sun.jna.Platform.isMac()) {
+                            scope.launch { playerRepository.play() }
+                            true
+                        } else false
+                        Key.MediaPause, Key.MediaStop -> if (!com.sun.jna.Platform.isMac()) {
+                            scope.launch { playerRepository.pause() }
+                            true
+                        } else false
+                        Key.MediaNext -> if (!com.sun.jna.Platform.isMac()) {
+                            scope.launch { playerRepository.skipNext() }
+                            true
+                        } else false
+                        Key.MediaPrevious -> if (!com.sun.jna.Platform.isMac()) {
+                            scope.launch { playerRepository.skipPrevious() }
+                            true
+                        } else false
+                        else -> false
                     }
                 },
         ) {

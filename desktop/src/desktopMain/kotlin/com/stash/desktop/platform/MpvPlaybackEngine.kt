@@ -59,7 +59,15 @@ class MpvPlaybackEngine @Inject constructor() : PlaybackEngine, Closeable {
                 lib.mpv_set_option_string(h, "audio-display", "no")
                 lib.mpv_set_option_string(h, "gapless-audio", "yes")
                 lib.mpv_set_option_string(h, "media-controls", "yes")
-                lib.mpv_set_option_string(h, "input-media-keys", "yes")
+                // On macOS, libmpv's internal Swift RemoteCommandCenter requires NSApp to be
+                // mpv's own Application subclass (AppHub.isApplication), so its EventHelper fails
+                // to initialize in a JVM host and leaves a broken Now Playing / RemoteCommandCenter
+                // registration. Disable libmpv's media keys on macOS and use MacOsMediaControls instead.
+                lib.mpv_set_option_string(
+                    h,
+                    "input-media-keys",
+                    if (com.sun.jna.Platform.isMac()) "no" else "yes"
+                )
                 val status = lib.mpv_initialize(h)
                 if (status >= 0) {
                     handle = h
@@ -266,7 +274,9 @@ class MpvPlaybackEngine @Inject constructor() : PlaybackEngine, Closeable {
                         _currentPositionMs = (posSec * 1000).toLong().coerceAtLeast(0L)
                         if (!hasStartedPlaying) {
                             hasStartedPlaying = true
-                            _playbackState.value = PlaybackEngine.State.Playing
+                            if (!isPaused) {
+                                _playbackState.value = PlaybackEngine.State.Playing
+                            }
                         }
                     }
 

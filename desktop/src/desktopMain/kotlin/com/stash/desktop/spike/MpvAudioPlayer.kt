@@ -167,6 +167,9 @@ class MpvAudioPlayer {
                 lib.mpv_set_option_string(h, "load-unsafe-playlists", "no")
                 lib.mpv_set_option_string(h, "vo", "null") // Headless / audio only
                 lib.mpv_set_option_string(h, "terminal", "no")
+                if (Platform.isMac()) {
+                    lib.mpv_set_option_string(h, "input-media-keys", "no")
+                }
                 val status = lib.mpv_initialize(h)
                 if (status >= 0) {
                     handle = h
