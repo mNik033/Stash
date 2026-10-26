@@ -11,6 +11,7 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -1442,10 +1443,10 @@ private fun PlaylistsGrid(
     Box(Modifier.fillMaxSize()) {
         LazyVerticalGrid(
             state = gridState,
-            columns = GridCells.Fixed(2),
+            columns = GridCells.Adaptive(minSize = 160.dp),
             contentPadding = PaddingValues(start = 20.dp, top = 8.dp, end = 20.dp, bottom = bottomChromePadding(8.dp)),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             // Full-width leading header (Shuffle hero + recent rail, Songs-tab only).
             item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) {
@@ -1467,7 +1468,7 @@ private fun PlaylistsGrid(
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(140.dp)
+                            .aspectRatio(1f)
                             .clip(RoundedCornerShape(16.dp))
                             .combinedClickable(
                                 onClick = { onPlayPlaylist(playlist) },
@@ -1540,12 +1541,16 @@ private fun PlaylistsGrid(
                     GlassCard(
                         modifier = Modifier
                             .fillMaxWidth()
+                            .aspectRatio(1f)
                             .combinedClickable(
                                 onClick = { onPlayPlaylist(playlist) },
                                 onLongClick = { selectedPlaylist = playlist },
                             ),
                     ) {
-                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Column(
+                            verticalArrangement = Arrangement.SpaceBetween,
+                            modifier = Modifier.fillMaxSize(),
+                        ) {
                             // A pinned playlist without art showed no pin at all.
                             Row(verticalAlignment = Alignment.Top) {
                                 Text(
@@ -2166,10 +2171,10 @@ private fun ArtistsGrid(
     Box(Modifier.fillMaxSize()) {
         LazyVerticalGrid(
             state = gridState,
-            columns = GridCells.Fixed(2),
+            columns = GridCells.Adaptive(minSize = 140.dp),
             contentPadding = PaddingValues(start = 20.dp, top = 8.dp, end = 20.dp, bottom = bottomChromePadding(8.dp)),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             item(span = { GridItemSpan(maxLineSpan) }) { header() }
             items(displayList, key = { it.name }) { artist ->
@@ -2208,7 +2213,7 @@ private fun ArtistsGrid(
 
             // Collapsible section for single-track artists
             if (singleTrackArtists.isNotEmpty()) {
-                item(span = { GridItemSpan(2) }) {
+                item(span = { GridItemSpan(maxLineSpan) }) {
                     Surface(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -2394,10 +2399,10 @@ private fun AlbumsGrid(
     Box(Modifier.fillMaxSize()) {
         LazyVerticalGrid(
             state = gridState,
-            columns = GridCells.Fixed(2),
+            columns = GridCells.Adaptive(minSize = 160.dp),
             contentPadding = PaddingValues(start = 20.dp, top = 8.dp, end = 20.dp, bottom = bottomChromePadding(8.dp)),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             item(span = { GridItemSpan(maxLineSpan) }) { header() }
             items(displayList, key = { "${it.name}|${it.artist}" }) { album ->
@@ -2420,7 +2425,7 @@ private fun AlbumsGrid(
                         model = artModel,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(120.dp)
+                            .aspectRatio(1f)
                             .clip(RoundedCornerShape(8.dp)),
                     ) {
                         Surface(
@@ -2471,7 +2476,7 @@ private fun AlbumsGrid(
 
             // Collapsible section for single-track albums
             if (singleTrackAlbums.isNotEmpty()) {
-                item(span = { GridItemSpan(2) }) {
+                item(span = { GridItemSpan(maxLineSpan) }) {
                     Surface(
                         modifier = Modifier
                             .fillMaxWidth()
