@@ -9,6 +9,10 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.stash.core.auth.crypto.EncryptionManager
+import com.stash.core.auth.crypto.NoOpEncryptionManager
+import com.stash.core.auth.crypto.decryptString
+import com.stash.core.auth.crypto.encryptString
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -31,11 +35,17 @@ private val Context.lastFmDataStore: DataStore<Preferences> by preferencesDataSt
  * DataStore-backed storage for the user's Last.fm session. Session keys
  * do not expire per Last.fm — once stored, the user stays connected
  * until they explicitly disconnect (which calls [clear]).
+ *
+ * Session keys are encrypted at rest with [EncryptionManager].
  */
 @Singleton
 class LastFmSessionPreference @Inject constructor(
     @ApplicationContext private val context: Context,
+    private val encryption: EncryptionManager,
 ) {
+    /** Secondary constructor for testing */
+    constructor(context: Context) : this(context, NoOpEncryptionManager)
+
     private val usernameKey = stringPreferencesKey("username")
     private val sessionKeyKey = stringPreferencesKey("session_key")
     private val bannerDismissedKey = booleanPreferencesKey("home_banner_dismissed")
@@ -43,7 +53,8 @@ class LastFmSessionPreference @Inject constructor(
 
     val session: Flow<LastFmSession?> = context.lastFmDataStore.data.map { prefs ->
         val u = prefs[usernameKey]
-        val k = prefs[sessionKeyKey]
+        val rawKey = prefs[sessionKeyKey]
+        val k = rawKey?.let { encryption.decryptString(it) }
         if (u.isNullOrBlank() || k.isNullOrBlank()) null else LastFmSession(u, k)
     }
 
@@ -59,9 +70,10 @@ class LastFmSessionPreference @Inject constructor(
     }
 
     suspend fun save(session: LastFmSession) {
+        val encryptedKey = encryption.encryptString(session.sessionKey)
         context.lastFmDataStore.edit {
             it[usernameKey] = session.username
-            it[sessionKeyKey] = session.sessionKey
+            it[sessionKeyKey] = encryptedKey
         }
     }
 

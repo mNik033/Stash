@@ -19,6 +19,15 @@ interface EncryptionManager {
     fun consumeKeysetReset(): Boolean = false
 }
 
+/**
+ * A pass-through [EncryptionManager] that performs no encryption.
+ * Useful for tests and fallback constructors.
+ */
+object NoOpEncryptionManager : EncryptionManager {
+    override fun encrypt(plaintext: ByteArray): ByteArray = plaintext
+    override fun decrypt(ciphertext: ByteArray): ByteArray = ciphertext
+}
+
 /** Prefix applied to string values that have been encrypted and encoded with Base64. */
 const val ENCRYPTED_PREFIX = "enc:v1:"
 

@@ -1,4 +1,4 @@
-﻿package com.stash.data.download.lossless.qbdlx
+package com.stash.data.download.lossless.qbdlx
 
 import android.content.Context
 import com.stash.core.common.Log
@@ -9,6 +9,10 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.stash.core.auth.crypto.EncryptionManager
+import com.stash.core.auth.crypto.NoOpEncryptionManager
+import com.stash.core.auth.crypto.decryptString
+import com.stash.core.auth.crypto.encryptString
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
@@ -35,35 +39,28 @@ private val Context.qbdlxCredentialsDataStore: DataStore<Preferences> by prefere
 )
 
 /**
- * The user's OWN connected Qobuz account â€” the only Qobuz credential Stash
+ * The user's OWN connected Qobuz account — the only Qobuz credential Stash
  * holds. There is no bundled token pool and no bundled app_secret: the account
  * is connected through [QobuzAccountConnector], which mints the token under the
  * live-scraped web app_id/secret ([QobuzWebCredentials]) and stores that pair
  * alongside it.
  *
- * Responsibilities:
- *  - [hasLogin] / [loginLive] / [loginCredential]: is there a credential, and is
- *    it usable right now. These gate the source via
- *    [com.stash.data.download.lossless.LosslessAvailability].
- *  - [setUserCredential] / [clearUserCredential] / [connectedEmail]: connect,
- *    disconnect, and label the account in Settings.
- *  - [markDead] / [recordAlive] / [rejectLogin]: a [DEAD_COOLDOWN_MS]
- *    circuit-breaker so one transient 401 does not blank out lossless â€” or, for a
- *    migrated pasted token that cannot be re-minted, a clean disconnect.
- *  - [signingFor] (the [QbdlxSigningResolver]): hands the client the account's
- *    own (app_id, app_secret), because a Qobuz token signed with a mismatched
- *    secret silently downgrades to a 30-second preview.
- *
- * Also carries the one-shot migration for a token pasted back when the pool
- * still shipped â€” see [migratePastedToken].
+ * Tokens and app secrets are encrypted at rest with [EncryptionManager].
  */
 @Singleton
 class QbdlxCredentialStore @Inject constructor(
     @ApplicationContext private val context: Context,
     private val webCreds: QobuzWebCredentials,
+    private val encryption: EncryptionManager,
 ) : QbdlxSigningResolver {
 
-    // â”€â”€ User-connected account (bring-your-own Qobuz) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    /** Test constructor with default no-op encryption */
+    constructor(
+        context: Context,
+        webCreds: QobuzWebCredentials,
+    ) : this(context, webCreds, NoOpEncryptionManager)
+
+    // ── User-connected account (bring-your-own Qobuz) ──────────────────────
     private val loginTokenKey = stringPreferencesKey("login_token")
     private val loginAppIdKey = stringPreferencesKey("login_app_id")
     private val loginAppSecretKey = stringPreferencesKey("login_app_secret")
@@ -94,19 +91,19 @@ class QbdlxCredentialStore @Inject constructor(
     /** The read [loginCredential]'s one-time load is built from. A seam so tests can fail or cancel it. */
     internal var readCredentials: suspend () -> Preferences = { context.qbdlxCredentialsDataStore.data.first() }
 
-    /** The connected account's email, for a "Connected as â€¦" label. Null when none. */
+    /** The connected account's email, for a "Connected as …" label. Null when none. */
     suspend fun connectedEmail(): String? =
         context.qbdlxCredentialsDataStore.data.first()[loginEmailKey]?.takeIf { it.isNotBlank() }
 
     /**
-     * The connected account's email, or null â€” including for a MIGRATED pasted
+     * The connected account's email, or null — including for a MIGRATED pasted
      * token, which has none. Settings labels the account with it, so it must never
      * be what "is an account connected?" keys on: see [hasLogin].
      *
      * Do NOT reimplement [connectedEmail] on top of this flow: its `catch { emit(null) }`
      * turns a transient DataStore error into `null`, which [rejectLogin] reads as
      * "a migrated token" and would DISCONNECT A PAYING ACCOUNT. That function must
-     * keep throwing â€” a label that briefly reads wrong is survivable; a wiped
+     * keep throwing — a label that briefly reads wrong is survivable; a wiped
      * credential is not.
      */
     val connectedEmailFlow: Flow<String?> =
@@ -119,7 +116,7 @@ class QbdlxCredentialStore @Inject constructor(
 
     /**
      * Live view of "a connected account exists" for the availability predicates.
-     * A pasted token awaiting migration counts â€” it is user-owned and the
+     * A pasted token awaiting migration counts — it is user-owned and the
      * migration runs on the first [loginCredential].
      */
     val hasLogin: Flow<Boolean> =
@@ -132,7 +129,7 @@ class QbdlxCredentialStore @Inject constructor(
         }
             // DataStore re-emits the whole Preferences on every unrelated write,
             // and a read error must not terminate the combine this feeds for the
-            // rest of the process â€” fail closed instead.
+            // rest of the process — fail closed instead.
             .distinctUntilChanged()
             .catch { emit(false) }
 
@@ -143,12 +140,12 @@ class QbdlxCredentialStore @Inject constructor(
     suspend fun loginCredential(): QbdlxLoginCredential? {
         if (loginLoaded) return cachedLogin           // steady state stays lock-free
         loadMutex.withLock {
-            if (loginLoaded) return cachedLogin       // lost the race â€” the winner already loaded
+            if (loginLoaded) return cachedLogin       // lost the race — the winner already loaded
             // Only a read that SUCCEEDED may latch loginLoaded: the latch holds for the
             // life of the process, and this first call often runs in a cancellable
             // coroutine (a search-row prefetch dropped by lookup(), a stream resolve cut
             // short by a skip). Caching a cancelled or failed read as "no account" hid a
-            // paid account until restart â€” every download deferred while hasLogin still
+            // paid account until restart — every download deferred while hasLogin still
             // showed it connected. Cancellation propagates; an error leaves the load
             // armed so the next call reads again.
             val p = try {
@@ -156,16 +153,16 @@ class QbdlxCredentialStore @Inject constructor(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                Log.w(TAG, "credential read failed: ${e.javaClass.simpleName} â€” retrying on the next call")
+                Log.w(TAG, "credential read failed: ${e.javaClass.simpleName} — retrying on the next call")
                 return cachedLogin
             }
 
             // The pool left the app; its cached tokens must leave the device too.
             purgeRetiredPoolKeys(p)
 
-            val t = p[loginTokenKey]
-            val a = p[loginAppIdKey]
-            val s = p[loginAppSecretKey]
+            val t = p[loginTokenKey]?.let { encryption.decryptString(it) }
+            val a = p[loginAppIdKey]?.let { encryption.decryptString(it) }
+            val s = p[loginAppSecretKey]?.let { encryption.decryptString(it) }
             cachedLogin = if (!t.isNullOrBlank() && !a.isNullOrBlank() && !s.isNullOrBlank())
                 QbdlxLoginCredential(t, a, s) else null
             loginLoaded = true
@@ -193,11 +190,11 @@ class QbdlxCredentialStore @Inject constructor(
      * Called from two places, deliberately: [loginCredential] (so a resolve always
      * lands on a purged store) and once per install at startup (StashApplication),
      * because a user with lossless off never triggers a resolve and would otherwise
-     * keep the tokens forever. Idempotent and non-throwing â€” a failed edit just
+     * keep the tokens forever. Idempotent and non-throwing — a failed edit just
      * leaves the keys for the next call.
      *
      * The startup caller is in another Gradle module, so this entry point is public
-     * and takes no [Preferences] â€” datastore is an `implementation` dep here.
+     * and takes no [Preferences] — datastore is an `implementation` dep here.
      */
     suspend fun purgeRetiredPoolKeys() = purgeRetiredPoolKeys(
         runCatching { context.qbdlxCredentialsDataStore.data.first() }
@@ -211,7 +208,7 @@ class QbdlxCredentialStore @Inject constructor(
         runCatching {
             context.qbdlxCredentialsDataStore.edit { it.remove(STALE_POOL_KEY); it.remove(STALE_PINNED_KEY) }
         }
-            // Only claim the purge when it actually happened â€” logging success over a
+            // Only claim the purge when it actually happened — logging success over a
             // failed edit would assert that plaintext tokens are gone while they remain.
             .onSuccess { Log.i(TAG, "purged cached pool credentials left over from the shipped token pool") }
             .onFailure { if (it is CancellationException) throw it }
@@ -219,37 +216,47 @@ class QbdlxCredentialStore @Inject constructor(
 
     /**
      * One-shot upgrade path for a token pasted before the pool left the app. The
-     * pair is scraped live ([QobuzWebCredentials]) rather than bundled â€” this app
+     * pair is scraped live ([QobuzWebCredentials]) rather than bundled — this app
      * ships no Qobuz app_secret. A failed scrape leaves `pasted_token` in place so
-     * the next launch can still migrate it â€” this load is cached for the life of
+     * the next launch can still migrate it — this load is cached for the life of
      * the process, so nothing retries before then.
      */
     private suspend fun migratePastedToken() {
         val pasted = pastedToken() ?: return
         val creds = webCreds.fetch() ?: run {
-            Log.i(TAG, "pasted token not migrated: web credentials unavailable â€” will retry on next launch")
+            Log.i(TAG, "pasted token not migrated: web credentials unavailable — will retry on next launch")
             return
         }
         Log.i(TAG, "migrating pasted token into the connected-account slot")
         setUserCredential(pasted, creds.appId, creds.appSecret, email = null)
-        // Only drop the value we actually migrated â€” a token pasted concurrently
+        // Only drop the value we actually migrated — a token pasted concurrently
         // must not be swallowed by this cleanup.
-        context.qbdlxCredentialsDataStore.edit { if (it[pastedTokenKey] == pasted) it.remove(pastedTokenKey) }
+        context.qbdlxCredentialsDataStore.edit { prefs ->
+            val stored = prefs[pastedTokenKey]
+            if (stored != null && encryption.decryptString(stored) == pasted) {
+                prefs.remove(pastedTokenKey)
+            }
+        }
     }
 
     /**
      * Persist a connected account (token + the app_id/secret it was minted under).
      *
      * [email] is REQUIRED, with no default: it is what [rejectLogin] keys on, so
-     * passing null classifies the credential as disposable â€” disconnected on the
+     * passing null classifies the credential as disposable — disconnected on the
      * first 401. A real logged-in account must pass its email; only the pasted-token
      * migration, which has nothing to re-mint from, passes null. Defaulting it would
      * make the destructive case the silent one.
      */
     suspend fun setUserCredential(token: String, appId: String, appSecret: String, email: String?) {
         recordAlive(token)
+        val encToken = encryption.encryptString(token)
+        val encAppId = encryption.encryptString(appId)
+        val encAppSecret = encryption.encryptString(appSecret)
         context.qbdlxCredentialsDataStore.edit {
-            it[loginTokenKey] = token; it[loginAppIdKey] = appId; it[loginAppSecretKey] = appSecret
+            it[loginTokenKey] = encToken
+            it[loginAppIdKey] = encAppId
+            it[loginAppSecretKey] = encAppSecret
             if (email.isNullOrBlank()) it.remove(loginEmailKey) else it[loginEmailKey] = email
         }
         cachedLogin = QbdlxLoginCredential(token, appId, appSecret)
@@ -270,24 +277,24 @@ class QbdlxCredentialStore @Inject constructor(
 
     /**
      * The (app_id, app_secret) to sign [token]'s requests with. Only the
-     * connected account has one â€” it is stored with the token precisely so the
+     * connected account has one — it is stored with the token precisely so the
      * pair can never drift from what the token was minted under.
      */
     override suspend fun signingFor(token: String): QbdlxSigning {
         loginCredential()?.let { if (it.token == token) return QbdlxSigning(it.appId, it.appSecret) }
         // Reachable: QbdlxFileUrlRouter reads the login, then the client re-reads it
         // here, so a disconnect or account swap in between orphans this token. Throw
-        // rather than sign with an empty pair â€” the router's QbdlxAuthException catch
+        // rather than sign with an empty pair — the router's QbdlxAuthException catch
         // reaches the same TokenDead outcome without spending a round-trip on a
         // request that could only log a misleading "auth 401".
         Log.w(TAG, "signingFor called for a token that is not the connected account")
         throw QbdlxAuthException(401, "signing pair no longer matches the connected account")
     }
 
-    // â”€â”€ Dead-credential circuit breaker â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ── Dead-credential circuit breaker ──────────────────────────────────
 
     /**
-     * Token â†’ epoch-ms until which it is considered dead. IN-MEMORY and
+     * Token → epoch-ms until which it is considered dead. IN-MEMORY and
      * TIME-BOXED (circuit-breaker style), deliberately NOT persisted: a single
      * transient auth failure (a cold-start network blip, or a 401 from the same
      * account being used concurrently across apps/the website) must NOT
@@ -302,7 +309,7 @@ class QbdlxCredentialStore @Inject constructor(
     private fun isDead(token: String): Boolean {
         val until = deadUntil[token] ?: return false
         if (clock() < until) return true
-        deadUntil.remove(token) // cooldown elapsed â€” give it another chance
+        deadUntil.remove(token) // cooldown elapsed — give it another chance
         return false
     }
 
@@ -318,13 +325,13 @@ class QbdlxCredentialStore @Inject constructor(
 
     /**
      * A connected account's token was rejected. A real account (it has an email)
-     * gets the deliberate [DEAD_COOLDOWN_MS] cooldown â€” a transient 401 must not
+     * gets the deliberate [DEAD_COOLDOWN_MS] cooldown — a transient 401 must not
      * disconnect someone. A MIGRATED pasted token (no email) has nothing to re-mint
      * from and was signed with a scraped pair Qobuz may simply refuse, so rejection
      * is terminal: clear it, and let Settings say "not configured" truthfully.
      *
      * Runs inside [QbdlxQobuzSource]'s `callLimited`, whose generic catch would turn
-     * any throw here into a health failure against the catalog breaker â€” a dead
+     * any throw here into a health failure against the catalog breaker — a dead
      * credential must not trip it. So both store touches are guarded, and an
      * unreadable store fails CLOSED to [markDead]: never disconnect a paying account
      * because a DataStore read blew up.
@@ -340,29 +347,32 @@ class QbdlxCredentialStore @Inject constructor(
         }
     }
 
-    // â”€â”€ Legacy pasted token (migration only) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ── Legacy pasted token (migration only) ──────────────────────────────
 
     private suspend fun pastedToken(): String? =
-        context.qbdlxCredentialsDataStore.data.first()[pastedTokenKey]?.takeIf { it.isNotBlank() }
+        context.qbdlxCredentialsDataStore.data.first()[pastedTokenKey]
+            ?.takeIf { it.isNotBlank() }
+            ?.let { encryption.decryptString(it) }
 
     /**
      * Set (or clear, with null) the legacy user-pasted token. No production caller
-     * left â€” the paste field went with the pool; this exists so
+     * left — the paste field went with the pool; this exists so
      * [migratePastedToken] stays testable.
      */
     internal suspend fun setPastedToken(token: String?) {
         val t = token?.trim()
         if (!t.isNullOrEmpty()) recordAlive(t)
+        val encrypted = t?.takeIf { it.isNotEmpty() }?.let { encryption.encryptString(it) }
         context.qbdlxCredentialsDataStore.edit { prefs ->
-            if (t.isNullOrEmpty()) prefs.remove(pastedTokenKey) else prefs[pastedTokenKey] = t
+            if (encrypted.isNullOrEmpty()) prefs.remove(pastedTokenKey) else prefs[pastedTokenKey] = encrypted
         }
         // This store is a process-wide singleton whose lazy login load is cached by
-        // the FIRST availability/resolve check â€” without re-arming, that cache holds
+        // the FIRST availability/resolve check — without re-arming, that cache holds
         // its null and nothing would ever migrate the new value.
         if (!t.isNullOrEmpty()) loginLoaded = false // re-arm: the next loginCredential() re-reads and migrates
     }
 
-    /** Test-only: the backing store â€” the delegate above is file-private, so tests seed/read raw keys through here. */
+    /** Test-only: the backing store — the delegate above is file-private, so tests seed/read raw keys through here. */
     internal val dataStoreForTest: DataStore<Preferences> get() = context.qbdlxCredentialsDataStore
 
     /** Test-only: wipe persisted pasted/login state + in-memory dead flags. */
@@ -382,7 +392,7 @@ class QbdlxCredentialStore @Inject constructor(
         // isEnabledForStreaming gate on), so a TRANSIENT failure (a preview/522/
         // timeout under a download burst) that trips a mark-dead must not kill qbdlx
         // for long. 60s recovers fast; a genuinely-dead token just re-marks, costing
-        // one doomed attempt per minute (negligible). Was 10min â€” far too long a
+        // one doomed attempt per minute (negligible). Was 10min — far too long a
         // total blackout for a transient.
         const val DEAD_COOLDOWN_MS = 60_000L
     }

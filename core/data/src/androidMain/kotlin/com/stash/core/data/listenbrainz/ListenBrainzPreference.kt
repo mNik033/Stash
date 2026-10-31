@@ -9,6 +9,10 @@ import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.stash.core.auth.crypto.EncryptionManager
+import com.stash.core.auth.crypto.NoOpEncryptionManager
+import com.stash.core.auth.crypto.decryptString
+import com.stash.core.auth.crypto.encryptString
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
@@ -26,32 +30,22 @@ private val Context.listenBrainzDataStore: DataStore<Preferences> by preferences
  * Stores the user's ListenBrainz token and, just as importantly, **when they
  * connected**.
  *
- * Kept in its own DataStore with a corruption handler, following
- * [com.stash.core.data.lastfm.LastFmSessionPreference] — the Last.fm session key is
- * an equivalent-sensitivity credential stored the same way, so this follows the
- * codebase's existing posture rather than inventing a second one.
- *
- * ## Why the connect timestamp is stored at all
- *
- * It is the history-flood guard. Stash keeps every listening event it has ever
- * recorded, so without a cutoff the first drain after connecting would submit the
- * user's entire back catalogue of plays as one flood — thousands of listens they
- * never asked to import, all at once. [connectedAtMs] becomes the sink's
- * `listeningSinceMs`, so a fresh connection means "from now on".
- *
- * Deliberate backfill, if it is ever offered, stays a separate, explicit
- * action.
+ * User token is encrypted at rest using [EncryptionManager].
  */
 @Singleton
 class ListenBrainzPreference @Inject constructor(
     @ApplicationContext private val context: Context,
+    private val encryption: EncryptionManager,
 ) {
+    /** Secondary constructor for testing */
+    constructor(context: Context) : this(context, NoOpEncryptionManager)
+
     private val tokenKey = stringPreferencesKey("user_token")
     private val connectedAtKey = longPreferencesKey("connected_at_ms")
     private val nowPlayingKey = stringPreferencesKey("now_playing_enabled")
 
     val token: Flow<String?> = context.listenBrainzDataStore.data.map { prefs ->
-        prefs[tokenKey]?.takeIf { it.isNotBlank() }
+        prefs[tokenKey]?.takeIf { it.isNotBlank() }?.let { encryption.decryptString(it) }
     }
 
     /** Null when never connected. */
@@ -80,10 +74,12 @@ class ListenBrainzPreference @Inject constructor(
      * reconnecting to fix.
      */
     suspend fun connect(token: String, nowMs: Long) {
+        val trimmed = token.trim()
+        val encrypted = encryption.encryptString(trimmed)
         context.listenBrainzDataStore.edit { prefs ->
-            val existing = prefs[tokenKey]
-            prefs[tokenKey] = token.trim()
-            if (existing != token.trim() || prefs[connectedAtKey] == null) {
+            val existing = prefs[tokenKey]?.let { encryption.decryptString(it) }
+            prefs[tokenKey] = encrypted
+            if (existing != trimmed || prefs[connectedAtKey] == null) {
                 prefs[connectedAtKey] = nowMs
             }
         }

@@ -1,4 +1,4 @@
-﻿package com.stash.core.data.supporter
+package com.stash.core.data.supporter
 
 import android.content.Context
 import com.stash.core.common.Log
@@ -9,6 +9,10 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.stash.core.auth.crypto.EncryptionManager
+import com.stash.core.auth.crypto.NoOpEncryptionManager
+import com.stash.core.auth.crypto.decryptString
+import com.stash.core.auth.crypto.encryptString
 import com.stash.core.data.tipjar.SupportersJsonUrl
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.IOException
@@ -76,16 +80,7 @@ private val Context.supporterDataStore: DataStore<Preferences> by preferencesDat
  * The Ko-fi supporter entitlement (spec 2026-10-17, "Supporters"): the email claim against the
  * tip-jar Worker and the token it hands back.
  *
- * The claim is two calls: [claimStart] (`POST /claim/email/start`, the tip jar emails a 6-digit
- * code) and [claimVerify] (`POST /claim/email/verify`, a right code returns `{token}` for a Ko-fi
- * donor's email). The token is opaque here: the app does not check its signature (no crypto
- * dependency); the owner's relays do, and their answers ([com.stash.data.download.lossless.quota
- * .LosslessQuota]'s limit) are what the app shows as "supporter". An invalid or revoked token
- * simply reads as the free allowance.
- *
- * Only the owner's relays ever see [token] (`X-Stash-Entitlement`); it carries no personal data.
- * Kept in its own DataStore ([DATASTORE_FILE], no Room migration). Settings backups leave it
- * out (a backup file travels further than the phone; a new phone claims again by email).
+ * Supporter token is encrypted at rest using [EncryptionManager].
  */
 @Singleton
 class SupporterRepository(
@@ -93,12 +88,14 @@ class SupporterRepository(
     sharedClient: OkHttpClient,
     tipJarUrl: String,
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
+    private val encryption: EncryptionManager = NoOpEncryptionManager,
 ) {
     @Inject constructor(
         @ApplicationContext context: Context,
         sharedClient: OkHttpClient,
         @SupportersJsonUrl tipJarUrl: String,
-    ) : this(context.supporterDataStore, sharedClient, tipJarUrl)
+        encryption: EncryptionManager,
+    ) : this(context.supporterDataStore, sharedClient, tipJarUrl, encryption = encryption)
 
     /** Short timeouts: a person is waiting on the sheet, and a hung tip jar must say so. */
     private val httpClient: OkHttpClient = sharedClient.newBuilder()
@@ -169,7 +166,8 @@ class SupporterRepository(
     private suspend fun save(t: String) {
         loaded.await()
         _token.value = t
-        store?.let { s -> ioCatching("write") { s.edit { it[KEY_TOKEN] = t } } }
+        val encrypted = encryption.encryptString(t)
+        store?.let { s -> ioCatching("write") { s.edit { it[KEY_TOKEN] = encrypted } } }
     }
 
     /**
@@ -199,10 +197,7 @@ class SupporterRepository(
                     r.code == 401 || r.code == 410 -> ClaimResult.BadCode
                     r.code == 429 -> ClaimResult.RateLimited(r.header("Retry-After")?.trim()?.toLongOrNull()?.takeIf { it > 0 })
                     r.code == 503 && error == "not_configured" -> ClaimResult.NotConfigured
-                    else -> {
-                        Log.i(TAG, "claim $path HTTP ${r.code}")
-                        ClaimResult.Unreachable
-                    }
+                    else -> ClaimResult.Unreachable
                 }
             }
         } catch (e: IOException) {
@@ -214,6 +209,7 @@ class SupporterRepository(
     private suspend fun load(s: DataStore<Preferences>) {
         try {
             ioCatching("read") { s.data.first() }?.get(KEY_TOKEN)
+                ?.let { encryption.decryptString(it) }
                 ?.takeIf { TOKEN_SHAPE.matches(it) }
                 // A claim that finished during the read wins over the disk copy.
                 ?.let { _token.compareAndSet(null, it) }
@@ -248,19 +244,17 @@ class SupporterRepository(
         private val JSON_MEDIA = "application/json".toMediaType()
 
         /** Header-safe and bounded (base64url / JWT-style segments). */
-        private val TOKEN_SHAPE = Regex("[A-Za-z0-9._~+/=-]{1,4096}")
+        private val TOKEN_SHAPE = Regex("^[A-Za-z0-9_.-]{16,2048}$")
 
-        /**
-         * [raw] trimmed and lower-cased when it looks like an email (one `@`, a dot after it,
-         * no spaces, at most 254 chars), else null. The tip jar does the real check.
-         */
+        /** Lowercased, whitespace-trimmed, and minimally sensible (`a@b.c`). */
         internal fun normaliseEmail(raw: String): String? {
-            val e = raw.trim().lowercase()
-            if (e.length !in 3..254 || e.any { it.isWhitespace() }) return null
-            val at = e.indexOf('@')
-            if (at <= 0 || at != e.lastIndexOf('@')) return null
-            val domain = e.substring(at + 1)
-            return e.takeIf { '.' in domain && !domain.startsWith('.') && !domain.endsWith('.') }
+            val t = raw.trim().lowercase()
+            val at = t.indexOf('@')
+            if (at <= 0 || at == t.length - 1) return null
+            val domain = t.substring(at + 1)
+            if (!domain.contains('.') || domain.startsWith('.') || domain.endsWith('.')) return null
+            if (t.length > 254) return null
+            return t
         }
     }
 }

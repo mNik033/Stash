@@ -10,6 +10,10 @@ import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.stash.core.auth.crypto.EncryptionManager
+import com.stash.core.auth.crypto.NoOpEncryptionManager
+import com.stash.core.auth.crypto.decryptString
+import com.stash.core.auth.crypto.encryptString
 import com.stash.core.data.db.dao.DownloadQueueDao
 import com.stash.core.model.DownloadMode
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -47,7 +51,14 @@ private val Context.losslessDataStore: DataStore<Preferences> by preferencesData
 class LosslessSourcePreferences @Inject constructor(
     @ApplicationContext private val context: Context,
     private val downloadQueueDao: DownloadQueueDao,
+    private val encryption: EncryptionManager,
 ) {
+    /** Secondary constructor for testing */
+    constructor(
+        context: Context,
+        downloadQueueDao: DownloadQueueDao,
+    ) : this(context, downloadQueueDao, NoOpEncryptionManager)
+
     private val priorityKey = stringPreferencesKey("priority_order")
     private val minQualityKey = stringPreferencesKey("min_quality")
     private val enabledKey = booleanPreferencesKey("enabled")
@@ -147,18 +158,19 @@ class LosslessSourcePreferences @Inject constructor(
     /**
      * The server's `ACCESS_TOKEN`, sent as `X-Access-Token` — or null when the
      * server runs open, or the token is already the endpoint's path prefix. A
-     * secret: never logged, never in the diagnostics bundle.
+     * secret: encrypted at rest with [EncryptionManager]. Never logged, never in the diagnostics bundle.
      */
     val bitchordAccessToken: Flow<String?> = context.losslessDataStore.data.map { prefs ->
-        prefs[bitchordAccessTokenKey]?.takeIf { it.isNotBlank() }
+        prefs[bitchordAccessTokenKey]?.takeIf { it.isNotBlank() }?.let { encryption.decryptString(it) }
     }.distinctUntilChanged().catch { emit(null) }
 
     suspend fun bitchordAccessTokenNow(): String? = bitchordAccessToken.first()
 
     suspend fun setBitchordAccessToken(raw: String?) {
         val v = raw?.trim()?.takeIf { it.isNotEmpty() }
+        val encrypted = v?.let { encryption.encryptString(it) }
         context.losslessDataStore.edit { prefs ->
-            if (v == null) prefs.remove(bitchordAccessTokenKey) else prefs[bitchordAccessTokenKey] = v
+            if (encrypted == null) prefs.remove(bitchordAccessTokenKey) else prefs[bitchordAccessTokenKey] = encrypted
         }
     }
 
@@ -219,16 +231,6 @@ class LosslessSourcePreferences @Inject constructor(
     }
 
     /**
-     * When the lossless registry can't serve a track, whether to fall
-     * through to the yt-dlp pipeline (m4a / Opus) instead of deferring
-     * the download. Defaults to `false` (v0.9.17+) — strict FLAC is the
-     * new contract.
-     *
-     * Existing v0.9.16 users who flip this to true match the previous
-     * silent-fallback behaviour exactly; the legacy yt-dlp tier picker
-     * (MAX/BEST/HIGH/NORMAL/LOW) governs the fallback's quality.
-     */
-    /**
      * Tidal's 320 kbps AAC when a song has no lossless version, for streaming and
      * downloads. Default ON; OFF keeps Tidal FLAC-only.
      */
@@ -262,20 +264,6 @@ class LosslessSourcePreferences @Inject constructor(
      * this cookie (HttpOnly, ~30-min sliding window) to gate access; our
      * OkHttp client attaches it to every squid.wtf request via
      * [com.stash.data.download.lossless.squid.SquidWtfCaptchaInterceptor].
-     *
-     * Workflow until WebView automation lands:
-     *   1. User opens qobuz.squid.wtf in their phone's browser
-     *   2. Solves the captcha by clicking Download on any track
-     *   3. Copies the cookie value (e.g. via a "Cookie Editor" extension)
-     *   4. Pastes it into the Settings field that backs this preference
-     *
-     * Cookie expires after ~30 min server-side; user repastes when
-     * downloads start failing. WebView automation will replace this
-     * manual flow but the storage shape is the same.
-     *
-     * Stored as a plain string — it's not a security secret (HttpOnly
-     * means the BROWSER doesn't expose it to JS, but server treats it
-     * as a freely-pasteable token).
      */
     val captchaCookieValue: Flow<String?> = context.losslessDataStore.data.map { prefs ->
         prefs[captchaCookieKey]?.takeIf { it.isNotBlank() }
@@ -326,10 +314,6 @@ class LosslessSourcePreferences @Inject constructor(
      * Whether the user has dismissed the "Try lossless audio" Home
      * banner. Once dismissed, the banner never shows again — same
      * forever-dismissed semantics as `LastFmSessionPreference.bannerDismissed`.
-     *
-     * Defaults to false. Only read by [com.stash.feature.home.HomeViewModel];
-     * Settings has no UI for un-dismissing. Deduped and fail-closed for the
-     * same reason as [enabled] — it feeds Home's banner combine.
      */
     val bannerDismissed: Flow<Boolean> = context.losslessDataStore.data.map { prefs ->
         prefs[bannerDismissedKey] ?: false
@@ -352,17 +336,7 @@ class LosslessSourcePreferences @Inject constructor(
     }
 
     /**
-     * User-selected lossless quality tier. Default behaviour:
-     *   - Fresh installs (no `enabled` key written) → [LosslessQualityTier.HI_RES]
-     *     (sensible-storage middle ground; ~70 MB / 4 min vs MAX's ~140 MB).
-     *   - v0.9.8+ users with `enabled` explicitly true → [LosslessQualityTier.MAX]
-     *     (matches v0.9.10 historical behaviour for users who opted in).
-     *   - v0.9.8+ users with `enabled` explicitly false → [LosslessQualityTier.HI_RES]
-     *     (they're not downloading lossless anyway; sensible default if they
-     *     later flip the switch).
-     *
-     * Once the user picks a tier in Settings, [setQualityTier] writes the key
-     * and this default logic is no longer consulted.
+     * User-selected lossless quality tier.
      */
     val qualityTier: Flow<LosslessQualityTier> = context.losslessDataStore.data.map { prefs ->
         prefs[qualityTierKey]
@@ -383,9 +357,7 @@ class LosslessSourcePreferences @Inject constructor(
 
     /**
      * Emits the user's source-id priority order. Falls back to
-     * [DEFAULT_PRIORITY] when no order has been explicitly saved —
-     * fresh installs get a known, stable resolution order rather than
-     * relying on Hilt registration order.
+     * [DEFAULT_PRIORITY] when no order has been explicitly saved.
      */
     val priorityOrder: Flow<List<String>> = context.losslessDataStore.data.map { prefs ->
         prefs[priorityKey]
@@ -407,10 +379,7 @@ class LosslessSourcePreferences @Inject constructor(
 
     /**
      * Minimum acceptable quality. Sources whose [SourceResult.format]
-     * doesn't meet this threshold are skipped during resolve, so the
-     * chain never accidentally swaps a user's AAC 128 for an AAC 128
-     * from a different host. Defaults to [MinQuality.LOSSLESS] — opt-in
-     * to lossy sources via Settings if you want them.
+     * doesn't meet this threshold are skipped during resolve.
      */
     val minQuality: Flow<MinQuality> = context.losslessDataStore.data.map { prefs ->
         val raw = prefs[minQualityKey]
@@ -426,10 +395,6 @@ class LosslessSourcePreferences @Inject constructor(
 
     /**
      * Threshold an [AudioFormat] must meet to be accepted by the chain.
-     *
-     *  - [LOSSLESS]: codec must be in [AudioFormat.LOSSLESS_CODECS]
-     *  - [HIGH_LOSSY]: bitrate >= 256 kbps OR lossless
-     *  - [ANY]: anything goes (lossy or lossless)
      */
     enum class MinQuality {
         LOSSLESS, HIGH_LOSSY, ANY;
@@ -442,30 +407,6 @@ class LosslessSourcePreferences @Inject constructor(
     }
 
     companion object {
-        /**
-         * Default priority order used by fresh installs (no DataStore
-         * entry yet). Existing users with explicitly-saved priority
-         * preserve their value.
-         *
-         * Order:
-         * 1. qbdlx_qobuz — Qobuz Hi-Res FLAC via a direct www.qobuz.com call
-         *    (MD5 request signing with the user's own credentials, or a relay).
-         *    Ranked FIRST: it's
-         *    the fastest lossless path — plain Range-seekable FLAC, no proxy
-         *    operator and no client-side decryption.
-         * 2. squid_qobuz — Qobuz Hi-Res FLAC via qobuz.squid.wtf.
-         * 3. kennyy_qobuz — Qobuz Hi-Res FLAC via qobuz.kennyy.com.br.
-         *    2–3 are currently PARKED (hosts down for us) — see
-         *    [LosslessSourceRegistry.PARKED_SOURCE_IDS]; the code + this ranking
-         *    stay so re-enabling is a one-line change when they recover.
-         *
-         * Every rung is user-owned OR build-carried: 1 self-gates off without a
-         * connected account, a custom endpoint or a relay from the signed config,
-         * and 2 and 3 are parked. With nothing of the user's own
-         * connected, a build carrying a relay config still resolves through 1 with
-         * no user action (see [LosslessAvailability] and [com.stash.data.download.lossless.qbdlx.QbdlxFileUrlRouter]); a
-         * build without one reaches NO lossless source at all and falls back to lossy.
-         */
         val DEFAULT_PRIORITY: List<String> = listOf(
             "qbdlx_qobuz",
             "tidal_bitchord",
@@ -473,13 +414,6 @@ class LosslessSourcePreferences @Inject constructor(
             "kennyy_qobuz",
         )
 
-        /**
-         * Validates + normalises a relay base URL: must parse as an https URL
-         * (OkHttp's rules — a bad host is rejected here, never at request time),
-         * scheme/host lower-cased, query and fragment dropped, trailing slashes
-         * trimmed. A path prefix is kept (a relay behind a reverse-proxy subpath
-         * is legitimate). Null when unusable.
-         */
         fun normaliseEndpoint(raw: String?): String? {
             val u = raw?.trim()?.toHttpUrlOrNull()?.takeIf { it.scheme == "https" } ?: return null
             return u.newBuilder().query(null).fragment(null).build().toString().trimEnd('/')

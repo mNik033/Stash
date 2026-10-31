@@ -6,6 +6,10 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.stash.core.auth.crypto.EncryptionManager
+import com.stash.core.auth.crypto.NoOpEncryptionManager
+import com.stash.core.auth.crypto.decryptString
+import com.stash.core.auth.crypto.encryptString
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
@@ -17,15 +21,16 @@ import javax.inject.Singleton
  * Persists user-provided Google Cloud OAuth credentials (Client ID and Client Secret)
  * for the YouTube device-code authorization flow.
  *
- * These values are app-registration identifiers, not user secrets, so plain
- * DataStore preferences are appropriate (no encryption needed). The user enters
- * them once in the Settings screen and they are reused for all subsequent
- * device-code and token-refresh requests.
+ * Client Secret is encrypted at rest using [EncryptionManager].
  */
 @Singleton
 class YouTubeCredentialsStore @Inject constructor(
     @ApplicationContext private val context: Context,
+    private val encryption: EncryptionManager,
 ) {
+    /** Secondary constructor for testing */
+    constructor(context: Context) : this(context, NoOpEncryptionManager)
+
     companion object {
         private val KEY_CLIENT_ID = stringPreferencesKey("yt_client_id")
         private val KEY_CLIENT_SECRET = stringPreferencesKey("yt_client_secret")
@@ -36,18 +41,17 @@ class YouTubeCredentialsStore @Inject constructor(
         prefs[KEY_CLIENT_ID] ?: ""
     }
 
-    /** Reactive flow of the stored Client Secret, empty string if not set. */
+    /** Reactive flow of the stored Client Secret (decrypted), empty string if not set. */
     val clientSecret: Flow<String> = context.youTubeCredentials.data.map { prefs ->
-        prefs[KEY_CLIENT_SECRET] ?: ""
+        prefs[KEY_CLIENT_SECRET]?.let { encryption.decryptString(it, fallbackToEmpty = true) } ?: ""
     }
 
     /**
      * Returns true if both Client ID and Client Secret have been saved.
      */
     suspend fun hasCredentials(): Boolean {
-        val prefs = context.youTubeCredentials.data.first()
-        val id = prefs[KEY_CLIENT_ID] ?: ""
-        val secret = prefs[KEY_CLIENT_SECRET] ?: ""
+        val id = getClientId()
+        val secret = getClientSecret()
         return id.isNotBlank() && secret.isNotBlank()
     }
 
@@ -59,22 +63,25 @@ class YouTubeCredentialsStore @Inject constructor(
     }
 
     /**
-     * Returns the stored Client Secret, or empty string if not set.
+     * Returns the stored Client Secret (decrypted), or empty string if not set.
      */
     suspend fun getClientSecret(): String {
-        return context.youTubeCredentials.data.first()[KEY_CLIENT_SECRET] ?: ""
+        return context.youTubeCredentials.data.first()[KEY_CLIENT_SECRET]?.let {
+            encryption.decryptString(it, fallbackToEmpty = true)
+        } ?: ""
     }
 
     /**
-     * Saves the user's Google Cloud OAuth credentials.
+     * Saves the user's Google Cloud OAuth credentials. Client Secret is encrypted at rest.
      *
      * @param clientId     The OAuth Client ID (TV / limited-input device type).
      * @param clientSecret The OAuth Client Secret paired with [clientId].
      */
     suspend fun saveCredentials(clientId: String, clientSecret: String) {
+        val encryptedSecret = encryption.encryptString(clientSecret.trim())
         context.youTubeCredentials.edit { prefs ->
             prefs[KEY_CLIENT_ID] = clientId.trim()
-            prefs[KEY_CLIENT_SECRET] = clientSecret.trim()
+            prefs[KEY_CLIENT_SECRET] = encryptedSecret
         }
     }
 
