@@ -11,6 +11,7 @@ import com.stash.core.auth.model.ServiceToken
 import com.stash.core.auth.model.UserInfo
 import com.stash.core.auth.store.TokenStore
 import com.stash.core.common.platform.AppPaths
+import com.stash.data.download.YtCookieFiles
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -34,7 +35,7 @@ private data class StoredToken(
 
 @Singleton
 class DesktopTokenStore @Inject constructor(
-    appPaths: AppPaths,
+    private val appPaths: AppPaths,
     private val encryption: EncryptionManager,
 ) : TokenStore {
 
@@ -92,6 +93,9 @@ class DesktopTokenStore @Inject constructor(
 
     override suspend fun clearYouTube() {
         dataStore.edit { it.remove(Keys.YOUTUBE) }
+        runCatching {
+            YtCookieFiles.sweep(appPaths.noBackupFilesDir)
+        }
     }
 
     // ── Discord ──────────────────────────────────────────────────────────

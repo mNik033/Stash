@@ -10,6 +10,7 @@ import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.WindowState
 import androidx.compose.ui.window.application
 import com.stash.core.ui.theme.StashTheme
+import com.stash.data.download.YtCookieFiles
 import com.stash.desktop.di.DaggerDesktopComponent
 import com.stash.desktop.ui.DesktopScaffold
 import com.sun.jna.Library
@@ -39,7 +40,13 @@ fun main() {
     }
 
     application {
-        val component = remember { DaggerDesktopComponent.create() }
+        val component = remember {
+            val comp = DaggerDesktopComponent.create()
+            runCatching {
+                YtCookieFiles.sweep(comp.appPaths().noBackupFilesDir)
+            }
+            comp
+        }
         var isDarkTheme by remember { mutableStateOf(true) }
         var isAmoledTheme by remember { mutableStateOf(false) }
 

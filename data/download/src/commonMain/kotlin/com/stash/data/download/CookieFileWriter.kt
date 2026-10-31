@@ -1,5 +1,6 @@
 package com.stash.data.download
 
+import com.stash.core.common.platform.FileSecurity
 import java.io.File
 
 /**
@@ -61,10 +62,7 @@ object CookieFileWriter {
         outputFile.parentFile?.mkdirs()
         val tmpFile = File.createTempFile("cookies_", ".tmp", outputFile.parentFile)
         try {
-            tmpFile.setReadable(false, false)
-            tmpFile.setReadable(true, true)
-            tmpFile.setWritable(false, false)
-            tmpFile.setWritable(true, true)
+            FileSecurity.restrictToOwner(tmpFile)
 
             tmpFile.bufferedWriter().use { writer ->
                 writer.write(HEADER)
@@ -83,6 +81,7 @@ object CookieFileWriter {
                 outputFile.writeBytes(tmpFile.readBytes())
                 tmpFile.delete()
             }
+            FileSecurity.restrictToOwner(outputFile)
         } finally {
             if (tmpFile.exists()) tmpFile.delete()
         }
