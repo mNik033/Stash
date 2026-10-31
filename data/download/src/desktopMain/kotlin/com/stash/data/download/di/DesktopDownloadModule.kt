@@ -1,7 +1,9 @@
 package com.stash.data.download.di
 
+import com.stash.core.data.prefs.QualityPreference
 import com.stash.data.download.files.DesktopLocalImportCoordinator
 import com.stash.data.download.files.LocalImportCoordinator
+import com.stash.data.download.prefs.QualityPreferencesManager
 import com.stash.data.download.ytdlp.DesktopYtDlpRunner
 import com.stash.data.download.ytdlp.YtDlpRunner
 import dagger.Binds
@@ -26,7 +28,8 @@ abstract class DesktopDownloadModule {
     @Binds
     @Singleton
     abstract fun bindDownloadProgressTracker(impl: com.stash.data.download.DesktopDownloadProgressTracker): com.stash.data.download.DownloadProgressTracker
+
+    @Binds
+    @Singleton
+    abstract fun bindQualityPreference(impl: QualityPreferencesManager): QualityPreference
 }
-
-
-

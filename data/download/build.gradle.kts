@@ -58,6 +58,7 @@ kotlin {
 
             implementation(libs.kotlinx.coroutines.core)
             implementation(libs.kotlinx.serialization.json)
+            implementation(libs.datastore.preferences)
             implementation(libs.okhttp)
             implementation(libs.dagger)
         }
@@ -68,7 +69,6 @@ kotlin {
             implementation(libs.youtubedl.ffmpeg)
             implementation(libs.youtubedl.aria2c)
             implementation(libs.kotlinx.coroutines.android)
-            implementation(libs.datastore.preferences)
             implementation(libs.work.runtime.ktx)
             implementation(libs.hilt.work)
             implementation("androidx.documentfile:documentfile:1.0.1")

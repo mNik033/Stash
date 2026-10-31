@@ -42,12 +42,12 @@ kotlin {
             implementation(libs.sqlite.bundled)
             implementation(libs.kotlinx.serialization.json)
             implementation(libs.kotlinx.coroutines.core)
+            implementation(libs.datastore.preferences)
             implementation(libs.okhttp)
             implementation(libs.dagger)
         }
         androidMain.dependencies {
             implementation(libs.room.ktx)
-            implementation(libs.datastore.preferences)
             implementation(libs.hilt.android)
             implementation(libs.work.runtime.ktx)
             implementation(libs.hilt.work)
