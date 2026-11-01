@@ -10,6 +10,9 @@ import com.stash.data.download.jiosaavn.toJioSaavnKbps
 import com.stash.data.download.lossless.LosslessSourcePreferences
 import com.stash.data.download.lossless.LosslessSourceRegistry
 import com.stash.data.download.lossless.TrackQuery
+import com.stash.data.download.lossless.forLibrarySource
+import com.stash.data.download.lossless.bitchord.BitchordClient
+import com.stash.data.download.lossless.qbdlx.QbdlxQobuzSource
 import com.stash.data.download.lossless.tidal.TidalAac
 import com.stash.data.download.lossless.tidal.TidalAacResolver
 import com.stash.data.download.preview.AudioUrlTailProbe
@@ -44,6 +47,8 @@ class DesktopStreamResolver @Inject constructor(
     private val ytMusicApiClient: YTMusicApiClient,
     private val tailProbe: AudioUrlTailProbe,
     private val ytDlpRunner: YtDlpRunner,
+    private val qbdlxQobuzSource: QbdlxQobuzSource,
+    private val bitchordClient: BitchordClient,
     private val losslessSourceRegistry: LosslessSourceRegistry,
     private val losslessPrefs: LosslessSourcePreferences,
     private val qualityPreference: QualityPreference,
@@ -276,10 +281,46 @@ class DesktopStreamResolver @Inject constructor(
             explicit = track.explicit,
             spotifyUri = track.spotifyUri,
             trackId = track.id.takeIf { it > 0 },
-        )
+        ).forLibrarySource(track.source, track.musicVideoType)
 
         // 2. Lossless Waterfall (Qobuz / Tidal FLAC / Relay via LosslessSourceRegistry)
         if ((qualityTier == QualityTier.MAX || qualityTier == QualityTier.BEST) && losslessEnabled) {
+            // First: Direct Qobuz immediate resolve (bypasses background breaker/bucket, requests specific quality tier)
+            val qobuzResult = runCatching {
+                val reqQuality = losslessPrefs.qualityTierNow().qobuzCode
+                qbdlxQobuzSource.resolveImmediate(trackQuery, reqQuality)
+            }.getOrNull()
+
+            if (qobuzResult != null && !qobuzResult.downloadUrl.isNullOrBlank()) {
+                Log.i(TAG, "Resolved Qobuz lossless stream for '${track.title}'")
+                return@withContext ResolvedDesktopStream(
+                    uri = qobuzResult.downloadUrl,
+                    fileFormat = qobuzResult.format.codec.lowercase(),
+                    qualityKbps = qobuzResult.format.bitrateKbps,
+                    sampleRateHz = qobuzResult.format.sampleRateHz.takeIf { it > 0 },
+                    bitsPerSample = qobuzResult.format.bitsPerSample.takeIf { it > 0 },
+                    streamOrigin = "qbdlx",
+                )
+            }
+
+            // Second: Tidal via BitChord (handles both progressive FLAC and Hi-Res DASH .mpd)
+            val tidalResult = runCatching {
+                bitchordClient.resolve(trackQuery, allowAac = false)
+            }.getOrNull()
+
+            if (tidalResult != null && !tidalResult.url.isNullOrBlank()) {
+                Log.i(TAG, "Resolved Tidal lossless stream for '${track.title}' (codec=${tidalResult.codec}, dash=${tidalResult.isDash})")
+                return@withContext ResolvedDesktopStream(
+                    uri = tidalResult.url,
+                    fileFormat = tidalResult.codec.lowercase(),
+                    qualityKbps = tidalResult.bitrateKbps,
+                    sampleRateHz = tidalResult.sampleRateHz.takeIf { it > 0 },
+                    bitsPerSample = tidalResult.bitDepth.takeIf { it > 0 },
+                    streamOrigin = "tidal",
+                )
+            }
+
+            // Third: Generic fallback to any other registered lossless source
             val losslessResult = runCatching {
                 losslessSourceRegistry.resolve(trackQuery, bypassRateLimit = true)
             }.getOrNull()

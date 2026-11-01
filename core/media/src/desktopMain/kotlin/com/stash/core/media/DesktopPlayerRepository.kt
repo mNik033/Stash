@@ -568,7 +568,8 @@ class DesktopPlayerRepository @Inject constructor(
             isBuffering = true,
         )
 
-        val resolved = streamResolver.resolveYouTubeStream(item.videoId)
+        val resolved = streamResolver.resolveForTrack(track)
+            ?: streamResolver.resolveYouTubeStream(item.videoId)
         if (resolved == null || resolved.uri.isBlank()) {
             _playerState.value = _playerState.value.copy(isPlaying = false, isBuffering = false)
             return StreamRoutingResult.NotAvailable
@@ -593,6 +594,7 @@ class DesktopPlayerRepository @Inject constructor(
             artist = item.artist,
             album = item.album.orEmpty(),
             durationMs = durationMs,
+            isLocal = track.isDownloaded || resolved.streamOrigin == "local",
             artworkUri = item.thumbnailUrl,
         )
         engine.play(playable, playWhenReady = true)
