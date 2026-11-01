@@ -375,6 +375,11 @@ class DesktopMusicRepository @Inject constructor(
 
     override suspend fun setPlaylistDownload(playlistId: Long, on: Boolean) {
         playlistDao.setKeepOffline(playlistId, on)
+        if (on) {
+            queueDownloadsForPlaylist(playlistId, background = false)
+        } else {
+            downloadQueueDao.cancelWaitingForPlaylist(playlistId)
+        }
     }
 
     override suspend fun removeDownloadsForPlaylist(playlistId: Long): Int {

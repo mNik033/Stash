@@ -13,6 +13,7 @@ import com.stash.core.data.prefs.LibraryScopePreference
 import com.stash.core.data.prefs.StreamingPreference
 import com.stash.core.data.repository.MusicRepository
 import com.stash.core.data.share.SharedMixRepository
+import com.stash.core.data.share.SharePreference
 import com.stash.core.data.sync.FlacUpgradeEnqueuer
 import com.stash.core.media.PlayerRepository
 import com.stash.core.media.actions.TrackActionsDelegate
@@ -240,6 +241,25 @@ object DesktopViewModelModule {
         artistImageDao = artistImageDao,
         connectivityMonitor = connectivityMonitor,
     )
+
+    @Provides
+    @Singleton
+    fun provideShareMixViewModelFactory(
+        repository: SharedMixRepository,
+        sharePreference: SharePreference,
+    ): DesktopShareMixViewModelFactory = DesktopShareMixViewModelFactory(
+        repository = repository,
+        sharePreference = sharePreference,
+    )
+}
+
+class DesktopShareMixViewModelFactory(
+    private val repository: SharedMixRepository,
+    private val sharePreference: SharePreference,
+) {
+    fun create(playlistId: Long): com.stash.feature.library.share.ShareMixViewModel {
+        return com.stash.feature.library.share.ShareMixViewModel(repository, sharePreference)
+    }
 }
 
 class DesktopArtistProfileViewModelFactory(

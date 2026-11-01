@@ -100,6 +100,7 @@ import com.stash.desktop.ui.home.DesktopHomeScreen
 import com.stash.feature.library.LibraryScreen
 import com.stash.feature.library.LocalAllSongsViewModel
 import com.stash.feature.library.LocalLibraryViewModel
+import com.stash.feature.library.LocalShareMixViewModel
 import com.stash.feature.search.LocalSearchViewModel
 import com.stash.feature.search.SearchScreen
 import com.stash.feature.sync.LocalSyncViewModel
@@ -207,6 +208,7 @@ fun DesktopScaffold(
         LocalAllSongsViewModel provides remember { component.allSongsViewModel() },
         LocalSearchViewModel provides remember { component.searchViewModel() },
         LocalSyncViewModel provides remember { component.syncViewModel() },
+        LocalShareMixViewModel provides remember { { playlistId -> component.shareMixViewModelFactory().create(playlistId) } },
     ) {
         Column(
             modifier = modifier
