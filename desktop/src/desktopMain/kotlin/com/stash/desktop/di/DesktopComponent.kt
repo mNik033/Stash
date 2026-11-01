@@ -62,6 +62,9 @@ interface DesktopComponent {
     fun allSongsViewModel(): AllSongsViewModel
     fun searchViewModel(): SearchViewModel
     fun syncViewModel(): SyncViewModel
+    fun downloadManagementViewModel(): com.stash.feature.sync.DownloadManagementViewModel
+    fun failedDownloadsViewModel(): com.stash.feature.sync.FailedDownloadsViewModel
+    fun failedMatchesViewModel(): com.stash.feature.sync.FailedMatchesViewModel
     fun artistProfileViewModelFactory(): DesktopArtistProfileViewModelFactory
     fun albumDiscoveryViewModelFactory(): DesktopAlbumDiscoveryViewModelFactory
     fun playlistDetailViewModelFactory(): DesktopPlaylistDetailViewModelFactory

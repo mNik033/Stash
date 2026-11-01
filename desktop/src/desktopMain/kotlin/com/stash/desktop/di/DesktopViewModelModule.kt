@@ -29,6 +29,10 @@ import com.stash.feature.library.allsongs.ScannedCoverStore
 import com.stash.feature.search.PreviewPrefetcher
 import com.stash.feature.search.RecentSearchesStore
 import com.stash.feature.search.SearchViewModel
+import com.stash.data.download.DownloadProgressTracker
+import com.stash.feature.sync.DownloadManagementViewModel
+import com.stash.feature.sync.FailedDownloadsViewModel
+import com.stash.feature.sync.FailedMatchesViewModel
 import com.stash.feature.sync.SyncViewModel
 import dagger.Module
 import dagger.Provides
@@ -146,6 +150,41 @@ object DesktopViewModelModule {
         downloadQueueTrigger = downloadQueueTrigger,
         blocklistGuard = blocklistGuard,
         syncStateManager = syncStateManager,
+    )
+
+    @Provides
+    @Singleton
+    fun provideDownloadManagementViewModel(
+        database: StashDatabase,
+        progressTracker: DownloadProgressTracker,
+        trigger: DownloadQueueTrigger,
+    ): DownloadManagementViewModel = DownloadManagementViewModel(
+        downloadQueueDao = database.downloadQueueDao(),
+        downloadProgressTracker = progressTracker,
+        downloadQueueTrigger = trigger,
+    )
+
+    @Provides
+    @Singleton
+    fun provideFailedDownloadsViewModel(
+        database: StashDatabase,
+        trigger: DownloadQueueTrigger,
+        blocklistGuard: BlocklistGuard,
+    ): FailedDownloadsViewModel = FailedDownloadsViewModel(
+        downloadQueueDao = database.downloadQueueDao(),
+        trackDao = database.trackDao(),
+        downloadQueueTrigger = trigger,
+        blocklistGuard = blocklistGuard,
+    )
+
+    @Provides
+    @Singleton
+    fun provideFailedMatchesViewModel(
+        musicRepository: MusicRepository,
+        database: StashDatabase,
+    ): FailedMatchesViewModel = FailedMatchesViewModel(
+        musicRepository = musicRepository,
+        trackDao = database.trackDao(),
     )
 
     @Provides

@@ -541,8 +541,8 @@ class DesktopMusicRepository @Inject constructor(
     override fun getPickablePlaylists(): Flow<List<Playlist>> =
         playlistDao.getPickablePlaylists().map { list -> list.map { it.toDomain() } }
 
-    override fun getUnmatchedTracks(): Flow<List<UnmatchedTrackView>> = emptyFlow()
-    override fun getUnmatchedCount(): Flow<Int> = flowOf(0)
+    override fun getUnmatchedTracks(): Flow<List<UnmatchedTrackView>> = downloadQueueDao.getUnmatchedTracks()
+    override fun getUnmatchedCount(): Flow<Int> = downloadQueueDao.getUnmatchedCount()
     override suspend fun dismissMatch(trackId: Long) {
         trackDao.dismissMatch(trackId)
     }

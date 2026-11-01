@@ -1,15 +1,33 @@
 package com.stash.feature.sync
 
 import androidx.lifecycle.ViewModel
-import com.stash.core.data.db.dao.UnmatchedTrackView
+import androidx.lifecycle.viewModelScope
+import com.stash.core.data.db.dao.TrackDao
+import com.stash.core.data.repository.MusicRepository
 import com.stash.core.media.preview.PreviewState
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 
-actual open class FailedMatchesViewModel : ViewModel() {
-    actual val uiState: StateFlow<FailedMatchesUiState> = MutableStateFlow(FailedMatchesUiState())
+actual open class FailedMatchesViewModel(
+    private val musicRepository: MusicRepository? = null,
+    private val trackDao: TrackDao? = null,
+) : ViewModel() {
+    private val _uiState = MutableStateFlow(FailedMatchesUiState())
+    actual val uiState: StateFlow<FailedMatchesUiState> =
+        musicRepository?.getUnmatchedTracks()
+            ?.map { tracks -> FailedMatchesUiState(tracks = tracks, isLoading = false) }
+            ?.stateIn(
+                scope = viewModelScope,
+                started = SharingStarted.WhileSubscribed(5_000),
+                initialValue = FailedMatchesUiState(),
+            ) ?: _uiState
+
     actual val previewState: StateFlow<PreviewState> = MutableStateFlow(PreviewState.Idle)
     actual val approvedDownloads: StateFlow<ApprovedDownloads> = MutableStateFlow(ApprovedDownloads())
     actual val userMessages: Flow<String> = emptyFlow()
@@ -21,6 +39,14 @@ actual open class FailedMatchesViewModel : ViewModel() {
     actual fun stopPreview() {}
     actual fun approveMatch(trackId: Long, queueEntryId: Long, candidate: ResyncCandidate) {}
     actual fun approveSwap(row: FlaggedTrackRow, candidate: ResyncCandidate) {}
-    actual fun unflagTrack(trackId: Long) {}
-    actual fun dismissTrack(trackId: Long) {}
+    actual fun unflagTrack(trackId: Long) {
+        viewModelScope.launch {
+            trackDao?.updateMatchFlagged(trackId, false)
+        }
+    }
+    actual fun dismissTrack(trackId: Long) {
+        viewModelScope.launch {
+            musicRepository?.dismissMatch(trackId)
+        }
+    }
 }

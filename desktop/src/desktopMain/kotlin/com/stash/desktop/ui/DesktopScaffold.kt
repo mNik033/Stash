@@ -103,6 +103,12 @@ import com.stash.feature.library.LocalLibraryViewModel
 import com.stash.feature.library.LocalShareMixViewModel
 import com.stash.feature.search.LocalSearchViewModel
 import com.stash.feature.search.SearchScreen
+import com.stash.feature.sync.DownloadManagementScreen
+import com.stash.feature.sync.FailedDownloadsScreen
+import com.stash.feature.sync.FailedMatchesScreen
+import com.stash.feature.sync.LocalDownloadManagementViewModel
+import com.stash.feature.sync.LocalFailedDownloadsViewModel
+import com.stash.feature.sync.LocalFailedMatchesViewModel
 import com.stash.feature.sync.LocalSyncViewModel
 import com.stash.feature.sync.SyncScreen
 import androidx.compose.runtime.mutableStateListOf
@@ -144,6 +150,9 @@ sealed interface DesktopScreen {
     data object Library : DesktopScreen
     data object Search : DesktopScreen
     data object Sync : DesktopScreen
+    data object Downloads : DesktopScreen
+    data object FailedDownloads : DesktopScreen
+    data object FailedMatches : DesktopScreen
     data object Settings : DesktopScreen
     data class PlaylistDetail(val playlistId: Long) : DesktopScreen
     data class AlbumDetail(
@@ -192,7 +201,10 @@ fun DesktopScaffold(
         DesktopScreen.Search,
         is DesktopScreen.ArtistProfile,
         is DesktopScreen.AlbumDiscovery -> DesktopNavTab.Search
-        DesktopScreen.Sync -> DesktopNavTab.Sync
+        DesktopScreen.Sync,
+        DesktopScreen.Downloads,
+        DesktopScreen.FailedDownloads,
+        DesktopScreen.FailedMatches -> DesktopNavTab.Sync
         DesktopScreen.Settings -> DesktopNavTab.Settings
     }
 
@@ -208,6 +220,9 @@ fun DesktopScaffold(
         LocalAllSongsViewModel provides remember { component.allSongsViewModel() },
         LocalSearchViewModel provides remember { component.searchViewModel() },
         LocalSyncViewModel provides remember { component.syncViewModel() },
+        LocalDownloadManagementViewModel provides remember { component.downloadManagementViewModel() },
+        LocalFailedDownloadsViewModel provides remember { component.failedDownloadsViewModel() },
+        LocalFailedMatchesViewModel provides remember { component.failedMatchesViewModel() },
         LocalShareMixViewModel provides remember { { playlistId -> component.shareMixViewModelFactory().create(playlistId) } },
     ) {
         Column(
@@ -436,7 +451,47 @@ fun DesktopScaffold(
                             )
                         }
                         DesktopScreen.Sync -> {
-                            SyncScreen()
+                            SyncScreen(
+                                onNavigateToDownloads = {
+                                    backStack.add(DesktopScreen.Downloads)
+                                },
+                                onNavigateToFailedDownloads = {
+                                    backStack.add(DesktopScreen.FailedDownloads)
+                                },
+                                onNavigateToFailedMatches = {
+                                    backStack.add(DesktopScreen.FailedMatches)
+                                },
+                                onNavigateToBlockedSongs = {
+                                    backStack.add(DesktopScreen.Settings)
+                                },
+                                onNavigateToAccounts = {
+                                    backStack.add(DesktopScreen.Settings)
+                                },
+                                onManageSource = {
+                                    backStack.add(DesktopScreen.Settings)
+                                },
+                            )
+                        }
+                        DesktopScreen.Downloads -> {
+                            DownloadManagementScreen(
+                                onBack = {
+                                    if (backStack.size > 1) backStack.removeAt(backStack.lastIndex)
+                                },
+                            )
+                        }
+                        DesktopScreen.FailedDownloads -> {
+                            FailedDownloadsScreen(
+                                onBack = {
+                                    if (backStack.size > 1) backStack.removeAt(backStack.lastIndex)
+                                },
+                            )
+                        }
+                        DesktopScreen.FailedMatches -> {
+                            FailedMatchesScreen(
+                                onBack = {
+                                    if (backStack.size > 1) backStack.removeAt(backStack.lastIndex)
+                                },
+                            )
                         }
                         DesktopScreen.Settings -> {
                             DesktopSettingsScreen(
