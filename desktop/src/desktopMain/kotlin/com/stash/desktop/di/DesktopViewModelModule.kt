@@ -2,6 +2,10 @@ package com.stash.desktop.di
 
 import androidx.lifecycle.SavedStateHandle
 import com.stash.core.auth.TokenManager
+import com.stash.core.data.db.StashDatabase
+import com.stash.core.data.blocklist.BlocklistGuard
+import com.stash.core.data.sync.DownloadQueueTrigger
+import com.stash.data.download.files.LibrarySizeHolder
 import com.stash.core.data.db.dao.ArtistImageDao
 import com.stash.core.data.db.dao.ScannedSongDao
 import com.stash.core.data.navigation.LibraryDeepLinkController
@@ -120,7 +124,28 @@ object DesktopViewModelModule {
 
     @Provides
     @Singleton
-    fun provideSyncViewModel(): SyncViewModel = SyncViewModel()
+    fun provideSyncViewModel(
+        tokenManager: TokenManager,
+        streamingPreference: StreamingPreference,
+        database: StashDatabase,
+        musicRepository: MusicRepository,
+        librarySizeHolder: LibrarySizeHolder,
+        downloadQueueTrigger: DownloadQueueTrigger,
+        blocklistGuard: BlocklistGuard,
+        syncStateManager: com.stash.core.data.sync.SyncStateManager,
+    ): SyncViewModel = SyncViewModel(
+        tokenManager = tokenManager,
+        streamingPreference = streamingPreference,
+        playlistDao = database.playlistDao(),
+        downloadQueueDao = database.downloadQueueDao(),
+        syncHistoryDao = database.syncHistoryDao(),
+        syncUndoDao = database.syncUndoDao(),
+        musicRepository = musicRepository,
+        librarySizeHolder = librarySizeHolder,
+        downloadQueueTrigger = downloadQueueTrigger,
+        blocklistGuard = blocklistGuard,
+        syncStateManager = syncStateManager,
+    )
 
     @Provides
     @Singleton

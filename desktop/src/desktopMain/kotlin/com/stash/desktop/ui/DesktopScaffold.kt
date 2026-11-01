@@ -438,13 +438,7 @@ fun DesktopScaffold(
                         }
                         DesktopScreen.Settings -> {
                             DesktopSettingsScreen(
-                                appPaths = component.appPaths(),
-                                platformInfo = component.platformInfo(),
-                                mpvStatusMessage = if (component.mpvPlaybackEngine().isNativeEngineAvailable) {
-                                    "libmpv initialized and active"
-                                } else {
-                                    "libmpv not detected (fallback mode)"
-                                } ,
+                                component = component,
                                 isDarkTheme = isDarkTheme,
                                 isAmoledTheme = isAmoledTheme,
                                 onThemeChanged = onThemeChanged,

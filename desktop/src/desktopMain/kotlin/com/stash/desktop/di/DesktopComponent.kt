@@ -70,6 +70,11 @@ interface DesktopComponent {
     fun lyricsRepository(): com.stash.data.lyrics.LyricsRepository
     fun likeCoordinator(): com.stash.core.data.social.LikeCoordinator
     fun downloadQueueProcessor(): DesktopDownloadQueueProcessor
+    fun streamingPreference(): com.stash.core.data.prefs.StreamingPreference
+    fun qualityPreference(): com.stash.core.data.prefs.QualityPreference
+    fun qbdlxCredentialStore(): com.stash.data.download.lossless.qbdlx.QbdlxCredentialStore
+    fun qobuzAccountConnector(): com.stash.data.download.lossless.qbdlx.QobuzAccountConnector
+    fun losslessSourcePreferences(): com.stash.data.download.lossless.LosslessSourcePreferences
 
     @Component.Factory
     interface Factory {

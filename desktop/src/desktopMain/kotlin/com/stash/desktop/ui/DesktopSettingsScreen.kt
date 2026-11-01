@@ -1,5 +1,6 @@
 package com.stash.desktop.ui
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -20,52 +21,113 @@ import androidx.compose.material.icons.filled.Audiotrack
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.CleaningServices
 import androidx.compose.material.icons.filled.Cloud
+import androidx.compose.material.icons.filled.CloudDone
 import androidx.compose.material.icons.filled.Computer
 import androidx.compose.material.icons.filled.DarkMode
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Folder
-import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.LightMode
+import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Palette
+import androidx.compose.material.icons.filled.VpnKey
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.stash.core.common.platform.AppPaths
-import com.stash.core.common.platform.PlatformInfo
+import com.stash.core.auth.model.AuthService
+import com.stash.core.auth.model.AuthState
+import com.stash.core.model.DownloadMode
+import com.stash.core.model.QualityTier
 import com.stash.core.ui.theme.StashCyan
 import com.stash.core.ui.theme.StashGlassBorder
 import com.stash.core.ui.theme.StashPurple
 import com.stash.core.ui.theme.StashSurface
+import com.stash.data.download.lossless.qbdlx.QobuzLoginResult
+import com.stash.desktop.di.DesktopComponent
+import kotlinx.coroutines.launch
 
 @Composable
 fun DesktopSettingsScreen(
-    appPaths: AppPaths,
-    platformInfo: PlatformInfo,
-    mpvStatusMessage: String,
+    component: DesktopComponent,
     modifier: Modifier = Modifier,
     isDarkTheme: Boolean = true,
     isAmoledTheme: Boolean = false,
     onThemeChanged: (dark: Boolean, amoled: Boolean) -> Unit = { _, _ -> },
 ) {
+    val scope = rememberCoroutineScope()
     val scrollState = rememberScrollState()
+
+    val appPaths = component.appPaths()
+    val platformInfo = component.platformInfo()
+    val tokenManager = component.tokenManager()
+    val streamingPreference = component.streamingPreference()
+    val qualityPreference = component.qualityPreference()
+    val qbdlxCredentialStore = component.qbdlxCredentialStore()
+    val qobuzAccountConnector = component.qobuzAccountConnector()
+    val losslessSourcePreferences = component.losslessSourcePreferences()
+    val syncViewModel = component.syncViewModel()
+
+    val mpvStatusMessage = if (component.mpvPlaybackEngine().isNativeEngineAvailable) {
+        "libmpv initialized and active"
+    } else {
+        "libmpv not detected (fallback mode)"
+    }
+
     var cacheClearedMessage by remember { mutableStateOf<String?>(null) }
+
+    // Dialog states
+    var showSpotifyDialog by remember { mutableStateOf(false) }
+    var showYouTubeDialog by remember { mutableStateOf(false) }
+    var showQobuzDialog by remember { mutableStateOf(false) }
+    var showBitChordDialog by remember { mutableStateOf(false) }
+
+    // Reactive states
+    val isStreamingEnabled by streamingPreference.enabled.collectAsState(initial = true)
+    val currentQualityTier by qualityPreference.qualityTier.collectAsState(initial = QualityTier.MAX)
+    val currentDownloadMode by losslessSourcePreferences.downloadMode.collectAsState(initial = DownloadMode.LOSSLESS)
+    val youtubeFallback by losslessSourcePreferences.youtubeFallbackEnabled.collectAsState(initial = false)
+    val bitchordEndpoint by losslessSourcePreferences.bitchordEndpoint.collectAsState(initial = null)
+    val bitchordAccessToken by losslessSourcePreferences.bitchordAccessToken.collectAsState(initial = null)
+
+    val spotifyAuthState by tokenManager.spotifyAuthState.collectAsState()
+    val youTubeAuthState by tokenManager.youTubeAuthState.collectAsState()
+
+    val isSpotifyConnected = spotifyAuthState is AuthState.Connected
+    val isYouTubeConnected = youTubeAuthState is AuthState.Connected
+
+    var qobuzConnectedEmail by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(showQobuzDialog) {
+        qobuzConnectedEmail = qobuzAccountConnector.connectedEmail()
+    }
 
     Column(
         modifier = modifier
@@ -81,13 +143,211 @@ fun DesktopSettingsScreen(
         )
         Spacer(modifier = Modifier.height(4.dp))
         Text(
-            text = "Audio engine, connected streaming services, and desktop preferences",
+            text = "Playback mode, audio quality, streaming credentials, and system settings",
             fontSize = 14.sp,
             color = Color(0xFF94A3B8),
         )
         Spacer(modifier = Modifier.height(28.dp))
 
-        // ── 1. Appearance & Theme ─────────────────────────────────────────
+        // ── 1. Playback & Library Mode (Streaming vs Download) ────────────
+        SettingsSectionHeader(title = "Playback & Library Mode", icon = Icons.Default.MusicNote)
+        SettingsGroupContainer {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                ModeCard(
+                    title = "Streaming Mode (Online)",
+                    subtitle = "Stream entire library on-demand. Requires active internet connection.",
+                    icon = Icons.Default.Cloud,
+                    isSelected = isStreamingEnabled,
+                    onClick = { syncViewModel.setStreamingEnabled(true) },
+                    modifier = Modifier.weight(1f),
+                )
+                ModeCard(
+                    title = "Download Mode (Offline)",
+                    subtitle = "Play saved music locally from disk. Hides un-downloaded tracks from library.",
+                    icon = Icons.Default.Download,
+                    isSelected = !isStreamingEnabled,
+                    onClick = { syncViewModel.setStreamingEnabled(false) },
+                    modifier = Modifier.weight(1f),
+                )
+            }
+        }
+        Spacer(modifier = Modifier.height(24.dp))
+
+        // ── 2. Audio & Download Quality ────────────────────────────────────
+        SettingsSectionHeader(title = "Audio & Download Quality", icon = Icons.Default.Audiotrack)
+        SettingsGroupContainer {
+            Text(
+                text = "Audio Quality Tier",
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onBackground,
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = "Governs maximum bitrates for downloads and stream resolution",
+                fontSize = 12.sp,
+                color = Color(0xFF94A3B8),
+            )
+            Spacer(modifier = Modifier.height(10.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                QualityTier.entries.forEach { tier ->
+                    FilterChip(
+                        selected = currentQualityTier == tier,
+                        onClick = { scope.launch { qualityPreference.setQualityTier(tier) } },
+                        label = { Text("${tier.label} (${tier.bitrateKbps}k)") },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = StashPurple.copy(alpha = 0.3f),
+                            selectedLabelColor = StashCyan,
+                        ),
+                    )
+                }
+            }
+
+            SettingsDivider()
+
+            Text(
+                text = "Download Mode Target",
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onBackground,
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = "What downloads save to local storage: lossless FLAC or high-bitrate lossy",
+                fontSize = 12.sp,
+                color = Color(0xFF94A3B8),
+            )
+            Spacer(modifier = Modifier.height(10.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                DownloadMode.entries.forEach { mode ->
+                    val label = when (mode) {
+                        DownloadMode.LOSSLESS -> "Lossless (FLAC)"
+                        DownloadMode.AAC -> "Tidal AAC (320k)"
+                        DownloadMode.OPUS -> "YouTube (Opus)"
+                    }
+                    FilterChip(
+                        selected = currentDownloadMode == mode,
+                        onClick = { scope.launch { losslessSourcePreferences.setDownloadMode(mode) } },
+                        label = { Text(label) },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = StashPurple.copy(alpha = 0.3f),
+                            selectedLabelColor = StashCyan,
+                        ),
+                    )
+                }
+            }
+
+            SettingsDivider()
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Lossy Fallback when FLAC Unavailable",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onBackground,
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = "Falls back to 320kbps lossy audio if the song cannot be found on Qobuz/Tidal",
+                        fontSize = 12.sp,
+                        color = Color(0xFF94A3B8),
+                    )
+                }
+                Switch(
+                    checked = youtubeFallback,
+                    onCheckedChange = { scope.launch { losslessSourcePreferences.setYoutubeFallbackEnabled(it) } },
+                    colors = SwitchDefaults.colors(checkedThumbColor = StashCyan, checkedTrackColor = StashPurple),
+                )
+            }
+        }
+        Spacer(modifier = Modifier.height(24.dp))
+
+        // ── 3. Connected Services & Credentials ────────────────────────────
+        SettingsSectionHeader(title = "Connected Services & Credentials", icon = Icons.Default.Cloud)
+        SettingsGroupContainer {
+            // Spotify
+            SettingsServiceRow(
+                serviceName = "Spotify",
+                detail = if (isSpotifyConnected) "sp_dc cookie connected (encrypted at rest with AES-256)" else "Connect sp_dc cookie to sync liked songs and playlists",
+                status = if (isSpotifyConnected) "Connected" else "Connect",
+                accentColor = Color(0xFF1DB954),
+                isConnected = isSpotifyConnected,
+                onAction = {
+                    if (isSpotifyConnected) {
+                        scope.launch { tokenManager.clearAuth(AuthService.SPOTIFY) }
+                    } else {
+                        showSpotifyDialog = true
+                    }
+                },
+            )
+            SettingsDivider()
+
+            // YouTube Music
+            SettingsServiceRow(
+                serviceName = "YouTube Music",
+                detail = if (isYouTubeConnected) "YouTube session cookie connected (encrypted at rest)" else "Connect cookies for age-restricted & premium streaming/downloads",
+                status = if (isYouTubeConnected) "Connected" else "Connect",
+                accentColor = Color(0xFFFF0000),
+                isConnected = isYouTubeConnected,
+                onAction = {
+                    if (isYouTubeConnected) {
+                        scope.launch { tokenManager.clearAuth(AuthService.YOUTUBE_MUSIC) }
+                    } else {
+                        showYouTubeDialog = true
+                    }
+                },
+            )
+            SettingsDivider()
+
+            // Qobuz Lossless BYO
+            val isQobuzConnected = !qobuzConnectedEmail.isNullOrBlank()
+            SettingsServiceRow(
+                serviceName = "Qobuz (Lossless FLAC)",
+                detail = if (isQobuzConnected) "Logged in as $qobuzConnectedEmail (encrypted credentials)" else "Bring your own Qobuz subscription for studio-quality 24-bit FLAC",
+                status = if (isQobuzConnected) "Connected" else "Connect",
+                accentColor = Color(0xFF2563EB),
+                isConnected = isQobuzConnected,
+                onAction = {
+                    if (isQobuzConnected) {
+                        scope.launch {
+                            qobuzAccountConnector.disconnect()
+                            qobuzConnectedEmail = null
+                        }
+                    } else {
+                        showQobuzDialog = true
+                    }
+                },
+            )
+            SettingsDivider()
+
+            // BitChord / Tidal Relay
+            val isBitChordConfigured = !bitchordEndpoint.isNullOrBlank()
+            SettingsServiceRow(
+                serviceName = "BitChord / Tidal Lossless Relay",
+                detail = if (isBitChordConfigured) "Custom relay configured: $bitchordEndpoint" else "Connect self-hosted BitChord instance for Tidal HiFi lossless streaming",
+                status = if (isBitChordConfigured) "Configured" else "Configure",
+                accentColor = Color(0xFF00B4D8),
+                isConnected = isBitChordConfigured,
+                onAction = { showBitChordDialog = true },
+            )
+        }
+        Spacer(modifier = Modifier.height(24.dp))
+
+        // ── 4. Appearance & Theme ─────────────────────────────────────────
         SettingsSectionHeader(title = "Appearance", icon = Icons.Default.Palette)
         SettingsGroupContainer {
             Row(
@@ -103,16 +363,16 @@ fun DesktopSettingsScreen(
                     modifier = Modifier.weight(1f),
                 )
                 ThemeCard(
-                    title = "AMOLED",
-                    subtitle = "Pure black pixels #000000",
-                    icon = Icons.Default.DarkMode,
+                    title = "AMOLED Black",
+                    subtitle = "Pure black background",
+                    icon = Icons.Default.CheckCircle,
                     isSelected = isDarkTheme && isAmoledTheme,
                     onClick = { onThemeChanged(true, true) },
                     modifier = Modifier.weight(1f),
                 )
                 ThemeCard(
                     title = "Light Theme",
-                    subtitle = "Crisp daytime contrast",
+                    subtitle = "Clean slate & white",
                     icon = Icons.Default.LightMode,
                     isSelected = !isDarkTheme,
                     onClick = { onThemeChanged(false, false) },
@@ -122,50 +382,7 @@ fun DesktopSettingsScreen(
         }
         Spacer(modifier = Modifier.height(24.dp))
 
-        // ── 2. Playback & Audio Engine ─────────────────────────────────────
-        SettingsSectionHeader(title = "Audio Playback Engine", icon = Icons.Default.Audiotrack)
-        SettingsGroupContainer {
-            SettingsDetailRow(
-                label = "Native Audio Engine",
-                value = "libmpv (High-Performance Audio Pipeline)",
-                description = mpvStatusMessage,
-            )
-            SettingsDivider()
-            SettingsDetailRow(
-                label = "Bit-Perfect & Hi-Res Output",
-                value = "Automatic sample rate & bit depth switching",
-                description = "FLAC up to 24-bit / 192kHz supported with gapless playback",
-            )
-        }
-        Spacer(modifier = Modifier.height(24.dp))
-
-        // ── 3. Streaming Accounts ──────────────────────────────────────────
-        SettingsSectionHeader(title = "Connected Services", icon = Icons.Default.Cloud)
-        SettingsGroupContainer {
-            SettingsServiceRow(
-                serviceName = "Spotify",
-                detail = "Web Player sp_dc cookie authentication with auto-refresh",
-                status = "Ready to connect",
-                accentColor = Color(0xFF1DB954),
-            )
-            SettingsDivider()
-            SettingsServiceRow(
-                serviceName = "YouTube Music",
-                detail = "InnerTube API with SAPISID authentication",
-                status = "Ready to connect",
-                accentColor = Color(0xFFFF0000),
-            )
-            SettingsDivider()
-            SettingsServiceRow(
-                serviceName = "Discord Rich Presence",
-                detail = "Displays current song, artist, and album in your Discord status",
-                status = "Desktop RPC active",
-                accentColor = Color(0xFF5865F2),
-            )
-        }
-        Spacer(modifier = Modifier.height(24.dp))
-
-        // ── 4. Storage & Cache ─────────────────────────────────────────────
+        // ── 5. Storage & Cache ─────────────────────────────────────────────
         SettingsSectionHeader(title = "Storage & Cache", icon = Icons.Default.Folder)
         SettingsGroupContainer {
             SettingsDetailRow(
@@ -207,12 +424,17 @@ fun DesktopSettingsScreen(
         }
         Spacer(modifier = Modifier.height(24.dp))
 
-        // ── 5. System Information ──────────────────────────────────────────
+        // ── 6. System Information ──────────────────────────────────────────
         SettingsSectionHeader(title = "System & Environment", icon = Icons.Default.Computer)
         SettingsGroupContainer {
             SettingsDetailRow(
                 label = "Operating System",
                 value = "${platformInfo.osName} (${System.getProperty("os.arch")})",
+            )
+            SettingsDivider()
+            SettingsDetailRow(
+                label = "Playback Engine",
+                value = mpvStatusMessage,
             )
             SettingsDivider()
             SettingsDetailRow(
@@ -226,6 +448,248 @@ fun DesktopSettingsScreen(
             )
         }
         Spacer(modifier = Modifier.height(40.dp))
+    }
+
+    // ── Dialogs ────────────────────────────────────────────────────────────
+
+    // Spotify Cookie Dialog
+    if (showSpotifyDialog) {
+        var spDcInput by remember { mutableStateOf("") }
+        AlertDialog(
+            onDismissRequest = { showSpotifyDialog = false },
+            title = { Text("Connect Spotify Account") },
+            text = {
+                Column {
+                    Text(
+                        text = "Paste your 'sp_dc' cookie from open.spotify.com. It is encrypted at rest using OS-level AES-256 (DPAPI on Windows / Keychain on macOS).",
+                        fontSize = 13.sp,
+                        color = Color(0xFF94A3B8),
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    OutlinedTextField(
+                        value = spDcInput,
+                        onValueChange = { spDcInput = it },
+                        label = { Text("sp_dc Cookie") },
+                        placeholder = { Text("AQB...") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val cookie = spDcInput.trim()
+                        if (cookie.isNotBlank()) {
+                            scope.launch {
+                                tokenManager.connectSpotifyWithCookie(cookie)
+                                showSpotifyDialog = false
+                            }
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = StashPurple),
+                ) {
+                    Text("Save & Connect")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showSpotifyDialog = false }) {
+                    Text("Cancel")
+                }
+            },
+        )
+    }
+
+    // YouTube Cookie Dialog
+    if (showYouTubeDialog) {
+        var ytCookieInput by remember { mutableStateOf("") }
+        AlertDialog(
+            onDismissRequest = { showYouTubeDialog = false },
+            title = { Text("Connect YouTube Music Cookies") },
+            text = {
+                Column {
+                    Text(
+                        text = "Paste cookies.txt content or raw Cookie header from music.youtube.com for age-restricted / premium stream access. Encrypted at rest.",
+                        fontSize = 13.sp,
+                        color = Color(0xFF94A3B8),
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    OutlinedTextField(
+                        value = ytCookieInput,
+                        onValueChange = { ytCookieInput = it },
+                        label = { Text("Cookie Content") },
+                        placeholder = { Text("SAPISID=...; HSID=... or # Netscape HTTP Cookie File") },
+                        maxLines = 5,
+                        modifier = Modifier.fillMaxWidth().height(120.dp),
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val cookie = ytCookieInput.trim()
+                        if (cookie.isNotBlank()) {
+                            scope.launch {
+                                tokenManager.connectYouTubeWithCookie(cookie)
+                                showYouTubeDialog = false
+                            }
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = StashPurple),
+                ) {
+                    Text("Save Cookies")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showYouTubeDialog = false }) {
+                    Text("Cancel")
+                }
+            },
+        )
+    }
+
+    // Qobuz Account Dialog
+    if (showQobuzDialog) {
+        var emailInput by remember { mutableStateOf("") }
+        var passwordInput by remember { mutableStateOf("") }
+        var isLoggingIn by remember { mutableStateOf(false) }
+        var errorMessage by remember { mutableStateOf<String?>(null) }
+
+        AlertDialog(
+            onDismissRequest = { if (!isLoggingIn) showQobuzDialog = false },
+            title = { Text("Qobuz Account Login") },
+            text = {
+                Column {
+                    Text(
+                        text = "Sign in to your Qobuz account to enable direct Hi-Res 24-bit/192kHz FLAC streaming and downloads. Tokens are encrypted at rest with AES-256.",
+                        fontSize = 13.sp,
+                        color = Color(0xFF94A3B8),
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    OutlinedTextField(
+                        value = emailInput,
+                        onValueChange = { emailInput = it },
+                        label = { Text("Qobuz Email") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = passwordInput,
+                        onValueChange = { passwordInput = it },
+                        label = { Text("Qobuz Password") },
+                        visualTransformation = PasswordVisualTransformation(),
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+
+                    if (errorMessage != null) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = errorMessage!!,
+                            color = Color(0xFFEF4444),
+                            fontSize = 12.sp,
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        scope.launch {
+                            errorMessage = null
+                            isLoggingIn = true
+                            val res = qobuzAccountConnector.connect(emailInput.trim(), passwordInput)
+                            isLoggingIn = false
+                            when (res) {
+                                is QobuzLoginResult.Success -> {
+                                    qobuzConnectedEmail = emailInput.trim()
+                                    showQobuzDialog = false
+                                }
+                                is QobuzLoginResult.InvalidCredentials -> {
+                                    errorMessage = "Invalid email or password"
+                                }
+                                is QobuzLoginResult.FreeAccount -> {
+                                    errorMessage = "This Qobuz account does not have a lossless subscription"
+                                }
+                                is QobuzLoginResult.Error -> {
+                                    errorMessage = "Network or server error connecting to Qobuz"
+                                }
+                            }
+                        }
+                    },
+                    enabled = !isLoggingIn && emailInput.isNotBlank() && passwordInput.isNotBlank(),
+                    colors = ButtonDefaults.buttonColors(containerColor = StashPurple),
+                ) {
+                    if (isLoggingIn) {
+                        CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Color.White)
+                    } else {
+                        Text("Sign In")
+                    }
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showQobuzDialog = false }, enabled = !isLoggingIn) {
+                    Text("Cancel")
+                }
+            },
+        )
+    }
+
+    // BitChord Relay Dialog
+    if (showBitChordDialog) {
+        var endpointInput by remember { mutableStateOf(bitchordEndpoint.orEmpty()) }
+        var tokenInput by remember { mutableStateOf(bitchordAccessToken.orEmpty()) }
+
+        AlertDialog(
+            onDismissRequest = { showBitChordDialog = false },
+            title = { Text("Configure BitChord / Lossless Relay") },
+            text = {
+                Column {
+                    Text(
+                        text = "Enter the URL of your self-hosted BitChord Tidal relay and optional access token. Token is encrypted at rest.",
+                        fontSize = 13.sp,
+                        color = Color(0xFF94A3B8),
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    OutlinedTextField(
+                        value = endpointInput,
+                        onValueChange = { endpointInput = it },
+                        label = { Text("BitChord Server URL") },
+                        placeholder = { Text("https://bitchord.myhost.com") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = tokenInput,
+                        onValueChange = { tokenInput = it },
+                        label = { Text("Access Token (Optional)") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        scope.launch {
+                            losslessSourcePreferences.setBitchordEndpoint(endpointInput.trim().ifBlank { null })
+                            losslessSourcePreferences.setBitchordAccessToken(tokenInput.trim().ifBlank { null })
+                            showBitChordDialog = false
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = StashPurple),
+                ) {
+                    Text("Save")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showBitChordDialog = false }) {
+                    Text("Cancel")
+                }
+            },
+        )
     }
 }
 
@@ -259,7 +723,7 @@ private fun SettingsGroupContainer(content: @Composable () -> Unit) {
         colors = CardDefaults.cardColors(
             containerColor = StashSurface,
         ),
-        border = androidx.compose.foundation.BorderStroke(1.dp, StashGlassBorder),
+        border = BorderStroke(1.dp, StashGlassBorder),
     ) {
         Column(modifier = Modifier.padding(20.dp)) {
             content()
@@ -303,6 +767,8 @@ private fun SettingsServiceRow(
     detail: String,
     status: String,
     accentColor: Color,
+    isConnected: Boolean = false,
+    onAction: () -> Unit = {},
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -331,11 +797,19 @@ private fun SettingsServiceRow(
                 color = Color(0xFF94A3B8),
             )
         }
+        Spacer(modifier = Modifier.width(16.dp))
         OutlinedButton(
-            onClick = {},
+            onClick = onAction,
             shape = RoundedCornerShape(8.dp),
+            colors = if (isConnected) {
+                androidx.compose.material3.ButtonDefaults.outlinedButtonColors(
+                    contentColor = StashCyan,
+                )
+            } else {
+                androidx.compose.material3.ButtonDefaults.outlinedButtonColors()
+            },
         ) {
-            Text(status, fontSize = 12.sp)
+            Text(if (isConnected) "Disconnect" else status, fontSize = 12.sp)
         }
     }
 }
@@ -352,6 +826,63 @@ private fun SettingsDivider() {
 }
 
 @Composable
+private fun ModeCard(
+    title: String,
+    subtitle: String,
+    icon: ImageVector,
+    isSelected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        onClick = onClick,
+        modifier = modifier,
+        shape = RoundedCornerShape(12.dp),
+        color = if (isSelected) StashPurple.copy(alpha = 0.2f) else MaterialTheme.colorScheme.surfaceVariant,
+        border = BorderStroke(
+            1.5.dp,
+            if (isSelected) StashCyan else StashGlassBorder,
+        ),
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = if (isSelected) StashCyan else Color(0xFF94A3B8),
+                    modifier = Modifier.size(24.dp),
+                )
+                if (isSelected) {
+                    Icon(
+                        imageVector = Icons.Default.CheckCircle,
+                        contentDescription = "Active Mode",
+                        tint = StashCyan,
+                        modifier = Modifier.size(20.dp),
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.height(12.dp))
+            Text(
+                text = title,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onBackground,
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = subtitle,
+                fontSize = 12.sp,
+                color = Color(0xFF94A3B8),
+            )
+        }
+    }
+}
+
+@Composable
 private fun ThemeCard(
     title: String,
     subtitle: String,
@@ -365,7 +896,7 @@ private fun ThemeCard(
         modifier = modifier,
         shape = RoundedCornerShape(12.dp),
         color = if (isSelected) StashPurple.copy(alpha = 0.2f) else MaterialTheme.colorScheme.surfaceVariant,
-        border = androidx.compose.foundation.BorderStroke(
+        border = BorderStroke(
             1.5.dp,
             if (isSelected) StashPurple else StashGlassBorder,
         ),
