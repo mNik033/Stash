@@ -950,36 +950,109 @@ private fun DesktopBottomPlayerBar(
 
             // ── Right: Quality & Volume Controls ─────────────────────────
             Row(
-                modifier = Modifier.width(260.dp),
+                modifier = Modifier.width(300.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.End,
             ) {
-                // Quality badge pill
+                // Quality badge pill + Signal Path popover
+                var showSignalPath by remember { mutableStateOf(false) }
+
                 val qualityLabel = when (val fmt = track?.fileFormat?.lowercase()) {
                     "flac" -> {
                         val depth = track.bitsPerSample
                         val rateKhz = track.sampleRateHz?.let { it / 1000 }
-                        if (depth != null && rateKhz != null) "FLAC $depth/${rateKhz}kHz" else "FLAC Lossless"
+                        if (depth != null && rateKhz != null) "FLAC $depth/${rateKhz}kHz"
+                        else if (rateKhz != null) "FLAC ${rateKhz}kHz"
+                        else "FLAC Lossless"
                     }
                     "wav" -> "WAV Lossless"
+                    "alac" -> "ALAC Lossless"
                     "opus" -> if (track.qualityKbps > 0) "Opus ${track.qualityKbps}k" else "Opus"
                     "mp3" -> if (track.qualityKbps > 0) "MP3 ${track.qualityKbps}k" else "MP3"
                     "m4a", "aac" -> if (track.qualityKbps > 0) "AAC ${track.qualityKbps}k" else "AAC"
                     "ogg" -> if (track.qualityKbps > 0) "OGG ${track.qualityKbps}k" else "OGG"
                     else -> if (track?.isDownloaded == true) fmt?.uppercase() ?: "Local" else "Stream"
                 }
-                Box(
-                    modifier = Modifier
-                        .background(StashPurple.copy(alpha = 0.2f), shape = RoundedCornerShape(6.dp))
-                        .border(1.dp, StashPurple.copy(alpha = 0.5f), RoundedCornerShape(6.dp))
-                        .padding(horizontal = 8.dp, vertical = 3.dp),
-                ) {
-                    Text(
-                        text = qualityLabel,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = StashCyan,
-                    )
+
+                val originLabel = when (track?.streamOrigin?.lowercase()) {
+                    "qbdlx", "qbdlx_qobuz" -> "Qobuz"
+                    "tidal", "tidal_bitchord" -> "Tidal"
+                    "jiosaavn" -> "JioSaavn"
+                    "youtube" -> "YT"
+                    "local" -> "Local"
+                    else -> if (track?.isDownloaded == true) "Local" else null
+                }
+                val fullBadgeText = if (originLabel != null) "$qualityLabel • $originLabel" else qualityLabel
+
+                Box {
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .clickable { showSignalPath = !showSignalPath }
+                            .background(StashPurple.copy(alpha = 0.2f), shape = RoundedCornerShape(6.dp))
+                            .border(1.dp, StashPurple.copy(alpha = 0.5f), RoundedCornerShape(6.dp))
+                            .padding(horizontal = 8.dp, vertical = 3.dp),
+                    ) {
+                        Text(
+                            text = fullBadgeText,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = StashCyan,
+                        )
+                    }
+
+                    androidx.compose.material3.DropdownMenu(
+                        expanded = showSignalPath,
+                        onDismissRequest = { showSignalPath = false },
+                        modifier = Modifier
+                            .background(Color(0xFF1E1B2E))
+                            .border(1.dp, Color(0xFF334155), RoundedCornerShape(8.dp))
+                            .padding(12.dp),
+                    ) {
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Text(
+                                text = "SIGNAL PATH",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = StashCyan,
+                            )
+                            Spacer(Modifier.height(2.dp))
+                            Text(
+                                text = "Source: ${originLabel ?: "Online Stream"}",
+                                fontSize = 12.sp,
+                                color = Color.White,
+                            )
+                            Text(
+                                text = "Format: ${track?.fileFormat?.uppercase() ?: "Unknown"}",
+                                fontSize = 12.sp,
+                                color = Color(0xFFCBD5E1),
+                            )
+                            Text(
+                                text = "Quality: " + if ((track?.qualityKbps ?: 0) > 0) "${track?.qualityKbps} kbps" else "Bit-perfect Lossless",
+                                fontSize = 12.sp,
+                                color = Color(0xFFCBD5E1),
+                            )
+                            if (track?.sampleRateHz != null) {
+                                Text(
+                                    text = "Sample Rate: ${track.sampleRateHz} Hz",
+                                    fontSize = 12.sp,
+                                    color = Color(0xFFCBD5E1),
+                                )
+                            }
+                            if (track?.bitsPerSample != null) {
+                                Text(
+                                    text = "Bit Depth: ${track.bitsPerSample}-bit",
+                                    fontSize = 12.sp,
+                                    color = Color(0xFFCBD5E1),
+                                )
+                            }
+                            Text(
+                                text = "Engine: libmpv native audio (gapless)",
+                                fontSize = 11.sp,
+                                color = Color(0xFF94A3B8),
+                            )
+                        }
+                    }
                 }
                 Spacer(modifier = Modifier.width(8.dp))
 

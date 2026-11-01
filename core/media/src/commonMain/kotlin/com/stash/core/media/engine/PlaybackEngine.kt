@@ -1,6 +1,7 @@
 package com.stash.core.media.engine
 
 import com.stash.core.model.PlayableItem
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
 /**
@@ -8,6 +9,13 @@ import kotlinx.coroutines.flow.StateFlow
  * management from platform audio backends (Media3 on Android, libmpv on Desktop).
  */
 interface PlaybackEngine {
+
+    data class AudioFormat(
+        val codec: String,
+        val bitrateKbps: Int = 0,
+        val sampleRateHz: Int? = null,
+        val bitsPerSample: Int? = null,
+    )
 
     sealed class State {
         data object Idle : State()
@@ -20,6 +28,9 @@ interface PlaybackEngine {
 
     /** Observable flow of the engine's playback state. */
     val playbackState: StateFlow<State>
+
+    /** Observable decoded audio format from the underlying engine. */
+    val audioFormat: StateFlow<AudioFormat?> get() = MutableStateFlow(null)
 
     /** Current playback position in milliseconds. */
     val currentPositionMs: Long

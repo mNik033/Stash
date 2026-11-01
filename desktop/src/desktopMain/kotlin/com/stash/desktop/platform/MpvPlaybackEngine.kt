@@ -32,6 +32,9 @@ class MpvPlaybackEngine @Inject constructor() : PlaybackEngine, Closeable {
     private val _playbackState = MutableStateFlow<PlaybackEngine.State>(PlaybackEngine.State.Idle)
     override val playbackState: StateFlow<PlaybackEngine.State> = _playbackState.asStateFlow()
 
+    private val _audioFormat = MutableStateFlow<PlaybackEngine.AudioFormat?>(null)
+    override val audioFormat: StateFlow<PlaybackEngine.AudioFormat?> = _audioFormat.asStateFlow()
+
     @Volatile private var _currentPositionMs: Long = 0L
     override val currentPositionMs: Long get() = _currentPositionMs
 
@@ -114,6 +117,7 @@ class MpvPlaybackEngine @Inject constructor() : PlaybackEngine, Closeable {
         _currentItem = item
         _currentPositionMs = 0L
         _durationMs = item.durationMs
+        _audioFormat.value = null
 
         if (!isSafeUriOrPath(item.uri)) {
             _playbackState.value = PlaybackEngine.State.Error("Unsupported or missing media URI")
@@ -199,6 +203,7 @@ class MpvPlaybackEngine @Inject constructor() : PlaybackEngine, Closeable {
             }
         }
         _currentPositionMs = 0L
+        _audioFormat.value = null
         _playbackState.value = PlaybackEngine.State.Idle
     }
 
@@ -277,6 +282,35 @@ class MpvPlaybackEngine @Inject constructor() : PlaybackEngine, Closeable {
                             if (!isPaused) {
                                 _playbackState.value = PlaybackEngine.State.Playing
                             }
+                        }
+                    }
+
+                    if (hasStartedPlaying && _audioFormat.value == null) {
+                        val codecRaw = readProperty(lib, h, "audio-codec-name")
+                        if (!codecRaw.isNullOrBlank()) {
+                            val bitrateStr = readProperty(lib, h, "audio-bitrate")
+                            val sampleRateStr = readProperty(lib, h, "audio-params/samplerate")
+                            val formatStr = readProperty(lib, h, "audio-params/format")
+
+                            val bitrateKbps = bitrateStr?.toDoubleOrNull()?.let { (it / 1000.0).toInt() } ?: 0
+                            val sampleRateHz = sampleRateStr?.toIntOrNull()
+                            val bits = when {
+                                formatStr?.contains("32") == true -> 32
+                                formatStr?.contains("24") == true -> 24
+                                formatStr?.contains("16") == true -> 16
+                                else -> null
+                            }
+                            val normalizedCodec = when (codecRaw.lowercase()) {
+                                "pcm_s16le", "pcm_s24le", "pcm_s32le" -> "wav"
+                                "mp4a-latm" -> "aac"
+                                else -> codecRaw.lowercase()
+                            }
+                            _audioFormat.value = PlaybackEngine.AudioFormat(
+                                codec = normalizedCodec,
+                                bitrateKbps = bitrateKbps,
+                                sampleRateHz = sampleRateHz,
+                                bitsPerSample = bits,
+                            )
                         }
                     }
 

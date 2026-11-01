@@ -109,6 +109,29 @@ class DesktopPlayerRepository @Inject constructor(
                 }
             }
         }
+        scope.launch {
+            engine.audioFormat.collect { liveFormat ->
+                if (liveFormat != null) {
+                    val current = _playerState.value.currentTrack
+                    if (current != null) {
+                        val refined = current.copy(
+                            fileFormat = if (liveFormat.codec.isNotBlank()) liveFormat.codec else current.fileFormat,
+                            qualityKbps = if (liveFormat.bitrateKbps > 0) liveFormat.bitrateKbps else current.qualityKbps,
+                            sampleRateHz = liveFormat.sampleRateHz ?: current.sampleRateHz,
+                            bitsPerSample = liveFormat.bitsPerSample ?: current.bitsPerSample,
+                        )
+                        if (refined != current) {
+                            _playerState.value = _playerState.value.copy(
+                                currentTrack = refined,
+                                queue = _playerState.value.queue.mapIndexed { idx, t ->
+                                    if (idx == _playerState.value.currentIndex) refined else t
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+        }
     }
 
     private suspend fun advanceOnTrackEnded() {
@@ -219,21 +242,34 @@ class DesktopPlayerRepository @Inject constructor(
         playJob?.cancel()
         playJob = scope.launch {
             try {
-                val uri = streamResolver.resolveForTrack(track)
+                val resolved = streamResolver.resolveForTrack(track)
                 if (!isActive) return@launch
-                if (uri.isNullOrBlank()) {
+                if (resolved == null || resolved.uri.isBlank()) {
                     _userMessages.emit("Unable to play '${track.title}'. Stream not available.")
                     _playerState.value = _playerState.value.copy(isPlaying = false, isBuffering = false)
                     return@launch
                 }
+                val updatedTrack = track.copy(
+                    fileFormat = resolved.fileFormat,
+                    qualityKbps = resolved.qualityKbps,
+                    sampleRateHz = resolved.sampleRateHz ?: track.sampleRateHz,
+                    bitsPerSample = resolved.bitsPerSample ?: track.bitsPerSample,
+                    streamOrigin = resolved.streamOrigin,
+                )
+                _playerState.value = _playerState.value.copy(
+                    currentTrack = updatedTrack,
+                    queue = _playerState.value.queue.mapIndexed { idx, t ->
+                        if (idx == _playerState.value.currentIndex) updatedTrack else t
+                    }
+                )
                 val item = PlayableItem(
                     mediaId = track.id.toString(),
-                    uri = uri,
+                    uri = resolved.uri,
                     title = track.title,
                     artist = track.artist,
                     album = track.album,
                     durationMs = track.durationMs,
-                    isLocal = track.isDownloaded,
+                    isLocal = track.isDownloaded || resolved.streamOrigin == "local",
                     artworkUri = track.albumArtUrl ?: track.albumArtPath,
                 )
                 if (!isActive) return@launch
@@ -467,20 +503,31 @@ class DesktopPlayerRepository @Inject constructor(
             isBuffering = true,
         )
 
-        val uri = streamResolver.resolveForTrack(track)
-        if (uri.isNullOrBlank()) {
+        val resolved = streamResolver.resolveForTrack(track)
+        if (resolved == null || resolved.uri.isBlank()) {
             _playerState.value = _playerState.value.copy(isPlaying = false, isBuffering = false)
             return StreamRoutingResult.NotAvailable
         }
 
+        val updatedTrack = track.copy(
+            fileFormat = resolved.fileFormat,
+            qualityKbps = resolved.qualityKbps,
+            sampleRateHz = resolved.sampleRateHz ?: track.sampleRateHz,
+            bitsPerSample = resolved.bitsPerSample ?: track.bitsPerSample,
+            streamOrigin = resolved.streamOrigin,
+        )
+        _playerState.value = _playerState.value.copy(
+            currentTrack = updatedTrack,
+        )
+
         val playable = PlayableItem(
             mediaId = track.id.toString(),
-            uri = uri,
+            uri = resolved.uri,
             title = track.title,
             artist = track.artist,
             album = track.album,
             durationMs = track.durationMs,
-            isLocal = track.isDownloaded,
+            isLocal = track.isDownloaded || resolved.streamOrigin == "local",
             artworkUri = track.albumArtUrl ?: track.albumArtPath,
         )
 
@@ -521,15 +568,27 @@ class DesktopPlayerRepository @Inject constructor(
             isBuffering = true,
         )
 
-        val uri = streamResolver.resolveStreamUrl(item.videoId)
-        if (uri.isNullOrBlank()) {
+        val resolved = streamResolver.resolveYouTubeStream(item.videoId)
+        if (resolved == null || resolved.uri.isBlank()) {
             _playerState.value = _playerState.value.copy(isPlaying = false, isBuffering = false)
             return StreamRoutingResult.NotAvailable
         }
 
+        val updatedTrack = track.copy(
+            fileFormat = resolved.fileFormat,
+            qualityKbps = resolved.qualityKbps,
+            sampleRateHz = resolved.sampleRateHz ?: track.sampleRateHz,
+            bitsPerSample = resolved.bitsPerSample ?: track.bitsPerSample,
+            streamOrigin = resolved.streamOrigin,
+        )
+        _playerState.value = _playerState.value.copy(
+            queue = listOf(updatedTrack),
+            currentTrack = updatedTrack,
+        )
+
         val playable = PlayableItem(
             mediaId = item.videoId,
-            uri = uri,
+            uri = resolved.uri,
             title = item.title,
             artist = item.artist,
             album = item.album.orEmpty(),
