@@ -603,8 +603,8 @@ private fun DesktopNavRail(
 ) {
     Surface(
         modifier = modifier.fillMaxHeight(),
-        color = StashSurface,
-        border = androidx.compose.foundation.BorderStroke(1.dp, StashGlassBorder),
+        color = MaterialTheme.colorScheme.surface,
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
     ) {
         Column(
             modifier = Modifier
@@ -648,7 +648,7 @@ private fun DesktopNavRail(
                                 fontSize = 20.sp,
                                 fontWeight = FontWeight.Black,
                                 letterSpacing = 2.sp,
-                                color = Color.White,
+                                color = MaterialTheme.colorScheme.onSurface,
                             )
                         }
                     }
@@ -659,7 +659,7 @@ private fun DesktopNavRail(
                         Icon(
                             imageVector = if (isCollapsed) Icons.Default.Menu else Icons.AutoMirrored.Filled.MenuOpen,
                             contentDescription = if (isCollapsed) "Expand sidebar" else "Collapse sidebar",
-                            tint = Color(0xFF94A3B8),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.size(18.dp),
                         )
                     }
@@ -669,8 +669,8 @@ private fun DesktopNavRail(
                 // Navigation Items
                 DesktopNavTab.values().forEach { tab ->
                     val isSelected = currentTab == tab
-                    val bg = if (isSelected) StashPurple.copy(alpha = 0.18f) else Color.Transparent
-                    val contentColor = if (isSelected) StashCyan else Color(0xFF94A3B8)
+                    val bg = if (isSelected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent
+                    val contentColor = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
 
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
@@ -695,7 +695,7 @@ private fun DesktopNavRail(
                                 text = tab.label,
                                 fontSize = 14.sp,
                                 fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
-                                color = if (isSelected) Color.White else Color(0xFF94A3B8),
+                                color = contentColor,
                                 maxLines = 1,
                             )
                         }
@@ -722,7 +722,7 @@ private fun DesktopNavRail(
                     Text(
                         text = if (isConnected) "Online" else "Offline",
                         fontSize = 12.sp,
-                        color = Color(0xFF94A3B8),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
             }
@@ -762,8 +762,8 @@ private fun DesktopBottomPlayerBar(
 
     Surface(
         modifier = modifier,
-        color = StashSurface,
-        border = androidx.compose.foundation.BorderStroke(1.dp, StashGlassBorder),
+        color = MaterialTheme.colorScheme.surface,
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
     ) {
         Row(
             modifier = Modifier
@@ -782,7 +782,7 @@ private fun DesktopBottomPlayerBar(
                     modifier = Modifier
                         .size(54.dp)
                         .clip(RoundedCornerShape(8.dp))
-                        .background(Color(0xFF1E293B)),
+                        .background(MaterialTheme.colorScheme.surfaceVariant),
                     contentAlignment = Alignment.Center,
                 ) {
                     val artUrl = track?.albumArtUrl ?: track?.albumArtPath
@@ -797,7 +797,7 @@ private fun DesktopBottomPlayerBar(
                         Icon(
                             imageVector = Icons.Default.MusicNote,
                             contentDescription = null,
-                            tint = Color(0xFF64748B),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.size(24.dp),
                         )
                     }
@@ -808,7 +808,7 @@ private fun DesktopBottomPlayerBar(
                         text = track?.title ?: "No Track Playing",
                         fontSize = 14.sp,
                         fontWeight = FontWeight.SemiBold,
-                        color = Color.White,
+                        color = MaterialTheme.colorScheme.onSurface,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
@@ -816,7 +816,7 @@ private fun DesktopBottomPlayerBar(
                     Text(
                         text = track?.artist ?: "Select a song from Library or Search",
                         fontSize = 12.sp,
-                        color = Color(0xFF94A3B8),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
@@ -826,7 +826,7 @@ private fun DesktopBottomPlayerBar(
                     Icon(
                         imageVector = if (track?.stashLikedAt != null) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
                         contentDescription = "Like",
-                        tint = if (track?.stashLikedAt != null) StashCyan else Color(0xFF94A3B8),
+                        tint = if (track?.stashLikedAt != null) StashCyan else MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.size(20.dp),
                     )
                 }
@@ -849,7 +849,7 @@ private fun DesktopBottomPlayerBar(
                         Icon(
                             imageVector = Icons.Default.Shuffle,
                             contentDescription = "Shuffle",
-                            tint = if (playerState.isShuffleEnabled) StashCyan else Color(0xFF94A3B8),
+                            tint = if (playerState.isShuffleEnabled) StashCyan else MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.size(18.dp),
                         )
                     }
@@ -857,7 +857,7 @@ private fun DesktopBottomPlayerBar(
                         Icon(
                             imageVector = Icons.Default.SkipPrevious,
                             contentDescription = "Previous",
-                            tint = Color.White,
+                            tint = MaterialTheme.colorScheme.onSurface,
                             modifier = Modifier.size(22.dp),
                         )
                     }
@@ -893,7 +893,7 @@ private fun DesktopBottomPlayerBar(
                         Icon(
                             imageVector = Icons.Default.SkipNext,
                             contentDescription = "Next",
-                            tint = Color.White,
+                            tint = MaterialTheme.colorScheme.onSurface,
                             modifier = Modifier.size(22.dp),
                         )
                     }
@@ -902,7 +902,7 @@ private fun DesktopBottomPlayerBar(
                         Icon(
                             imageVector = icon,
                             contentDescription = "Repeat",
-                            tint = if (playerState.repeatMode != RepeatMode.OFF) StashCyan else Color(0xFF94A3B8),
+                            tint = if (playerState.repeatMode != RepeatMode.OFF) StashCyan else MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.size(18.dp),
                         )
                     }
@@ -916,7 +916,7 @@ private fun DesktopBottomPlayerBar(
                     Text(
                         text = formatDuration(displayPos),
                         fontSize = 11.sp,
-                        color = Color(0xFF94A3B8),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     Slider(
                         value = displayProgress,
@@ -937,13 +937,13 @@ private fun DesktopBottomPlayerBar(
                         colors = SliderDefaults.colors(
                             thumbColor = StashCyan,
                             activeTrackColor = StashPurple,
-                            inactiveTrackColor = Color(0xFF334155),
+                            inactiveTrackColor = MaterialTheme.colorScheme.outlineVariant,
                         ),
                     )
                     Text(
                         text = formatDuration(durationMs),
                         fontSize = 11.sp,
-                        color = Color(0xFF94A3B8),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
             }
@@ -1005,8 +1005,8 @@ private fun DesktopBottomPlayerBar(
                         expanded = showSignalPath,
                         onDismissRequest = { showSignalPath = false },
                         modifier = Modifier
-                            .background(Color(0xFF1E1B2E))
-                            .border(1.dp, Color(0xFF334155), RoundedCornerShape(8.dp))
+                            .background(MaterialTheme.colorScheme.surface)
+                            .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(8.dp))
                             .padding(12.dp),
                     ) {
                         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -1020,36 +1020,36 @@ private fun DesktopBottomPlayerBar(
                             Text(
                                 text = "Source: ${originLabel ?: "Online Stream"}",
                                 fontSize = 12.sp,
-                                color = Color.White,
+                                color = MaterialTheme.colorScheme.onSurface,
                             )
                             Text(
                                 text = "Format: ${track?.fileFormat?.uppercase() ?: "Unknown"}",
                                 fontSize = 12.sp,
-                                color = Color(0xFFCBD5E1),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                             Text(
                                 text = "Quality: " + if ((track?.qualityKbps ?: 0) > 0) "${track?.qualityKbps} kbps" else "Bit-perfect Lossless",
                                 fontSize = 12.sp,
-                                color = Color(0xFFCBD5E1),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                             if (track?.sampleRateHz != null) {
                                 Text(
                                     text = "Sample Rate: ${track.sampleRateHz} Hz",
                                     fontSize = 12.sp,
-                                    color = Color(0xFFCBD5E1),
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                             }
                             if (track?.bitsPerSample != null) {
                                 Text(
                                     text = "Bit Depth: ${track.bitsPerSample}-bit",
                                     fontSize = 12.sp,
-                                    color = Color(0xFFCBD5E1),
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                             }
                             Text(
                                 text = "Engine: libmpv native audio (gapless)",
                                 fontSize = 11.sp,
-                                color = Color(0xFF94A3B8),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
                             )
                         }
                     }
@@ -1061,7 +1061,7 @@ private fun DesktopBottomPlayerBar(
                     Icon(
                         imageVector = Icons.Default.Lyrics,
                         contentDescription = "Lyrics",
-                        tint = if (showLyrics) StashCyan else Color(0xFF94A3B8),
+                        tint = if (showLyrics) StashCyan else MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.size(20.dp),
                     )
                 }
@@ -1077,7 +1077,7 @@ private fun DesktopBottomPlayerBar(
                     Icon(
                         imageVector = if (isMuted || volume == 0f) Icons.AutoMirrored.Filled.VolumeMute else Icons.AutoMirrored.Filled.VolumeUp,
                         contentDescription = "Volume",
-                        tint = Color(0xFF94A3B8),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.size(20.dp),
                     )
                 }
@@ -1094,7 +1094,7 @@ private fun DesktopBottomPlayerBar(
                     colors = SliderDefaults.colors(
                         thumbColor = StashCyan,
                         activeTrackColor = StashCyan,
-                        inactiveTrackColor = Color(0xFF334155),
+                        inactiveTrackColor = MaterialTheme.colorScheme.outlineVariant,
                     ),
                 )
             }
@@ -1228,8 +1228,8 @@ private fun DesktopLyricsSidePanel(
 
     Surface(
         modifier = modifier.fillMaxHeight(),
-        color = StashSurface,
-        border = androidx.compose.foundation.BorderStroke(1.dp, StashGlassBorder),
+        color = MaterialTheme.colorScheme.surface,
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
     ) {
         Column(
             modifier = Modifier
@@ -1257,14 +1257,14 @@ private fun DesktopLyricsSidePanel(
                         text = currentTrack?.title ?: "No track playing",
                         fontSize = 15.sp,
                         fontWeight = FontWeight.Bold,
-                        color = Color.White,
+                        color = MaterialTheme.colorScheme.onSurface,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
                     Text(
                         text = currentTrack?.artist ?: "Unknown artist",
                         fontSize = 12.sp,
-                        color = Color(0xFF94A3B8),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
@@ -1273,7 +1273,7 @@ private fun DesktopLyricsSidePanel(
                     Icon(
                         imageVector = Icons.Default.Close,
                         contentDescription = "Close Lyrics",
-                        tint = Color(0xFF94A3B8),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
             }
@@ -1297,7 +1297,7 @@ private fun DesktopLyricsSidePanel(
                             Text(
                                 text = "Searching lyrics...",
                                 fontSize = 13.sp,
-                                color = Color(0xFF94A3B8),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
                     }
@@ -1351,8 +1351,8 @@ private fun DesktopLyricsSidePanel(
                                     fontWeight = if (isActive) FontWeight.Bold else FontWeight.Medium,
                                     color = when {
                                         isActive -> StashCyan
-                                        isPast -> Color.White.copy(alpha = 0.85f)
-                                        else -> Color(0xFF64748B)
+                                        isPast -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f)
+                                        else -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
                                     },
                                     lineHeight = 22.sp,
                                 )
@@ -1369,7 +1369,7 @@ private fun DesktopLyricsSidePanel(
                             Text(
                                 text = line.ifBlank { " " },
                                 fontSize = 14.sp,
-                                color = Color(0xFFE2E8F0),
+                                color = MaterialTheme.colorScheme.onSurface,
                                 lineHeight = 22.sp,
                             )
                         }
@@ -1392,13 +1392,13 @@ private fun DesktopLyricsSidePanel(
                                 text = "Instrumental Track",
                                 fontSize = 15.sp,
                                 fontWeight = FontWeight.SemiBold,
-                                color = Color.White,
+                                color = MaterialTheme.colorScheme.onSurface,
                             )
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
                                 text = "This track does not have lyrics.",
                                 fontSize = 13.sp,
-                                color = Color(0xFF94A3B8),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
                     }
@@ -1416,7 +1416,7 @@ private fun DesktopLyricsSidePanel(
                             Icon(
                                 imageVector = Icons.Default.Lyrics,
                                 contentDescription = null,
-                                tint = Color(0xFF64748B),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
                                 modifier = Modifier.size(36.dp),
                             )
                             Spacer(modifier = Modifier.height(10.dp))
@@ -1424,13 +1424,13 @@ private fun DesktopLyricsSidePanel(
                                 text = if (state is DesktopLyricsState.Error) "Couldn't load lyrics" else "No lyrics found",
                                 fontSize = 15.sp,
                                 fontWeight = FontWeight.SemiBold,
-                                color = Color.White,
+                                color = MaterialTheme.colorScheme.onSurface,
                             )
                             Spacer(modifier = Modifier.height(6.dp))
                             Text(
                                 text = if (state is DesktopLyricsState.Error) state.message else "Lyrics are unavailable for this track.",
                                 fontSize = 13.sp,
-                                color = Color(0xFF94A3B8),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 maxLines = 2,
                                 overflow = TextOverflow.Ellipsis,
                             )

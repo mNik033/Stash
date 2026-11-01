@@ -145,7 +145,7 @@ fun DesktopSettingsScreen(
         Text(
             text = "Playback mode, audio quality, streaming credentials, and system settings",
             fontSize = 14.sp,
-            color = Color(0xFF94A3B8),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Spacer(modifier = Modifier.height(28.dp))
 
@@ -183,13 +183,13 @@ fun DesktopSettingsScreen(
                 text = "Audio Quality Tier",
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Medium,
-                color = MaterialTheme.colorScheme.onBackground,
+                color = MaterialTheme.colorScheme.onSurface,
             )
             Spacer(modifier = Modifier.height(2.dp))
             Text(
                 text = "Governs maximum bitrates for downloads and stream resolution",
                 fontSize = 12.sp,
-                color = Color(0xFF94A3B8),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Spacer(modifier = Modifier.height(10.dp))
             Row(
@@ -202,8 +202,10 @@ fun DesktopSettingsScreen(
                         onClick = { scope.launch { qualityPreference.setQualityTier(tier) } },
                         label = { Text("${tier.label} (${tier.bitrateKbps}k)") },
                         colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = StashPurple.copy(alpha = 0.3f),
-                            selectedLabelColor = StashCyan,
+                            selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                            selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                            labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
                         ),
                     )
                 }
@@ -215,13 +217,13 @@ fun DesktopSettingsScreen(
                 text = "Download Mode Target",
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Medium,
-                color = MaterialTheme.colorScheme.onBackground,
+                color = MaterialTheme.colorScheme.onSurface,
             )
             Spacer(modifier = Modifier.height(2.dp))
             Text(
                 text = "What downloads save to local storage: lossless FLAC or high-bitrate lossy",
                 fontSize = 12.sp,
-                color = Color(0xFF94A3B8),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Spacer(modifier = Modifier.height(10.dp))
             Row(
@@ -239,8 +241,10 @@ fun DesktopSettingsScreen(
                         onClick = { scope.launch { losslessSourcePreferences.setDownloadMode(mode) } },
                         label = { Text(label) },
                         colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = StashPurple.copy(alpha = 0.3f),
-                            selectedLabelColor = StashCyan,
+                            selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                            selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                            labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
                         ),
                     )
                 }
@@ -258,19 +262,22 @@ fun DesktopSettingsScreen(
                         text = "Lossy Fallback when FLAC Unavailable",
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Medium,
-                        color = MaterialTheme.colorScheme.onBackground,
+                        color = MaterialTheme.colorScheme.onSurface,
                     )
                     Spacer(modifier = Modifier.height(2.dp))
                     Text(
                         text = "Falls back to 320kbps lossy audio if the song cannot be found on Qobuz/Tidal",
                         fontSize = 12.sp,
-                        color = Color(0xFF94A3B8),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
                 Switch(
                     checked = youtubeFallback,
                     onCheckedChange = { scope.launch { losslessSourcePreferences.setYoutubeFallbackEnabled(it) } },
-                    colors = SwitchDefaults.colors(checkedThumbColor = StashCyan, checkedTrackColor = StashPurple),
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
+                        checkedTrackColor = MaterialTheme.colorScheme.primary,
+                    ),
                 )
             }
         }
@@ -717,13 +724,11 @@ private fun SettingsSectionHeader(title: String, icon: ImageVector) {
 
 @Composable
 private fun SettingsGroupContainer(content: @Composable () -> Unit) {
-    Card(
+    Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = StashSurface,
-        ),
-        border = BorderStroke(1.dp, StashGlassBorder),
+        color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
     ) {
         Column(modifier = Modifier.padding(20.dp)) {
             content()
@@ -742,20 +747,20 @@ private fun SettingsDetailRow(
             text = label,
             fontSize = 14.sp,
             fontWeight = FontWeight.Medium,
-            color = MaterialTheme.colorScheme.onBackground,
+            color = MaterialTheme.colorScheme.onSurface,
         )
         Spacer(modifier = Modifier.height(2.dp))
         Text(
             text = value,
             fontSize = 13.sp,
-            color = Color(0xFF94A3B8),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         if (description != null) {
             Spacer(modifier = Modifier.height(4.dp))
             Text(
                 text = description,
                 fontSize = 12.sp,
-                color = StashCyan.copy(alpha = 0.85f),
+                color = MaterialTheme.colorScheme.primary,
             )
         }
     }
@@ -787,14 +792,14 @@ private fun SettingsServiceRow(
                     text = serviceName,
                     fontSize = 15.sp,
                     fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onBackground,
+                    color = MaterialTheme.colorScheme.onSurface,
                 )
             }
             Spacer(modifier = Modifier.height(4.dp))
             Text(
                 text = detail,
                 fontSize = 12.sp,
-                color = Color(0xFF94A3B8),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
         Spacer(modifier = Modifier.width(16.dp))
@@ -803,7 +808,7 @@ private fun SettingsServiceRow(
             shape = RoundedCornerShape(8.dp),
             colors = if (isConnected) {
                 androidx.compose.material3.ButtonDefaults.outlinedButtonColors(
-                    contentColor = StashCyan,
+                    contentColor = MaterialTheme.colorScheme.primary,
                 )
             } else {
                 androidx.compose.material3.ButtonDefaults.outlinedButtonColors()
@@ -821,7 +826,7 @@ private fun SettingsDivider() {
             .fillMaxWidth()
             .padding(vertical = 12.dp)
             .height(1.dp)
-            .background(StashGlassBorder),
+            .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)),
     )
 }
 
@@ -834,15 +839,23 @@ private fun ModeCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val containerBg = if (isSelected) {
+        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+    } else {
+        MaterialTheme.colorScheme.surfaceVariant
+    }
+    val borderColor = if (isSelected) {
+        MaterialTheme.colorScheme.primary
+    } else {
+        MaterialTheme.colorScheme.outline
+    }
+
     Surface(
         onClick = onClick,
         modifier = modifier,
         shape = RoundedCornerShape(12.dp),
-        color = if (isSelected) StashPurple.copy(alpha = 0.2f) else MaterialTheme.colorScheme.surfaceVariant,
-        border = BorderStroke(
-            1.5.dp,
-            if (isSelected) StashCyan else StashGlassBorder,
-        ),
+        color = containerBg,
+        border = BorderStroke(1.5.dp, borderColor),
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(
@@ -853,14 +866,14 @@ private fun ModeCard(
                 Icon(
                     imageVector = icon,
                     contentDescription = null,
-                    tint = if (isSelected) StashCyan else Color(0xFF94A3B8),
+                    tint = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.size(24.dp),
                 )
                 if (isSelected) {
                     Icon(
                         imageVector = Icons.Default.CheckCircle,
                         contentDescription = "Active Mode",
-                        tint = StashCyan,
+                        tint = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.size(20.dp),
                     )
                 }
@@ -870,13 +883,13 @@ private fun ModeCard(
                 text = title,
                 fontSize = 15.sp,
                 fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onBackground,
+                color = MaterialTheme.colorScheme.onSurface,
             )
             Spacer(modifier = Modifier.height(4.dp))
             Text(
                 text = subtitle,
                 fontSize = 12.sp,
-                color = Color(0xFF94A3B8),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
     }
@@ -891,15 +904,23 @@ private fun ThemeCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val containerBg = if (isSelected) {
+        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+    } else {
+        MaterialTheme.colorScheme.surfaceVariant
+    }
+    val borderColor = if (isSelected) {
+        MaterialTheme.colorScheme.primary
+    } else {
+        MaterialTheme.colorScheme.outline
+    }
+
     Surface(
         onClick = onClick,
         modifier = modifier,
         shape = RoundedCornerShape(12.dp),
-        color = if (isSelected) StashPurple.copy(alpha = 0.2f) else MaterialTheme.colorScheme.surfaceVariant,
-        border = BorderStroke(
-            1.5.dp,
-            if (isSelected) StashPurple else StashGlassBorder,
-        ),
+        color = containerBg,
+        border = BorderStroke(1.5.dp, borderColor),
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(
@@ -910,14 +931,14 @@ private fun ThemeCard(
                 Icon(
                     imageVector = icon,
                     contentDescription = null,
-                    tint = if (isSelected) StashCyan else Color(0xFF94A3B8),
+                    tint = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.size(24.dp),
                 )
                 if (isSelected) {
                     Icon(
                         imageVector = Icons.Default.CheckCircle,
                         contentDescription = "Selected",
-                        tint = StashPurple,
+                        tint = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.size(18.dp),
                     )
                 }
@@ -927,13 +948,13 @@ private fun ThemeCard(
                 text = title,
                 fontSize = 14.sp,
                 fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onBackground,
+                color = MaterialTheme.colorScheme.onSurface,
             )
             Spacer(modifier = Modifier.height(2.dp))
             Text(
                 text = subtitle,
                 fontSize = 11.sp,
-                color = Color(0xFF94A3B8),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
     }
