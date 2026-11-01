@@ -54,6 +54,8 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -92,9 +94,7 @@ import com.stash.core.model.PlayerState
 import com.stash.core.model.RepeatMode
 import com.stash.core.model.Track
 import com.stash.core.ui.theme.StashCyan
-import com.stash.core.ui.theme.StashGlassBorder
 import com.stash.core.ui.theme.StashPurple
-import com.stash.core.ui.theme.StashSurface
 import com.stash.desktop.di.DesktopComponent
 import com.stash.desktop.ui.home.DesktopHomeScreen
 import com.stash.feature.library.LibraryScreen
@@ -190,7 +190,9 @@ fun DesktopScaffold(
     val backStack = remember { mutableStateListOf<DesktopScreen>(DesktopScreen.Home) }
     val currentScreen = backStack.lastOrNull() ?: DesktopScreen.Home
     var showLyricsPanel by remember { mutableStateOf(false) }
+    var showQueuePanel by remember { mutableStateOf(false) }
     var userCollapsedRail by remember { mutableStateOf<Boolean?>(null) }
+    val snackbarHostState = remember { SnackbarHostState() }
 
     val activeNavTab = when (currentScreen) {
         DesktopScreen.Home -> DesktopNavTab.Home
@@ -214,6 +216,12 @@ fun DesktopScaffold(
     val isConnected = remember { component.connectivity().isConnected() }
     val scope = rememberCoroutineScope()
 
+    LaunchedEffect(playerRepository) {
+        playerRepository.userMessages.collect { msg ->
+            snackbarHostState.showSnackbar(msg)
+        }
+    }
+
     // Provide ViewModel CompositionLocals so screens can find their ViewModel
     CompositionLocalProvider(
         LocalLibraryViewModel provides remember { component.libraryViewModel() },
@@ -225,10 +233,11 @@ fun DesktopScaffold(
         LocalFailedMatchesViewModel provides remember { component.failedMatchesViewModel() },
         LocalShareMixViewModel provides remember { { playlistId -> component.shareMixViewModelFactory().create(playlistId) } },
     ) {
-        Column(
-            modifier = modifier
-                .fillMaxSize()
-                .background(MaterialTheme.colorScheme.background)
+        Box(modifier = modifier.fillMaxSize()) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(MaterialTheme.colorScheme.background)
                 .onKeyEvent { keyEvent ->
                     if (keyEvent.type != KeyEventType.KeyUp) return@onKeyEvent false
                     when (keyEvent.key) {
@@ -602,6 +611,23 @@ fun DesktopScaffold(
                         modifier = Modifier.width(lyricsWidth),
                     )
                 }
+
+                // ── Right Queue Side Panel ────────────────────────────────────────
+                AnimatedVisibility(
+                    visible = showQueuePanel,
+                    enter = slideInHorizontally(initialOffsetX = { it }),
+                    exit = slideOutHorizontally(targetOffsetX = { it }),
+                ) {
+                    DesktopQueueSidePanel(
+                        queue = playerState.queue,
+                        currentTrack = playerState.currentTrack,
+                        isPlaying = playerState.isPlaying,
+                        onTrackClick = { idx -> scope.launch { playerRepository.skipToQueueIndex(idx) } },
+                        onRemoveTrack = { idx -> scope.launch { playerRepository.removeFromQueue(idx) } },
+                        onClose = { showQueuePanel = false },
+                        modifier = Modifier.width(lyricsWidth),
+                    )
+                }
             }
         }
 
@@ -618,7 +644,15 @@ fun DesktopScaffold(
                 onCycleRepeat = { scope.launch { playerRepository.cycleRepeatMode() } },
                 onSetVolume = { vol -> playerRepository.setVolume(vol) },
                 showLyrics = showLyricsPanel,
-                onToggleLyrics = { showLyricsPanel = !showLyricsPanel },
+                onToggleLyrics = {
+                    showLyricsPanel = !showLyricsPanel
+                    if (showLyricsPanel) showQueuePanel = false
+                },
+                showQueue = showQueuePanel,
+                onToggleQueue = {
+                    showQueuePanel = !showQueuePanel
+                    if (showQueuePanel) showLyricsPanel = false
+                },
                 onToggleLike = {
                     val track = playerState.currentTrack ?: return@DesktopBottomPlayerBar
                     val isCurrentlyLiked = track.stashLikedAt != null
@@ -640,13 +674,39 @@ fun DesktopScaffold(
                     }
                     val updated = track.copy(stashLikedAt = newLikedAt)
                     playerRepository.updateCurrentTrack(updated)
+                    scope.launch {
+                        snackbarHostState.showSnackbar(
+                            if (newLikedAt != null) "Added to Liked Songs" else "Removed from Liked Songs"
+                        )
+                    }
+                },
+                onNavigateToAlbum = { album, artist ->
+                    backStack.add(
+                        DesktopScreen.AlbumDetail(
+                            albumId = "",
+                            albumName = album,
+                            artUrl = playerState.currentTrack?.albumArtUrl ?: playerState.currentTrack?.albumArtPath,
+                            artistName = artist,
+                        )
+                    )
+                },
+                onNavigateToArtist = { artist ->
+                    backStack.add(DesktopScreen.ArtistDetail(artist))
                 },
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(88.dp),
             )
         }
+
+        SnackbarHost(
+            hostState = snackbarHostState,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 96.dp),
+        )
     }
+}
 }
 
 @Composable
@@ -801,7 +861,11 @@ private fun DesktopBottomPlayerBar(
     onSetVolume: (Float) -> Unit,
     showLyrics: Boolean,
     onToggleLyrics: () -> Unit,
+    showQueue: Boolean,
+    onToggleQueue: () -> Unit,
     onToggleLike: () -> Unit,
+    onNavigateToAlbum: (albumName: String, artistName: String) -> Unit,
+    onNavigateToArtist: (artistName: String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val track = playerState.currentTrack
@@ -839,7 +903,10 @@ private fun DesktopBottomPlayerBar(
                     modifier = Modifier
                         .size(54.dp)
                         .clip(RoundedCornerShape(8.dp))
-                        .background(MaterialTheme.colorScheme.surfaceVariant),
+                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                        .clickable(enabled = !track?.album.isNullOrBlank()) {
+                            track?.album?.let { album -> onNavigateToAlbum(album, track.artist) }
+                        },
                     contentAlignment = Alignment.Center,
                 ) {
                     val artUrl = track?.albumArtUrl ?: track?.albumArtPath
@@ -868,6 +935,9 @@ private fun DesktopBottomPlayerBar(
                         color = MaterialTheme.colorScheme.onSurface,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.clickable(enabled = !track?.album.isNullOrBlank()) {
+                            track?.album?.let { album -> onNavigateToAlbum(album, track.artist) }
+                        },
                     )
                     Spacer(modifier = Modifier.height(2.dp))
                     Text(
@@ -876,6 +946,9 @@ private fun DesktopBottomPlayerBar(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.clickable(enabled = !track?.artist.isNullOrBlank()) {
+                            track?.artist?.let { artist -> onNavigateToArtist(artist) }
+                        },
                     )
                 }
                 Spacer(modifier = Modifier.width(8.dp))
@@ -1112,6 +1185,17 @@ private fun DesktopBottomPlayerBar(
                     }
                 }
                 Spacer(modifier = Modifier.width(8.dp))
+
+                // Queue toggle
+                IconButton(onClick = onToggleQueue) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.QueueMusic,
+                        contentDescription = "Playback Queue",
+                        tint = if (showQueue) StashCyan else MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(20.dp),
+                    )
+                }
+                Spacer(modifier = Modifier.width(4.dp))
 
                 // Lyrics toggle
                 IconButton(onClick = onToggleLyrics) {
@@ -1517,4 +1601,182 @@ private fun formatDuration(millis: Long): String {
     val minutes = totalSeconds / 60
     val seconds = totalSeconds % 60
     return "${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}"
+}
+
+@Composable
+private fun DesktopQueueSidePanel(
+    queue: List<Track>,
+    currentTrack: Track?,
+    isPlaying: Boolean,
+    onTrackClick: (Int) -> Unit,
+    onRemoveTrack: (Int) -> Unit,
+    onClose: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        modifier = modifier.fillMaxHeight(),
+        color = MaterialTheme.colorScheme.surface,
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 16.dp, vertical = 20.dp),
+        ) {
+            // Header: Title + Track Count + Close Button
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.QueueMusic,
+                        contentDescription = null,
+                        tint = StashCyan,
+                        modifier = Modifier.size(20.dp),
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Play Queue",
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "(${queue.size})",
+                        fontSize = 13.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                IconButton(onClick = onClose) {
+                    Icon(
+                        imageVector = Icons.Default.Close,
+                        contentDescription = "Close Queue",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            if (queue.isEmpty()) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.QueueMusic,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                            modifier = Modifier.size(40.dp),
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text(
+                            text = "Queue is empty",
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "Songs you play or add will appear here.",
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            } else {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    itemsIndexed(queue) { index, track ->
+                        val current = currentTrack
+                        val isCurrent = current != null && (
+                            (track.id > 0L && track.id == current.id) ||
+                            (track.title == current.title && track.artist == current.artist)
+                        )
+
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(
+                                    if (isCurrent) StashPurple.copy(alpha = 0.18f)
+                                    else Color.Transparent,
+                                )
+                                .clickable { onTrackClick(index) }
+                                .padding(horizontal = 8.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            // Artwork
+                            Box(
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(MaterialTheme.colorScheme.surfaceVariant),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                val artUrl = track.albumArtUrl ?: track.albumArtPath
+                                if (artUrl != null) {
+                                    AsyncImage(
+                                        model = artUrl,
+                                        contentDescription = null,
+                                        modifier = Modifier.fillMaxSize(),
+                                        contentScale = ContentScale.Crop,
+                                    )
+                                } else {
+                                    Icon(
+                                        imageVector = Icons.Default.MusicNote,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.size(18.dp),
+                                    )
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.width(10.dp))
+
+                            // Title & Artist
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = track.title,
+                                    fontSize = 13.sp,
+                                    fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Medium,
+                                    color = if (isCurrent) StashCyan else MaterialTheme.colorScheme.onSurface,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                                Text(
+                                    text = track.artist,
+                                    fontSize = 11.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.width(6.dp))
+
+                            // Remove from queue button
+                            IconButton(
+                                onClick = { onRemoveTrack(index) },
+                                modifier = Modifier.size(28.dp),
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Close,
+                                    contentDescription = "Remove from Queue",
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                                    modifier = Modifier.size(16.dp),
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
 }

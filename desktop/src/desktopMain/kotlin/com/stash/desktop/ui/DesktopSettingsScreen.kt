@@ -68,9 +68,7 @@ import com.stash.core.auth.model.AuthState
 import com.stash.core.model.DownloadMode
 import com.stash.core.model.QualityTier
 import com.stash.core.ui.theme.StashCyan
-import com.stash.core.ui.theme.StashGlassBorder
 import com.stash.core.ui.theme.StashPurple
-import com.stash.core.ui.theme.StashSurface
 import com.stash.data.download.lossless.qbdlx.QobuzLoginResult
 import com.stash.desktop.di.DesktopComponent
 import kotlinx.coroutines.launch
