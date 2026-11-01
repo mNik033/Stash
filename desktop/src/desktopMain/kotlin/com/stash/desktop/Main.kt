@@ -45,6 +45,9 @@ fun main() {
             runCatching {
                 YtCookieFiles.sweep(comp.appPaths().noBackupFilesDir)
             }
+            runCatching {
+                comp.downloadQueueProcessor().triggerDrain()
+            }
             comp
         }
         var isDarkTheme by remember { mutableStateOf(true) }

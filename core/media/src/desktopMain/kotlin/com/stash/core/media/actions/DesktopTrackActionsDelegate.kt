@@ -95,7 +95,63 @@ class DesktopTrackActionsDelegate @Inject constructor(
     }
 
     override fun downloadTrack(item: TrackItem) {
-        _userMessages.tryEmit("Downloading on desktop is coming soon")
+        val key = item.videoId
+        if (key.isNotBlank() && (key in _downloadingIds.value || key in _downloadedIds.value)) return
+        if (key.isNotBlank()) {
+            _downloadingIds.update { it + key }
+        }
+
+        scope().launch {
+            try {
+                val trackId = ensureTrackPersisted(item)
+                if (trackId == null) {
+                    if (key.isNotBlank()) _downloadingIds.update { it - key }
+                    _userMessages.tryEmit("Couldn't save track to download")
+                    return@launch
+                }
+                val queued = musicRepository.queueDownload(trackId)
+                if (queued) {
+                    _userMessages.tryEmit("Queued download: ${item.title}")
+                    musicRepository.observeDownloadStatus(trackId).collect { status ->
+                        when (status) {
+                            com.stash.core.model.DownloadStatus.IN_PROGRESS,
+                            com.stash.core.model.DownloadStatus.PENDING -> {
+                                if (key.isNotBlank()) _downloadingIds.update { it + key }
+                            }
+                            com.stash.core.model.DownloadStatus.COMPLETED -> {
+                                if (key.isNotBlank()) {
+                                    _downloadingIds.update { it - key }
+                                    _downloadedIds.update { it + key }
+                                    _waitingForLosslessIds.update { it - key }
+                                }
+                            }
+                            com.stash.core.model.DownloadStatus.FAILED -> {
+                                if (key.isNotBlank()) _downloadingIds.update { it - key }
+                                _userMessages.tryEmit("Download failed: ${item.title}")
+                            }
+                            com.stash.core.model.DownloadStatus.WAITING_FOR_LOSSLESS -> {
+                                if (key.isNotBlank()) {
+                                    _downloadingIds.update { it - key }
+                                    _waitingForLosslessIds.update { it + key }
+                                }
+                                _userMessages.tryEmit("Waiting for lossless source…")
+                            }
+                            else -> {}
+                        }
+                    }
+                } else {
+                    if (key.isNotBlank()) {
+                        _downloadingIds.update { it - key }
+                        _downloadedIds.update { it + key }
+                    }
+                    _userMessages.tryEmit("Track already downloaded or in queue")
+                }
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                if (key.isNotBlank()) _downloadingIds.update { it - key }
+                _userMessages.tryEmit("Couldn't queue download")
+            }
+        }
     }
 
     override suspend fun refreshDownloadedIds(videoIds: Collection<String>) {

@@ -11,6 +11,7 @@ import com.stash.core.media.PlayerRepository
 import com.stash.core.media.di.DesktopMediaModule
 import com.stash.core.media.engine.PlaybackEngine
 import com.stash.core.network.di.DesktopNetworkModule
+import com.stash.data.download.DesktopDownloadQueueProcessor
 import com.stash.data.download.di.DesktopDownloadModule
 import com.stash.data.lyrics.di.DesktopLyricsModule
 import com.stash.data.spotify.di.DesktopSpotifyDataModule
@@ -68,6 +69,7 @@ interface DesktopComponent {
     fun artistDetailViewModelFactory(): DesktopArtistDetailViewModelFactory
     fun lyricsRepository(): com.stash.data.lyrics.LyricsRepository
     fun likeCoordinator(): com.stash.core.data.social.LikeCoordinator
+    fun downloadQueueProcessor(): DesktopDownloadQueueProcessor
 
     @Component.Factory
     interface Factory {

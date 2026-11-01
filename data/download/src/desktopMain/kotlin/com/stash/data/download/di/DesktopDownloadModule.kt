@@ -14,7 +14,12 @@ import com.stash.data.download.files.FfmpegBinaryResolver
 import com.stash.data.download.files.FileOrganizer
 import com.stash.data.download.files.LocalImportCoordinator
 import com.stash.data.download.lossless.LosslessSource
+import com.stash.data.download.lossless.qbdlx.QbdlxCredentialStore
 import com.stash.data.download.lossless.qbdlx.QbdlxQobuzSource
+import com.stash.data.download.lossless.qbdlx.QbdlxSigner
+import com.stash.data.download.lossless.qbdlx.QbdlxSigningResolver
+import com.stash.data.download.lossless.qbdlx.QobuzWebCredentials
+import com.stash.data.download.lossless.qbdlx.QobuzWebCredentialsClient
 import com.stash.data.download.lossless.tidal.TidalLosslessSource
 import com.stash.data.download.lyrics.LyricsFetchTrigger
 import com.stash.data.download.prefs.QualityPreferencesManager
@@ -41,6 +46,10 @@ abstract class DesktopDownloadModule {
     @Binds
     @Singleton
     abstract fun bindLibrarySizeHolder(impl: com.stash.data.download.files.DesktopLibrarySizeHolder): com.stash.data.download.files.LibrarySizeHolder
+
+    @Binds
+    @Singleton
+    abstract fun bindDownloadQueueTrigger(impl: com.stash.data.download.DesktopDownloadQueueProcessor): com.stash.core.data.sync.DownloadQueueTrigger
 
     @Binds
     @Singleton
@@ -77,7 +86,20 @@ abstract class DesktopDownloadModule {
     @IntoSet
     abstract fun bindTidalLosslessSource(impl: TidalLosslessSource): LosslessSource
 
+    @Binds
+    @Singleton
+    abstract fun bindQbdlxSigningResolver(impl: QbdlxCredentialStore): QbdlxSigningResolver
+
     companion object {
+        @Provides
+        @Singleton
+        fun provideQbdlxSigner(): QbdlxSigner = QbdlxSigner()
+
+        @Provides
+        @Singleton
+        fun provideQobuzWebCredentials(c: QobuzWebCredentialsClient): QobuzWebCredentials =
+            QobuzWebCredentials(c::fetch)
+
         @Provides
         @Singleton
         fun provideLyricsFetchTrigger(): LyricsFetchTrigger = object : LyricsFetchTrigger {

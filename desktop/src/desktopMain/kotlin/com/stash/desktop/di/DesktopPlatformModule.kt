@@ -64,5 +64,16 @@ abstract class DesktopPlatformModule {
             override val versionName: String = "1.0.0-desktop"
             override val versionCode: Int = 1
         }
+
+        @Provides
+        @Singleton
+        fun provideLastFmCredentials(appVersionProvider: AppVersionProvider): com.stash.core.data.lastfm.LastFmCredentials =
+            com.stash.core.data.lastfm.LastFmCredentials(
+                apiKey = "",
+                apiSecret = "",
+                extraReadApiKeys = emptyList(),
+                proxyUrl = null,
+                appVersion = appVersionProvider.versionName,
+            )
     }
 }

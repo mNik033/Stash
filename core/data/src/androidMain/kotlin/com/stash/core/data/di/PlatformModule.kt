@@ -77,5 +77,16 @@ abstract class PlatformModule {
             tipJarUrl = tipJarUrl,
             encryption = encryption,
         )
+
+        @Provides
+        @Singleton
+        fun provideDownloadQueueTrigger(
+            singleTrackDownloadEnqueuer: com.stash.core.data.sync.SingleTrackDownloadEnqueuer,
+        ): com.stash.core.data.sync.DownloadQueueTrigger = object : com.stash.core.data.sync.DownloadQueueTrigger {
+            override fun triggerDrain() {}
+            override suspend fun enqueue(queueId: Long) {
+                singleTrackDownloadEnqueuer.enqueue(queueId)
+            }
+        }
     }
 }

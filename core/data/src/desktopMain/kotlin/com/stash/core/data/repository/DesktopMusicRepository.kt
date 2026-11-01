@@ -32,12 +32,17 @@ import com.stash.core.model.Track
 import com.stash.core.model.share.SharedTrack
 import com.stash.core.model.share.toTrack
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
@@ -59,6 +64,7 @@ class DesktopMusicRepository @Inject constructor(
     private val libraryScopePreference: LibraryScopePreference,
     private val sharedMixDao: SharedMixDao,
     private val stashMixRecipeDao: StashMixRecipeDao,
+    private val downloadQueueTrigger: com.stash.core.data.sync.DownloadQueueTrigger,
 ) : MusicRepository {
 
     private val _trackDeletions = MutableSharedFlow<Long>(replay = 0, extraBufferCapacity = 64)
@@ -74,8 +80,16 @@ class DesktopMusicRepository @Inject constructor(
             .map { rows -> rows.map { it.toDomain() } }
             .flowOn(Dispatchers.Default)
 
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private fun <T> libraryScope(query: (includeNotDownloaded: Boolean, libraryOnly: Boolean) -> Flow<T>): Flow<T> =
+        combine(streamingPreference.enabled, libraryScopePreference.inLibraryOnly) { streamOnly, inLibraryOnly ->
+            streamOnly to (streamOnly && inLibraryOnly)
+        }
+            .distinctUntilChanged()
+            .flatMapLatest { (streamOnly, libraryOnly) -> query(streamOnly, libraryOnly) }
+
     override fun getTracksByArtist(artist: String): Flow<List<Track>> =
-        trackDao.getByArtist(artist, includeNotDownloaded = true, libraryOnly = false)
+        libraryScope { includeNotDownloaded, libraryOnly -> trackDao.getByArtist(artist, includeNotDownloaded, libraryOnly) }
             .map { entities ->
                 entities
                     .filter { matchesArtistCredits(it.artist, it.albumArtist, artist) }
@@ -84,7 +98,7 @@ class DesktopMusicRepository @Inject constructor(
             .flowOn(Dispatchers.Default)
 
     override fun getTracksByAlbum(album: String, artist: String): Flow<List<Track>> =
-        trackDao.getByAlbum(album, includeNotDownloaded = true, libraryOnly = false)
+        libraryScope { includeNotDownloaded, libraryOnly -> trackDao.getByAlbum(album, includeNotDownloaded, libraryOnly) }
             .map { entities ->
                 entities
                     .filter {
@@ -101,11 +115,11 @@ class DesktopMusicRepository @Inject constructor(
             .flowOn(Dispatchers.Default)
 
     override fun getAllArtists(): Flow<List<ArtistSummary>> =
-        trackDao.getAllArtists(includeNotDownloaded = true, libraryOnly = false)
+        libraryScope { includeNotDownloaded, libraryOnly -> trackDao.getAllArtists(includeNotDownloaded, libraryOnly) }
             .flowOn(Dispatchers.Default)
 
     override fun getAllAlbums(): Flow<List<AlbumSummary>> =
-        trackDao.getAllAlbums(includeNotDownloaded = true, libraryOnly = false)
+        libraryScope { includeNotDownloaded, libraryOnly -> trackDao.getAllAlbums(includeNotDownloaded, libraryOnly) }
             .flowOn(Dispatchers.Default)
 
     override fun getRecentlyAdded(limit: Int): Flow<List<Track>> =
@@ -182,7 +196,8 @@ class DesktopMusicRepository @Inject constructor(
     override fun observeTrackByYoutubeId(youtubeId: String): Flow<Track?> =
         trackDao.observeByYoutubeId(youtubeId).map { it?.toDomain() }
 
-    override fun observeDownloadStatus(trackId: Long): Flow<DownloadStatus?> = emptyFlow()
+    override fun observeDownloadStatus(trackId: Long): Flow<DownloadStatus?> =
+        downloadQueueDao.observeStatusForTrack(trackId).distinctUntilChanged()
 
     override suspend fun recordPlay(trackId: Long) {
         trackDao.incrementPlayCount(trackId)
@@ -295,24 +310,83 @@ class DesktopMusicRepository @Inject constructor(
         return true
     }
 
-    override suspend fun queueDownload(trackId: Long): Boolean = false
-    override suspend fun downloadWaitReason(trackId: Long): DownloadWaitReason? = null
+    override suspend fun queueDownload(trackId: Long): Boolean {
+        val entity = trackDao.getById(trackId) ?: return false
+        if (entity.isDownloaded) return false
+
+        val existingId = downloadQueueDao.getByTrackId(trackId)?.id
+        val queueId = existingId?.takeIf { downloadQueueDao.requeueForTap(it) == 1 }
+            ?: downloadQueueDao.insert(
+                com.stash.core.data.db.entity.DownloadQueueEntity(
+                    trackId = trackId,
+                    syncId = null,
+                    searchQuery = "${entity.artist} - ${entity.title}",
+                    youtubeUrl = entity.youtubeId?.let { "https://music.youtube.com/watch?v=$it" },
+                    userRequested = true,
+                )
+            )
+        downloadQueueTrigger.triggerDrain()
+        return true
+    }
+    override suspend fun downloadWaitReason(trackId: Long): DownloadWaitReason? =
+        downloadQueueDao.getByTrackId(trackId)
+            ?.takeIf { it.status == DownloadStatus.WAITING_FOR_LOSSLESS }
+            ?.let { DownloadWaitReason.fromCode(it.errorMessage) }
 
     override suspend fun removeDownload(trackId: Long) {
         val entity = trackDao.getById(trackId) ?: return
         entity.filePath?.let { runCatching { File(it).delete() } }
+        downloadQueueDao.deleteByTrackId(trackId)
         trackDao.clearDownloadState(trackId)
     }
 
-    override suspend fun queueDownloadsForPlaylist(playlistId: Long, background: Boolean): Int = 0
-    override suspend fun queueKeptPlaylists(manualSync: Boolean): Int = 0
-    override suspend fun resumeWaitingDownloads(tap: Boolean) {}
+    override suspend fun queueDownloadsForPlaylist(playlistId: Long, background: Boolean): Int {
+        val tracks = trackDao.getByPlaylist(playlistId, includeStreamable = true).first()
+        val candidates = tracks.filter { !it.isDownloaded && !it.matchDismissed }
+        if (candidates.isEmpty()) return 0
+
+        val entries = candidates.mapNotNull { entity ->
+            if (downloadQueueDao.hasRowToLeaveAlone(entity.id)) return@mapNotNull null
+            com.stash.core.data.db.entity.DownloadQueueEntity(
+                trackId = entity.id,
+                syncId = null,
+                searchQuery = "${entity.artist} - ${entity.title}",
+                youtubeUrl = entity.youtubeId?.let { "https://music.youtube.com/watch?v=$it" },
+                userRequested = true,
+            )
+        }
+        if (entries.isNotEmpty()) {
+            downloadQueueDao.insertAll(entries)
+            downloadQueueTrigger.triggerDrain()
+        }
+        return entries.size
+    }
+    override suspend fun queueKeptPlaylists(manualSync: Boolean): Int {
+        val playlistIds = playlistDao.getKeepOfflinePlaylistIds()
+        var total = 0
+        for (id in playlistIds) {
+            total += queueDownloadsForPlaylist(id, background = false)
+        }
+        return total
+    }
+    override suspend fun resumeWaitingDownloads(tap: Boolean) {
+        downloadQueueTrigger.triggerDrain()
+    }
 
     override suspend fun setPlaylistDownload(playlistId: Long, on: Boolean) {
         playlistDao.setKeepOffline(playlistId, on)
     }
 
-    override suspend fun removeDownloadsForPlaylist(playlistId: Long): Int = 0
+    override suspend fun removeDownloadsForPlaylist(playlistId: Long): Int {
+        val tracks = trackDao.getByPlaylist(playlistId, includeStreamable = true).first()
+        val downloaded = tracks.filter { it.isDownloaded }
+        for (entity in downloaded) {
+            entity.filePath?.let { runCatching { File(it).delete() } }
+            downloadQueueDao.deleteByTrackId(entity.id)
+            trackDao.clearDownloadState(entity.id)
+        }
+        return downloaded.size
+    }
 
     override suspend fun removePlaylist(playlist: Playlist) {
         playlistDao.delete(playlist.toEntity())

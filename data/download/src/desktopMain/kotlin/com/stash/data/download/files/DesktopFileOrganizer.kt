@@ -56,6 +56,25 @@ class DesktopFileOrganizer @Inject constructor(
         return CommittedTrack(targetFile.absolutePath, targetFile.length())
     }
 
+    fun computeMusicLibrarySize(): LibrarySizeBreakdown {
+        var totalBytes = 0L
+        var losslessBytes = 0L
+        var losslessCount = 0
+        val root = File(appPaths.filesDir, "music")
+        if (!root.exists()) return LibrarySizeBreakdown(0L, 0L, 0)
+
+        root.walkTopDown().filter { it.isFile }.forEach { file ->
+            val size = file.length()
+            totalBytes += size
+            val ext = file.extension.lowercase()
+            if (ext == "flac" || ext == "wav") {
+                losslessBytes += size
+                losslessCount++
+            }
+        }
+        return LibrarySizeBreakdown(totalBytes, losslessBytes, losslessCount)
+    }
+
     private fun sanitizeName(name: String): String {
         return name.replace(Regex("[\\\\/:*?\"<>|]"), "_").trim()
     }
