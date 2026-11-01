@@ -79,6 +79,8 @@ interface DesktopComponent {
     fun qbdlxCredentialStore(): com.stash.data.download.lossless.qbdlx.QbdlxCredentialStore
     fun qobuzAccountConnector(): com.stash.data.download.lossless.qbdlx.QobuzAccountConnector
     fun losslessSourcePreferences(): com.stash.data.download.lossless.LosslessSourcePreferences
+    fun losslessConfigFetcher(): com.stash.data.download.lossless.relay.LosslessConfigFetcher
+    fun losslessAvailability(): com.stash.data.download.lossless.LosslessAvailability
 
     @Component.Factory
     interface Factory {

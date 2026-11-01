@@ -78,6 +78,9 @@ jobs:
         run: chmod +x gradlew
 
       - name: Package Desktop application
+        env:
+          LOSSLESS_CONFIG_URL: ${{ secrets.LOSSLESS_CONFIG_URL }}
+          LOSSLESS_CONFIG_PUBKEY: ${{ secrets.LOSSLESS_CONFIG_PUBKEY }}
         run: ./gradlew ${{ matrix.gradle-task }} --no-daemon
 
       - name: Upload desktop artifact

@@ -19,6 +19,29 @@ fun qbdlxProp(key: String, env: String) =
 val losslessConfigUrl = qbdlxProp("lossless.configUrl", "LOSSLESS_CONFIG_URL")
 val losslessConfigPubKey = qbdlxProp("lossless.configPubKey", "LOSSLESS_CONFIG_PUBKEY")
 
+val generateDesktopLosslessConfig = tasks.register("generateDesktopLosslessConfig") {
+    val outputDir = layout.buildDirectory.dir("generated/losslessConfig/kotlin")
+    outputs.dir(outputDir)
+    inputs.property("configUrl", losslessConfigUrl)
+    inputs.property("configPubKey", losslessConfigPubKey)
+    doLast {
+        val file = outputDir.get().file("com/stash/data/download/lossless/relay/GeneratedLosslessConfig.kt").asFile
+        file.parentFile.mkdirs()
+        val safeUrl = losslessConfigUrl.replace("\\", "\\\\").replace("\"", "\\\"")
+        val safeKey = losslessConfigPubKey.replace("\\", "\\\\").replace("\"", "\\\"")
+        file.writeText(
+            """
+            package com.stash.data.download.lossless.relay
+
+            internal object GeneratedLosslessConfig {
+                const val CONFIG_URL = "$safeUrl"
+                const val CONFIG_PUBKEY = "$safeKey"
+            }
+            """.trimIndent()
+        )
+    }
+}
+
 android {
     namespace = "com.stash.data.download"
 
@@ -75,8 +98,11 @@ kotlin {
             implementation(libs.media3.datasource)
             implementation(libs.media3.database)
         }
-        desktopMain.dependencies {
-            implementation(libs.dagger)
+        desktopMain {
+            kotlin.srcDir(generateDesktopLosslessConfig)
+            dependencies {
+                implementation(libs.dagger)
+            }
         }
         commonTest.dependencies {
             implementation(project(":core:model"))

@@ -17,6 +17,10 @@ import com.sun.jna.Library
 import com.sun.jna.Native
 import com.sun.jna.Platform
 import com.sun.jna.WString
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 
 private interface WindowsShell32 : Library {
     fun SetCurrentProcessExplicitAppUserModelID(appID: WString): Int
@@ -40,6 +44,7 @@ fun main() {
     }
 
     application {
+        val appScope = remember { CoroutineScope(SupervisorJob() + Dispatchers.IO) }
         val component = remember {
             val comp = DaggerDesktopComponent.create()
             runCatching {
@@ -47,6 +52,14 @@ fun main() {
             }
             runCatching {
                 comp.downloadQueueProcessor().triggerDrain()
+            }
+            runCatching {
+                val fetcher = comp.losslessConfigFetcher()
+                if (fetcher.enabled) {
+                    fetcher.start(appScope)
+                } else {
+                    appScope.launch { fetcher.loadCached() }
+                }
             }
             comp
         }
