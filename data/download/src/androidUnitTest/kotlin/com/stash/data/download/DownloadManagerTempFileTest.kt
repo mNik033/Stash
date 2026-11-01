@@ -1,5 +1,7 @@
 package com.stash.data.download
 
+import com.stash.data.download.files.CommittedTrack
+
 import com.stash.core.data.db.dao.PlaylistDao
 import com.stash.core.data.db.dao.TrackDao
 import com.stash.core.data.lastfm.LastFmApiClient
@@ -139,7 +141,7 @@ class DownloadManagerTempFileTest {
     fun `a failed embed still commits the file`() = runTest {
         coEvery { metadataEmbedder.embedMetadata(any(), any(), any()) } throws IllegalStateException("ffmpeg died")
         coEvery { fileOrganizer.commitDownload(any(), any(), any(), any(), any(), any(), any(), any()) } returns
-            FileOrganizer.CommittedTrack("/music/evanescence-lacrymosa.opus", 5L)
+            CommittedTrack("/music/evanescence-lacrymosa.opus", 5L)
 
         val result = newSubject().downloadTrack(track)
 

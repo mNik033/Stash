@@ -2,7 +2,15 @@ package com.stash.data.download.di
 
 import com.stash.core.data.prefs.QualityPreference
 import com.stash.core.data.sync.TrackDownloader
+import com.stash.data.download.AndroidDownloadExecutor
+import com.stash.data.download.DownloadExecutor
 import com.stash.data.download.TrackDownloaderImpl
+import com.stash.data.download.files.AndroidEmbedArtScaler
+import com.stash.data.download.files.AndroidFfmpegBinaryResolver
+import com.stash.data.download.files.AndroidFileOrganizer
+import com.stash.data.download.files.EmbedArtScaler
+import com.stash.data.download.files.FfmpegBinaryResolver
+import com.stash.data.download.files.FileOrganizer
 import com.stash.data.download.prefs.QualityPreferencesManager
 import dagger.Binds
 import dagger.Module
@@ -10,32 +18,18 @@ import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
 import javax.inject.Singleton
 
-/**
- * Hilt module for the download layer.
- *
- * Binds abstraction interfaces defined in `:core:data` to their concrete
- * implementations in `:data:download`, preventing circular module dependencies
- * while allowing feature modules and sync workers to use the download pipeline.
- */
 @Module
 @InstallIn(SingletonComponent::class)
 abstract class DownloadModule {
 
-    /**
-     * Provides [TrackDownloaderImpl] wherever [TrackDownloader] is injected.
-     */
     @Binds
     @Singleton
     abstract fun bindTrackDownloader(impl: TrackDownloaderImpl): TrackDownloader
 
-    /**
-     * Provides [QualityPreferencesManager] wherever [QualityPreference] is injected.
-     */
     @Binds
     @Singleton
     abstract fun bindQualityPreference(impl: QualityPreferencesManager): QualityPreference
 
-    /** Save to Google Drive names songs the way the downloader does ([DriveUploadNaming]). */
     @Binds
     @Singleton
     abstract fun bindUploadNaming(impl: com.stash.data.download.cloud.DriveUploadNaming): com.stash.data.cloud.upload.UploadNaming
@@ -55,7 +49,20 @@ abstract class DownloadModule {
     @Binds
     @Singleton
     abstract fun bindDownloadProgressTracker(impl: com.stash.data.download.DownloadManager): com.stash.data.download.DownloadProgressTracker
+
+    @Binds
+    @Singleton
+    abstract fun bindFfmpegBinaryResolver(impl: AndroidFfmpegBinaryResolver): FfmpegBinaryResolver
+
+    @Binds
+    @Singleton
+    abstract fun bindEmbedArtScaler(impl: AndroidEmbedArtScaler): EmbedArtScaler
+
+    @Binds
+    @Singleton
+    abstract fun bindFileOrganizer(impl: AndroidFileOrganizer): FileOrganizer
+
+    @Binds
+    @Singleton
+    abstract fun bindDownloadExecutor(impl: AndroidDownloadExecutor): DownloadExecutor
 }
-
-
-

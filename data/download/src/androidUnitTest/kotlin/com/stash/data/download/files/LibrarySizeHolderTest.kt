@@ -30,7 +30,7 @@ class LibrarySizeHolderTest {
         val trackCount = MutableStateFlow(7)
         val initialSize = LibrarySizeBreakdown(100L, 80L, 2)
         val refreshedSize = LibrarySizeBreakdown(140L, 120L, 3)
-        val fileOrganizer = mockk<FileOrganizer>()
+        val fileOrganizer = mockk<AndroidFileOrganizer>()
         val musicRepository = mockk<MusicRepository>()
         every { musicRepository.getTrackCount() } returns trackCount
         coEvery { fileOrganizer.computeMusicLibrarySize() } returnsMany
@@ -57,7 +57,7 @@ class LibrarySizeHolderTest {
     fun `track count changes right after a walk wait for the gap`() = runTest {
         val trackCount = MutableStateFlow(7)
         val size = LibrarySizeBreakdown(100L, 80L, 2)
-        val fileOrganizer = mockk<FileOrganizer>()
+        val fileOrganizer = mockk<AndroidFileOrganizer>()
         val musicRepository = mockk<MusicRepository>()
         every { musicRepository.getTrackCount() } returns trackCount
         coEvery { fileOrganizer.computeMusicLibrarySize() } returns size

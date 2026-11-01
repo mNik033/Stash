@@ -311,7 +311,7 @@ class LocalImportCoordinatorTest {
     }
 
     private fun coordinator() =
-        RealLocalImportCoordinator(context, FileOrganizer(context, storagePreference, trackDao), musicRepository)
+        RealLocalImportCoordinator(context, AndroidFileOrganizer(context, storagePreference, trackDao), musicRepository)
 
     private fun importOne() = runBlocking {
         val coordinator = coordinator()

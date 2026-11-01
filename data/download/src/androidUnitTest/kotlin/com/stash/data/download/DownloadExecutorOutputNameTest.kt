@@ -15,11 +15,11 @@ import org.junit.Test
 import org.junit.rules.TemporaryFolder
 
 /**
- * [DownloadExecutor.download] accepts only plain base names inside the output
+ * [AndroidDownloadExecutor.download] accepts only plain base names inside the output
  * folder and https URLs; anything else is refused before yt-dlp, the cookie
  * file or the freshen step run.
  */
-class DownloadExecutorOutputNameTest {
+class AndroidDownloadExecutorOutputNameTest {
 
     @get:Rule val tmp = TemporaryFolder()
 
@@ -28,12 +28,12 @@ class DownloadExecutorOutputNameTest {
     private val context: Context = mockk(relaxed = true)
     private val remuxer: WebmAudioRemuxer = mockk(relaxed = true)
 
-    private fun executor(): DownloadExecutor {
+    private fun executor(): AndroidDownloadExecutor {
         // No cookie: a download that wrongly got past the checks goes straight
         // to yt-dlp (uninitialised under JVM tests) instead of writing a file.
         coEvery { tokenManager.getYouTubeCookie() } returns null
         every { context.noBackupFilesDir } returns tmp.root
-        return DownloadExecutor(ytDlpManager, context, tokenManager, remuxer)
+        return AndroidDownloadExecutor(ytDlpManager, context, tokenManager, remuxer)
     }
 
     private val url = "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
@@ -88,19 +88,19 @@ class DownloadExecutorOutputNameTest {
     @Test
     fun `only plain base names are safe`() {
         listOf("dl_42", "search_dQw4w9WgXcQ", "swap_7_dQw4w9WgXcQ", "import_v1.tmp", "a-b_C9")
-            .forEach { assertTrue(it, DownloadExecutor.isSafeFilename(it)) }
+            .forEach { assertTrue(it, AndroidDownloadExecutor.isSafeFilename(it)) }
         listOf(
             "", ".", "..", ".hidden", "a..b", "../x", "a/b", "a\\b", "a%(id)s", "a b", "a:b",
             "a\u0000b", "dl_é", "dl_３", "x".repeat(101),
-        ).forEach { assertTrue("'$it' must be refused", !DownloadExecutor.isSafeFilename(it)) }
+        ).forEach { assertTrue("'$it' must be refused", !AndroidDownloadExecutor.isSafeFilename(it)) }
     }
 
     @Test
     fun `the template stays directly inside the output folder`() {
-        val template = DownloadExecutor.outputTemplateFor(tmp.root, "dl_42")
+        val template = AndroidDownloadExecutor.outputTemplateFor(tmp.root, "dl_42")
         assertTrue("got $template", template == java.io.File(tmp.root, "dl_42.%(ext)s").absolutePath)
-        assertTrue(DownloadExecutor.outputTemplateFor(tmp.root, "../dl_42") == null)
-        assertTrue(DownloadExecutor.outputTemplateFor(tmp.root, "sub/dl_42") == null)
+        assertTrue(AndroidDownloadExecutor.outputTemplateFor(tmp.root, "../dl_42") == null)
+        assertTrue(AndroidDownloadExecutor.outputTemplateFor(tmp.root, "sub/dl_42") == null)
     }
 
     /**
@@ -113,7 +113,7 @@ class DownloadExecutorOutputNameTest {
         val stale = listOf("dl_42.opus", "dl_42.m4a", "dl_42.webm.part", "dl_42.ytdl").map { tmp.newFile(it) }
         val others = listOf("dl_420.opus", "dl_42_1a2b3c4d.opus", "search_dl_42.opus").map { tmp.newFile(it) }
 
-        DownloadExecutor.deleteStaleOutputs(tmp.root, "dl_42")
+        AndroidDownloadExecutor.deleteStaleOutputs(tmp.root, "dl_42")
 
         stale.forEach { assertTrue("${it.name} should be gone", !it.exists()) }
         others.forEach { assertTrue("${it.name} should stay", it.exists()) }
@@ -121,8 +121,8 @@ class DownloadExecutorOutputNameTest {
 
     @Test
     fun `only https URLs are accepted`() {
-        assertTrue(DownloadExecutor.isAcceptedUrl("https://www.youtube.com/watch?v=dQw4w9WgXcQ"))
-        assertTrue(DownloadExecutor.isAcceptedUrl("https://music.youtube.com/watch?v=dQw4w9WgXcQ"))
+        assertTrue(AndroidDownloadExecutor.isAcceptedUrl("https://www.youtube.com/watch?v=dQw4w9WgXcQ"))
+        assertTrue(AndroidDownloadExecutor.isAcceptedUrl("https://music.youtube.com/watch?v=dQw4w9WgXcQ"))
         listOf(
             "--x",
             "-x",
@@ -131,7 +131,7 @@ class DownloadExecutorOutputNameTest {
             "https:///no-host",
             "dQw4w9WgXcQ",
             "",
-        ).forEach { assertTrue("'$it' must be refused", !DownloadExecutor.isAcceptedUrl(it)) }
+        ).forEach { assertTrue("'$it' must be refused", !AndroidDownloadExecutor.isAcceptedUrl(it)) }
     }
 
     @Test

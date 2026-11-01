@@ -48,7 +48,7 @@ class LosslessSourcePreferencesRequeueTest {
         // exactly-zero invocations rely on relaxed defaults to avoid throwing
         // if an unexpected call slips through.
         downloadQueueDao = mockk(relaxed = true)
-        prefs = LosslessSourcePreferences(context, downloadQueueDao)
+        prefs = LosslessSourcePreferences(com.stash.core.data.platform.AndroidAppPaths(context), downloadQueueDao)
     }
 
     @Test

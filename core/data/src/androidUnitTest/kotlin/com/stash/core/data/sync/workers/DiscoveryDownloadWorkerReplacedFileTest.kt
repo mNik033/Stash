@@ -11,6 +11,7 @@ import com.stash.core.data.db.StashDatabase
 import com.stash.core.data.db.entity.DownloadQueueEntity
 import com.stash.core.data.db.entity.TrackEntity
 import com.stash.core.data.files.LocalFileOps
+import com.stash.core.data.files.AndroidLocalFileOps
 import com.stash.core.data.files.TrackFileReplacement
 import com.stash.core.data.sync.DownloadJobRegistry
 import com.stash.core.data.sync.TrackDownloadOutcome
@@ -168,7 +169,7 @@ class DiscoveryDownloadWorkerReplacedFileTest {
 
     @Test fun `a kept file whose row moved on is not restored`() = runBlocking {
         val trackId = trackHandedBackForReplacement()
-        val replacement = TrackFileReplacement(db.trackDao(), LocalFileOps(context))
+        val replacement = TrackFileReplacement(db.trackDao(), AndroidLocalFileOps(context))
 
         replacement.restoreKeptFile(trackId, newFile.absolutePath) // not the path the row records
         assertFalse(db.trackDao().getById(trackId)!!.isDownloaded)
@@ -208,7 +209,7 @@ class DiscoveryDownloadWorkerReplacedFileTest {
                 blocklistGuard = mockk { coEvery { isBlocked(any(), any(), any(), any()) } returns false },
                 syncNotificationManager = mockk(relaxed = true),
                 downloadJobs = DownloadJobRegistry(),
-                fileReplacement = TrackFileReplacement(db.trackDao(), LocalFileOps(appContext)),
+                fileReplacement = TrackFileReplacement(db.trackDao(), AndroidLocalFileOps(appContext)),
             )
         })
         .build()

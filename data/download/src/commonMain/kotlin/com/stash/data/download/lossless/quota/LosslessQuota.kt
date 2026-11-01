@@ -1,17 +1,17 @@
-﻿package com.stash.data.download.lossless.quota
+package com.stash.data.download.lossless.quota
 
-import android.content.Context
 import com.stash.core.common.Log
+import com.stash.core.common.platform.AppPaths
 import androidx.datastore.core.DataStore
 import androidx.datastore.core.handlers.ReplaceFileCorruptionHandler
+import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
-import androidx.datastore.preferences.preferencesDataStore
 import com.stash.data.download.lossless.relay.RelaySigner
-import dagger.hilt.android.qualifiers.ApplicationContext
+import java.io.File
 import javax.inject.Inject
 import javax.inject.Provider
 import javax.inject.Singleton
@@ -67,11 +67,6 @@ sealed interface LosslessQuotaNotice {
     data class Spent(val limit: Int, override val resetsAtMs: Long) : LosslessQuotaNotice
 }
 
-private val Context.losslessQuotaDataStore: DataStore<Preferences> by preferencesDataStore(
-    name = "lossless_quota",
-    corruptionHandler = ReplaceFileCorruptionHandler { emptyPreferences() },
-)
-
 /**
  * The daily lossless allowance (500 free a day, reset at UTC midnight, shared by the Qobuz and
  * Tidal relays; spec 2026-10-17). Both relay clients feed it from EVERY answer's
@@ -97,9 +92,12 @@ class LosslessQuota internal constructor(
     private val clock: () -> Long,
     private val scope: CoroutineScope,
 ) {
-    @Inject constructor(@ApplicationContext context: Context, signer: Provider<RelaySigner>) :
+    @Inject constructor(appPaths: AppPaths, signer: Provider<RelaySigner>) :
         this(
-            context.losslessQuotaDataStore,
+            PreferenceDataStoreFactory.create(
+                corruptionHandler = ReplaceFileCorruptionHandler { emptyPreferences() },
+                produceFile = { File(appPaths.filesDir, "datastore/lossless_quota.preferences_pb") },
+            ),
             { System.currentTimeMillis() + signer.get().clockOffsetSec * 1000L },
             CoroutineScope(SupervisorJob() + Dispatchers.IO),
         )
@@ -368,7 +366,7 @@ class LosslessQuota internal constructor(
         fun asOf(a: LosslessAllowance, nowMs: Long): LosslessAllowance =
             if (nowMs < a.resetsAtMs) a else LosslessAllowance(0, a.limit, nextUtcMidnightSec(nowMs))
 
-        /** `"412/500"` â†’ (412, 500); `"412/unlimited"` â†’ (412, null); junk â†’ null. */
+        /** `"412/500"` → (412, 500); `"412/unlimited"` → (412, null); junk → null. */
         internal fun parseCount(v: String?): Pair<Int, Int?>? {
             val parts = v?.trim()?.split('/')?.takeIf { it.size == 2 } ?: return null
             val used = parts[0].trim().toIntOrNull()?.takeIf { it >= 0 } ?: return null

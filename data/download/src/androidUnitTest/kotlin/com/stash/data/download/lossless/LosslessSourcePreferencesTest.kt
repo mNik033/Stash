@@ -16,7 +16,7 @@ import org.robolectric.RobolectricTestRunner
 @RunWith(RobolectricTestRunner::class)
 class LosslessSourcePreferencesTest {
     private val ctx = ApplicationProvider.getApplicationContext<Context>()
-    private val prefs = LosslessSourcePreferences(ctx, mockk<DownloadQueueDao>(relaxed = true))
+    private val prefs = LosslessSourcePreferences(com.stash.core.data.platform.AndroidAppPaths(ctx), mockk<DownloadQueueDao>(relaxed = true))
 
     /** The preferencesDataStore delegate is process-wide; start each test clean (codebase convention). */
     @Before fun clear() = runBlocking {

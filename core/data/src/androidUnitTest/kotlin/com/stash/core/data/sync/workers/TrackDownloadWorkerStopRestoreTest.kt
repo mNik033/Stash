@@ -13,6 +13,7 @@ import com.stash.core.data.db.StashDatabase
 import com.stash.core.data.db.entity.DownloadQueueEntity
 import com.stash.core.data.db.entity.TrackEntity
 import com.stash.core.data.files.LocalFileOps
+import com.stash.core.data.files.AndroidLocalFileOps
 import com.stash.core.data.files.TrackFileReplacement
 import com.stash.core.data.sync.DownloadJobRegistry
 import com.stash.core.data.sync.TrackDownloader
@@ -185,7 +186,7 @@ class TrackDownloadWorkerStopRestoreTest {
                     syncLog = mockk(relaxed = true),
                     flacUpgradeSweeper = mockk(relaxed = true),
                     downloadJobs = DownloadJobRegistry(),
-                    fileReplacement = TrackFileReplacement(db.trackDao(), LocalFileOps(appContext)),
+                    fileReplacement = TrackFileReplacement(db.trackDao(), AndroidLocalFileOps(appContext)),
                 )
             })
             .build()

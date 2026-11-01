@@ -1,10 +1,12 @@
 package com.stash.data.download
 
+import com.stash.data.download.files.CommittedTrack
+
 import android.content.Context
 import com.stash.core.common.constants.StashConstants
 import com.stash.core.data.db.dao.PlaylistDao
 import com.stash.core.data.db.dao.TrackDao
-import com.stash.core.data.files.LocalFileOps
+import com.stash.core.data.files.AndroidLocalFileOps
 import com.stash.core.data.lastfm.LastFmApiClient
 import com.stash.core.data.lastfm.LastFmCredentials
 import com.stash.core.model.QualityTier
@@ -64,7 +66,7 @@ class DownloadManagerJunkBodyTest {
     private val trackDao: TrackDao = mockk(relaxed = true)
 
     /** The real gate: plain temp paths need nothing from the context. */
-    private val localFileOps = LocalFileOps(mockk<Context>(relaxed = true))
+    private val localFileOps = AndroidLocalFileOps(mockk<Context>(relaxed = true))
 
     @Before
     fun setUp() {
@@ -73,7 +75,7 @@ class DownloadManagerJunkBodyTest {
         coEvery { trackDao.getById(any()) } returns null
         coEvery { fileOrganizer.getTempDir() } returns tmp.root
         coEvery { fileOrganizer.commitDownload(any(), any(), any(), any(), any(), any(), any(), any()) } returns
-            FileOrganizer.CommittedTrack("/music/evanescence-lacrymosa.opus", AUDIO_BYTES.toLong())
+            CommittedTrack("/music/evanescence-lacrymosa.opus", AUDIO_BYTES.toLong())
     }
 
     private fun newSubject(): DownloadManager = DownloadManager(

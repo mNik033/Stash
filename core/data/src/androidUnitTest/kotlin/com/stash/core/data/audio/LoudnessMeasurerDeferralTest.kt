@@ -31,7 +31,7 @@ import java.io.File
 class LoudnessMeasurerDeferralTest {
 
     private class FakeCharging(private val charging: Boolean) :
-        ChargingMonitor(mockk(relaxed = true)) {
+        ChargingMonitor {
         override fun isCharging(): Boolean = charging
     }
 

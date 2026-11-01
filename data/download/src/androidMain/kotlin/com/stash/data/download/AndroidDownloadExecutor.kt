@@ -1,4 +1,4 @@
-﻿package com.stash.data.download
+package com.stash.data.download
 
 import android.content.Context
 import com.stash.core.common.Log
@@ -24,19 +24,6 @@ import javax.inject.Singleton
 /**
  * Result of a yt-dlp download attempt.
  */
-sealed class DownloadResult {
-    /** Download succeeded; [file] is the audio on disk. */
-    data class Success(val file: File) : DownloadResult()
-
-    /** yt-dlp exited with an error. [message] contains the stderr output. */
-    data class YtDlpError(val message: String) : DownloadResult()
-
-    /** An unexpected exception occurred. */
-    data class Error(val message: String, val cause: Throwable? = null) : DownloadResult()
-
-    /** yt-dlp ran without error but no output file was found. */
-    data class NoOutput(val stdout: String?, val stderr: String?) : DownloadResult()
-}
 
 /**
  * Executes a single yt-dlp download, converting the result to audio.
@@ -50,12 +37,12 @@ sealed class DownloadResult {
  * We do NOT add our own --ffmpeg-location to avoid conflicts.
  */
 @Singleton
-class DownloadExecutor @Inject constructor(
+class AndroidDownloadExecutor @Inject constructor(
     private val ytDlpManager: YtDlpManager,
     @ApplicationContext private val context: Context,
     private val tokenManager: TokenManager,
     private val webmRemuxer: WebmAudioRemuxer,
-) {
+) : DownloadExecutor {
     companion object {
         private const val TAG = "StashDL"
 
@@ -132,12 +119,12 @@ class DownloadExecutor @Inject constructor(
      * @param onProgress  Callback receiving download progress as a fraction in [0.0, 1.0].
      * @return A [DownloadResult] describing the outcome.
      */
-    suspend fun download(
+    override suspend fun download(
         url: String,
         outputDir: File,
         filename: String,
         qualityArgs: List<String>,
-        onProgress: (Float) -> Unit = {},
+        onProgress: (Float) -> Unit,
     ): DownloadResult = withContext(Dispatchers.IO) {
         // Checked before the freshen, the cookie file and yt-dlp: nothing runs
         // for a name or URL that fails. Neither value is logged.

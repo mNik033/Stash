@@ -1,5 +1,7 @@
 package com.stash.data.download.shared
 
+import com.stash.data.download.files.CommittedTrack
+
 import com.stash.core.data.audio.AudioDurationExtractor
 import com.stash.core.model.Track
 import com.stash.data.download.files.AlbumArtCache
@@ -52,7 +54,7 @@ class TrackFinalizerTest {
         }
         coEvery {
             fileOrganizer.commitDownload(any(), any(), any(), any(), any(), any())
-        } returns FileOrganizer.CommittedTrack("/library/Drake/x.flac", 100)
+        } returns CommittedTrack("/library/Drake/x.flac", 100)
         coEvery { audioExtractor.extract(any()) } returns null
 
         val result = subject.finalizeFile(
@@ -78,7 +80,7 @@ class TrackFinalizerTest {
         }
         coEvery {
             fileOrganizer.commitDownload(any(), any(), any(), any(), any(), any())
-        } returns FileOrganizer.CommittedTrack("/library/Drake/x.flac", 100)
+        } returns CommittedTrack("/library/Drake/x.flac", 100)
         coEvery { audioExtractor.extract(any()) } returns null
 
         val result = subject.finalizeFile(
@@ -116,7 +118,7 @@ class TrackFinalizerTest {
         val formats = mutableListOf<String>()
         coEvery {
             fileOrganizer.commitDownload(any(), any(), any(), any(), capture(formats), any())
-        } returns FileOrganizer.CommittedTrack("/library/Drake/x.flac", 100)
+        } returns CommittedTrack("/library/Drake/x.flac", 100)
         coEvery { audioExtractor.extract(any()) } returns null
 
         listOf(

@@ -42,9 +42,9 @@ class FileOrganizerPlannedPathTest {
         musicDir = File(filesDir, "music")
     }
 
-    private fun organizer(layout: LibraryLayout): FileOrganizer {
+    private fun organizer(layout: LibraryLayout): AndroidFileOrganizer {
         every { storagePreference.libraryLayout } returns flowOf(layout)
-        return FileOrganizer(context, storagePreference, trackDao)
+        return AndroidFileOrganizer(context, storagePreference, trackDao)
     }
 
     private fun temp(name: String) = tmp.newFile(name).apply { writeText("audio") }

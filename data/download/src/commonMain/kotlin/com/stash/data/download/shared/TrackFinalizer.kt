@@ -1,4 +1,4 @@
-﻿package com.stash.data.download.shared
+package com.stash.data.download.shared
 
 import com.stash.core.common.Log
 import com.stash.core.data.audio.AudioDurationExtractor
@@ -6,7 +6,7 @@ import com.stash.core.data.audio.AudioMetadata
 import com.stash.core.model.Track
 import com.stash.data.download.files.AlbumArtCache
 import com.stash.data.download.files.FileOrganizer
-import com.stash.data.download.files.FileOrganizer.CommittedTrack
+import com.stash.data.download.files.CommittedTrack
 import com.stash.data.download.files.MetadataEmbedder
 import com.stash.data.download.lossless.AudioFormat
 import kotlinx.coroutines.CancellationException
@@ -24,12 +24,12 @@ import javax.inject.Singleton
  *  2. Move the temp file to the canonical library path.
  *  3. Probe the on-disk file for codec/bitrate/sample-rate/bit-depth.
  *
- * Returns [FinalizeResult]. **No DB writes** â€” caller does its own
+ * Returns [FinalizeResult]. **No DB writes** — caller does its own
  * row insert/update so sync preserves spotifyUri/isrc/album/explicit
  * and search runs `linkTrackToDownloadsMix` on its own path.
  *
  * Loudness measurement is intentionally NOT part of this flow anymore
- * (v0.9.26 hotfix). The synchronous ffmpeg ebur128 pass added ~25â€“50 s
+ * (v0.9.26 hotfix). The synchronous ffmpeg ebur128 pass added ~25–50 s
  * per track and serialised entire albums behind a single measurement
  * mutex. Callers now trigger
  * [com.stash.core.data.audio.LoudnessMeasurer.measureAndPersistInBackground]
@@ -48,7 +48,7 @@ class TrackFinalizer @Inject constructor(
      * built from whatever shape they have ([com.stash.core.model.Track]
      * for sync; a stub built from a TrackItem for search).
      *
-     * Embedding is non-fatal â€” file remains playable on failure.
+     * Embedding is non-fatal — file remains playable on failure.
      * The probe in [FinalizeResult.Success.meta] may be null if the
      * committed file cannot be opened by [MediaMetadataRetriever].
      */

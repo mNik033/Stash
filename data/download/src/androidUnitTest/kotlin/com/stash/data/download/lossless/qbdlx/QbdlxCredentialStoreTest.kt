@@ -31,7 +31,7 @@ class QbdlxCredentialStoreTest {
     private val ctx = ApplicationProvider.getApplicationContext<Context>()
 
     private fun store(creds: QobuzWebCreds? = QobuzWebCreds("712109809", "web-secret")) =
-        QbdlxCredentialStore(ctx) { creds }
+        QbdlxCredentialStore(com.stash.core.data.platform.AndroidAppPaths(ctx)) { creds }
 
     @Before
     fun setUp() {

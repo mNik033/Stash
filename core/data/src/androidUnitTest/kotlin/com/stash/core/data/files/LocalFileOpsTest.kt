@@ -19,7 +19,7 @@ import java.io.File
  */
 class LocalFileOpsTest {
 
-    private val ops = LocalFileOps(mockk(relaxed = true))
+    private val ops = AndroidLocalFileOps(mockk(relaxed = true))
 
     @get:Rule val tmp = TemporaryFolder()
 

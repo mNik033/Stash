@@ -17,7 +17,7 @@ import dagger.hilt.components.SingletonComponent
 @InstallIn(SingletonComponent::class)
 object FileExistenceCheckerModule {
     @Provides
-    fun provideFileExistenceSessionFactory(fileOrganizer: FileOrganizer): FileExistenceSessionFactory =
+    fun provideFileExistenceSessionFactory(fileOrganizer: AndroidFileOrganizer): FileExistenceSessionFactory =
         FileExistenceSessionFactory { fileOrganizer.existenceSession() }
 
     @Provides

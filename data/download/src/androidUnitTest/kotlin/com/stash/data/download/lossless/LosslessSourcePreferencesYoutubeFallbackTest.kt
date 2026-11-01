@@ -33,7 +33,7 @@ class LosslessSourcePreferencesYoutubeFallbackTest {
             .delete()
         // `relaxed = true` (not `relaxUnitFun`) — `requeueWaitingForLossless()`
         // returns Int, not Unit, so the more permissive relaxed mode is needed.
-        prefs = LosslessSourcePreferences(context, mockk(relaxed = true))
+        prefs = LosslessSourcePreferences(com.stash.core.data.platform.AndroidAppPaths(context), mockk(relaxed = true))
     }
 
     @Test

@@ -25,6 +25,7 @@ class MetadataEmbedderExecutionTest {
     private val nativeDir = File(root, "native").apply { mkdirs() }
     private val noBackupDir = File(root, "no-backup").apply { mkdirs() }
     private val context: Context = mockk()
+    private val resolver = AndroidFfmpegBinaryResolver(context)
     private val applicationInfo = ApplicationInfo().apply {
         nativeLibraryDir = nativeDir.absolutePath
     }
@@ -86,7 +87,7 @@ class MetadataEmbedderExecutionTest {
     fun `failure to preserve original propagates and cleans replacement files`() = runTest {
         installSuccessfulFfmpeg()
         val audio = newAudio()
-        val embedder = MetadataEmbedder(context, versionProvider).apply {
+        val embedder = MetadataEmbedder(resolver, versionProvider).apply {
             renameFile = { source, target ->
                 if (source == audio) false else source.renameTo(target)
             }
@@ -104,7 +105,7 @@ class MetadataEmbedderExecutionTest {
         installSuccessfulFfmpeg()
         val audio = newAudio()
         val output = taggedOutput(audio)
-        val embedder = MetadataEmbedder(context, versionProvider).apply {
+        val embedder = MetadataEmbedder(resolver, versionProvider).apply {
             renameFile = { source, target ->
                 if (source == output) false else source.renameTo(target)
             }
@@ -122,7 +123,7 @@ class MetadataEmbedderExecutionTest {
         installSuccessfulFfmpeg()
         val audio = newAudio()
 
-        val result = MetadataEmbedder(context, versionProvider).embedMetadata(audio, track)
+        val result = MetadataEmbedder(resolver, versionProvider).embedMetadata(audio, track)
 
         assertSame(audio, result)
         assertEquals("tagged", audio.readText())
@@ -144,7 +145,7 @@ class MetadataEmbedderExecutionTest {
         )
         val audio = newAudio()
 
-        MetadataEmbedder(context, versionProvider).embedMetadata(audio, track)
+        MetadataEmbedder(resolver, versionProvider).embedMetadata(audio, track)
 
         assertEquals("tagged", audio.readText())
     }
@@ -153,7 +154,7 @@ class MetadataEmbedderExecutionTest {
     fun `a hung ffmpeg is killed at the timeout and the original is kept`() = runTest {
         installFfmpeg("#!/bin/sh\nexec sleep 60\n")
         val audio = newAudio()
-        val embedder = MetadataEmbedder(context, versionProvider).apply { ffmpegTimeoutSec = 1 }
+        val embedder = MetadataEmbedder(resolver, versionProvider).apply { ffmpegTimeoutSec = 1 }
 
         val failure = assertFailurePreservesOriginal(audio, embedder)
 
@@ -164,7 +165,7 @@ class MetadataEmbedderExecutionTest {
 
     private suspend fun assertFailurePreservesOriginal(
         audio: File,
-        embedder: MetadataEmbedder = MetadataEmbedder(context, versionProvider),
+        embedder: MetadataEmbedder = MetadataEmbedder(resolver, versionProvider),
     ): Throwable {
         val original = audio.readBytes()
 

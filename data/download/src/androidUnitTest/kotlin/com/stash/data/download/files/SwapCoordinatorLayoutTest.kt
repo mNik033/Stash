@@ -5,7 +5,7 @@ import com.stash.core.data.audio.AudioDurationExtractor
 import com.stash.core.data.blocklist.BlocklistGuard
 import com.stash.core.data.db.dao.TrackDao
 import com.stash.core.data.db.entity.TrackEntity
-import com.stash.core.data.files.LocalFileOps
+import com.stash.core.data.files.AndroidLocalFileOps
 import com.stash.core.data.prefs.LibraryLayout
 import com.stash.core.data.prefs.StoragePreference
 import com.stash.core.data.sync.TrackIdentityEvents
@@ -47,7 +47,7 @@ class SwapCoordinatorLayoutTest {
     private val downloadExecutor = mockk<DownloadExecutor>()
     private val qualityPrefs = mockk<QualityPreferencesManager>()
     private val blocklistGuard = mockk<BlocklistGuard>(relaxed = true)
-    private val localFileOps = spyk(LocalFileOps(mockk(relaxed = true)))
+    private val localFileOps = spyk(AndroidLocalFileOps(mockk(relaxed = true)))
     private val trackIdentityEvents = mockk<TrackIdentityEvents>(relaxed = true)
     private val audioExtractor = mockk<AudioDurationExtractor>()
     private val saved = slot<String>()
@@ -94,7 +94,7 @@ class SwapCoordinatorLayoutTest {
         every { storagePreference.libraryLayout } returns flowOf(layout)
         return SwapCoordinator(
             downloadExecutor = downloadExecutor,
-            fileOrganizer = FileOrganizer(context, storagePreference, trackDao),
+            fileOrganizer = AndroidFileOrganizer(context, storagePreference, trackDao),
             qualityPrefs = qualityPrefs,
             trackDao = trackDao,
             blocklistGuard = blocklistGuard,

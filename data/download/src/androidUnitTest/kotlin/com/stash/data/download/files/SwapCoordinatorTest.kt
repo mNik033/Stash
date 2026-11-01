@@ -1,5 +1,7 @@
 package com.stash.data.download.files
 
+import com.stash.data.download.files.CommittedTrack
+
 import android.content.Context
 import com.stash.core.data.audio.AudioDurationExtractor
 import com.stash.core.data.audio.AudioMetadata
@@ -7,6 +9,7 @@ import com.stash.core.data.blocklist.BlocklistGuard
 import com.stash.core.data.db.dao.TrackDao
 import com.stash.core.data.db.entity.TrackEntity
 import com.stash.core.data.files.LocalFileOps
+import com.stash.core.data.files.AndroidLocalFileOps
 import com.stash.core.data.sync.TrackIdentityEvents
 import com.stash.core.model.QualityTier
 import com.stash.data.download.DownloadExecutor
@@ -53,11 +56,11 @@ class SwapCoordinatorTest {
     @get:Rule val tmp = TemporaryFolder()
 
     private val downloadExecutor = mockk<DownloadExecutor>()
-    private val fileOrganizer = mockk<FileOrganizer>()
+    private val fileOrganizer = mockk<AndroidFileOrganizer>()
     private val qualityPrefs = mockk<QualityPreferencesManager>()
     private val trackDao = mockk<TrackDao>(relaxed = true)
     private val blocklistGuard = mockk<BlocklistGuard>(relaxed = true)
-    private val localFileOps = spyk(LocalFileOps(mockk(relaxed = true)))
+    private val localFileOps = spyk(AndroidLocalFileOps(mockk(relaxed = true)))
     private val trackIdentityEvents = mockk<TrackIdentityEvents>(relaxed = true)
     private val audioExtractor = mockk<AudioDurationExtractor>()
     private val metadataEmbedder = mockk<MetadataEmbedder>(relaxed = true)
@@ -143,7 +146,7 @@ class SwapCoordinatorTest {
         } returns DownloadResult.Success(newTemp)
         coEvery {
             fileOrganizer.commitDownload(any(), any(), any(), any(), any(), any(), any())
-        } returns FileOrganizer.CommittedTrack(committedPath, 123L)
+        } returns CommittedTrack(committedPath, 123L)
         return newTemp
     }
 
@@ -155,7 +158,7 @@ class SwapCoordinatorTest {
             val temp = firstArg<File>()
             temp.copyTo(target, overwrite = true)
             temp.delete()
-            FileOrganizer.CommittedTrack(target.absolutePath, target.length())
+            CommittedTrack(target.absolutePath, target.length())
         }
     }
 

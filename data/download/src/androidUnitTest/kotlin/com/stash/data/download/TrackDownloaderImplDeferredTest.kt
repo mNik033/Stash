@@ -2,7 +2,7 @@ package com.stash.data.download
 
 import com.stash.core.data.db.dao.DownloadQueueDao
 import com.stash.core.data.db.entity.DownloadQueueEntity
-import com.stash.core.data.files.LocalFileOps
+import com.stash.core.data.files.AndroidLocalFileOps
 import com.stash.core.data.sync.TrackDownloadOutcome
 import com.stash.core.model.DownloadStatus
 import com.stash.core.model.Track
@@ -32,7 +32,7 @@ class TrackDownloaderImplDeferredTest {
     private val downloadQueueDao: DownloadQueueDao = mockk(relaxed = true)
     // Real LocalFileOps over a mock Context — the plain-path branch (used by
     // these tests' temp files) never touches the Context.
-    private val localFileOps = LocalFileOps(mockk(relaxed = true))
+    private val localFileOps = AndroidLocalFileOps(mockk(relaxed = true))
 
     private fun newSubject(): TrackDownloaderImpl = TrackDownloaderImpl(
         downloadManager = downloadManager,

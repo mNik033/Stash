@@ -1,4 +1,4 @@
-﻿package com.stash.data.download.files
+package com.stash.data.download.files
 
 import android.content.Context
 import android.net.Uri
@@ -39,14 +39,14 @@ sealed interface ReorganizeLibraryState {
 
 /**
  * Relocates every downloaded track INTO the user's chosen folder structure
- * ([LibraryLayout]) without changing its storage destination â€” internal
+ * ([LibraryLayout]) without changing its storage destination — internal
  * tracks stay internal, SAF-tree tracks stay inside the granted tree. The
  * destination switch itself remains the separate "Move library to SD" flow;
  * this pass is purely about the on-disk SHAPE (#198 per-playlist, #104 flat).
  *
  * Runs on a `@Singleton`-scoped [scope] so the reorganize survives ViewModel
  * death (the user can leave Settings and come back to progress), mirroring
- * [MoveLibraryCoordinator]. Work does NOT survive process death â€” it's a
+ * [MoveLibraryCoordinator]. Work does NOT survive process death — it's a
  * manual, restartable action.
  *
  * Safety invariants (mirroring MoveLibraryCoordinator):
@@ -70,7 +70,7 @@ class ReorganizeLibraryCoordinator @Inject constructor(
     @ApplicationContext private val context: Context,
     private val trackDao: TrackDao,
     private val storagePreference: StoragePreference,
-    private val fileOrganizer: FileOrganizer,
+    private val fileOrganizer: AndroidFileOrganizer,
     private val rewriteGate: LibraryRewriteGate,
 ) {
     private val _state = MutableStateFlow<ReorganizeLibraryState>(ReorganizeLibraryState.Idle)
@@ -82,7 +82,7 @@ class ReorganizeLibraryCoordinator @Inject constructor(
     /** Kick off the reorganize. No-op if already running. */
     fun start() {
         if (_state.value is ReorganizeLibraryState.Running) return
-        // Only one whole-library file_path rewrite at a time â€” see
+        // Only one whole-library file_path rewrite at a time — see
         // LibraryRewriteGate. Released in the launch's finally, so a
         // cancelled or failed pass hands it straight back.
         if (!rewriteGate.tryAcquire(GATE_OWNER)) {
@@ -116,9 +116,9 @@ class ReorganizeLibraryCoordinator @Inject constructor(
 
     /**
      * Cheap count of downloaded tracks whose stored location doesn't already
-     * match the current layout â€” used by Settings to gate/label the button.
+     * match the current layout — used by Settings to gate/label the button.
      * Internal paths are compared exactly; SAF URIs are decoded from their
-     * document ids and compared structurally (unparseable â‡’ counted as
+     * document ids and compared structurally (unparseable ⇒ counted as
      * misplaced so the pass gets a chance to verify properly on disk).
      */
     suspend fun countMisplacedTracks(): Int {
@@ -178,8 +178,8 @@ class ReorganizeLibraryCoordinator @Inject constructor(
         // PLAYLIST does the same for a track filed under one playlist name.
         // Both movers overwrite whatever occupies the target name, so an
         // unguarded pass would delete the first claimant's audio and leave
-        // its row pointing at the second one's file. First claimant wins â€”
-        // a row already sitting on the name keeps it â€” and the rest are
+        // its row pointing at the second one's file. First claimant wins —
+        // a row already sitting on the name keeps it — and the rest are
         // skipped, decided here so no delete ever runs for a loser.
         val claimed = HashSet<String>()
         entries.filter { it.alreadyInPlace }.forEach { claimed += it.targetKey }
@@ -260,7 +260,7 @@ class ReorganizeLibraryCoordinator @Inject constructor(
                 }
                 // runCatching swallows CancellationException too. Cancel works
                 // by cancelling activeJob, which surfaces here as a failed
-                // entry â€” the loop would carry on moving the REST of the
+                // entry — the loop would carry on moving the REST of the
                 // library and then overwrite Idle with Done. Re-throw so the
                 // outer handler resets to Idle and the pass actually stops.
                 ok.exceptionOrNull()?.let { if (it is CancellationException) throw it }
@@ -280,7 +280,7 @@ class ReorganizeLibraryCoordinator @Inject constructor(
         }
     }
 
-    /** Internal â†’ internal relocation via rename (copy+delete fallback). */
+    /** Internal → internal relocation via rename (copy+delete fallback). */
     private suspend fun moveWithinInternal(entry: PlanEntry): Boolean {
         val musicRoot = fileOrganizer.internalMusicRoot()
         val source = File(entry.sourcePath)
@@ -303,8 +303,8 @@ class ReorganizeLibraryCoordinator @Inject constructor(
                 target.outputStream().use { output -> input.copyTo(output) }
             }
         }
-        // DB first, then remove the leftover copy â€” same ordering guarantee as
-        // the library move (crash â‡’ duplicate file, never dangling pointer).
+        // DB first, then remove the leftover copy — same ordering guarantee as
+        // the library move (crash ⇒ duplicate file, never dangling pointer).
         trackDao.healFilePath(entry.trackId, target.absolutePath)
         if (!renamed) source.delete()
         moveInternalSidecar(source, target)
@@ -322,7 +322,7 @@ class ReorganizeLibraryCoordinator @Inject constructor(
      *
      * Best-effort by design: a missing sidecar is the normal case (most
      * tracks have no lyrics) and a failed sidecar move must never fail the
-     * track's move â€” the audio and its DB row are already consistent by the
+     * track's move — the audio and its DB row are already consistent by the
      * time this runs.
      */
     private fun moveInternalSidecar(source: File, target: File) {
@@ -344,7 +344,7 @@ class ReorganizeLibraryCoordinator @Inject constructor(
     }
 
 
-    /** SAF â†’ SAF relocation within the granted tree via copy + delete. */
+    /** SAF → SAF relocation within the granted tree via copy + delete. */
     private suspend fun moveWithinSaf(
         entry: PlanEntry,
         root: DocumentFile,
@@ -369,7 +369,7 @@ class ReorganizeLibraryCoordinator @Inject constructor(
             }
         }
 
-        // Already exactly where the layout wants it â†’ skip without touching
+        // Already exactly where the layout wants it → skip without touching
         // (protects against delete-then-recreate of the only copy). Counted
         // as a successful no-op.
         val existing = cursor.findFile(entry.targetName)
@@ -386,7 +386,7 @@ class ReorganizeLibraryCoordinator @Inject constructor(
             }
         } ?: error("Could not copy '${entry.targetName}' within the SAF tree")
 
-        // DB write before deleting the source â€” a crash leaves a duplicate
+        // DB write before deleting the source — a crash leaves a duplicate
         // document (harmless orphan), never a dead pointer.
         trackDao.healFilePath(entry.trackId, target.uri.toString())
         if (!source.delete()) {
@@ -402,7 +402,7 @@ class ReorganizeLibraryCoordinator @Inject constructor(
      *
      * The old directory is recovered by decoding the source document id the
      * same way [safAlreadyInPlace] does; providers whose ids don't follow
-     * `<volume>:<path>` simply leave the sidecar alone. Best-effort â€” the
+     * `<volume>:<path>` simply leave the sidecar alone. Best-effort — the
      * audio and its DB row are already consistent when this runs, so a
      * sidecar problem must never fail the track.
      */
@@ -418,7 +418,7 @@ class ReorganizeLibraryCoordinator @Inject constructor(
 
             // Walk from the tree root to the audio's old directory. The
             // decoded path is volume-relative, so it is PREFIXED by the
-            // picked tree's own base path â€” those leading segments do not
+            // picked tree's own base path — those leading segments do not
             // exist under root and are skipped. Once we have descended even
             // once we are inside the tree, and any further miss means the
             // path doesn't match this tree: give up rather than guess.

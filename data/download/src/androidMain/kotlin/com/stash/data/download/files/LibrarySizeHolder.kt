@@ -53,7 +53,7 @@ import kotlinx.coroutines.flow.update
  */
 @Singleton
 class AndroidLibrarySizeHolder @Inject constructor(
-    private val fileOrganizer: FileOrganizer,
+    private val fileOrganizer: AndroidFileOrganizer,
     private val musicRepository: MusicRepository,
 ) : LibrarySizeHolder {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -109,7 +109,7 @@ class AndroidLibrarySizeHolder @Inject constructor(
 }
 
 fun LibrarySizeHolder(
-    fileOrganizer: FileOrganizer,
+    fileOrganizer: AndroidFileOrganizer,
     musicRepository: MusicRepository,
 ): LibrarySizeHolder = AndroidLibrarySizeHolder(fileOrganizer, musicRepository)
 

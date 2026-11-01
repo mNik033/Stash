@@ -1,5 +1,7 @@
 package com.stash.data.download
 
+import com.stash.data.download.files.CommittedTrack
+
 import com.stash.core.data.audio.AudioMetadata
 import com.stash.core.data.db.dao.PlaylistDao
 import com.stash.core.data.db.dao.TrackDao
@@ -60,7 +62,7 @@ class DownloadManagerVideoLengthTest {
     private val audioDurationExtractor: com.stash.core.data.audio.AudioDurationExtractor = mockk(relaxed = true)
     private val trackFinalizer: TrackFinalizer = mockk {
         coEvery { finalizeFile(any(), any(), any()) } returns TrackFinalizer.FinalizeResult.Success(
-            FileOrganizer.CommittedTrack(filePath = SAVED, sizeBytes = 1L),
+            CommittedTrack(filePath = SAVED, sizeBytes = 1L),
             meta = null,
         )
     }

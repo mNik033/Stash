@@ -29,7 +29,7 @@ class LosslessConfigFetcherTest {
     private fun sign(bytes: ByteArray): String = Base64.getEncoder().encodeToString(
         Signature.getInstance("SHA256withECDSA").apply { initSign(keys.private); update(bytes) }.sign(),
     )
-    private fun fetcher() = LosslessConfigFetcher(ctx, OkHttpClient()).also {
+    private fun fetcher() = LosslessConfigFetcher(com.stash.core.data.platform.AndroidAppPaths(ctx), OkHttpClient()).also {
         it.configUrl = server.url("/stash/lossless.json").toString()
         it.publicKeyB64 = pub
     }

@@ -102,6 +102,7 @@ dependencies {
     testImplementation(project(":data:ytmusic"))
     testImplementation(project(":data:spotify"))
     testImplementation(project(":data:cloud"))
+    testImplementation(libs.datastore.preferences)
     testImplementation(libs.kotlinx.serialization.json)
     testImplementation("junit:junit:4.13.2")
     testImplementation(libs.truth)

@@ -1,6 +1,5 @@
 package com.stash.data.download.lossless
 
-import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.core.handlers.ReplaceFileCorruptionHandler
 import androidx.datastore.preferences.core.Preferences
@@ -9,14 +8,12 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
-import androidx.datastore.preferences.preferencesDataStore
 import com.stash.core.auth.crypto.EncryptionManager
 import com.stash.core.auth.crypto.NoOpEncryptionManager
 import com.stash.core.auth.crypto.decryptString
 import com.stash.core.auth.crypto.encryptString
 import com.stash.core.data.db.dao.DownloadQueueDao
 import com.stash.core.model.DownloadMode
-import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.flow.Flow
@@ -26,11 +23,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 
-/** DataStore for lossless-source preferences (priority order, min quality, etc). */
-private val Context.losslessDataStore: DataStore<Preferences> by preferencesDataStore(
-    name = "lossless_source_preferences",
-    corruptionHandler = ReplaceFileCorruptionHandler { emptyPreferences() },
-)
+
 
 /**
  * Persists user preferences for the lossless-source resolver chain:
@@ -49,15 +42,19 @@ private val Context.losslessDataStore: DataStore<Preferences> by preferencesData
  */
 @Singleton
 class LosslessSourcePreferences @Inject constructor(
-    @ApplicationContext private val context: Context,
+    appPaths: com.stash.core.common.platform.AppPaths,
     private val downloadQueueDao: DownloadQueueDao,
     private val encryption: EncryptionManager,
 ) {
+    private val dataStore: DataStore<Preferences> = getDataStore(
+        java.io.File(appPaths.filesDir, "datastore/lossless_source_preferences.preferences_pb")
+    )
+
     /** Secondary constructor for testing */
     constructor(
-        context: Context,
+        appPaths: com.stash.core.common.platform.AppPaths,
         downloadQueueDao: DownloadQueueDao,
-    ) : this(context, downloadQueueDao, NoOpEncryptionManager)
+    ) : this(appPaths, downloadQueueDao, NoOpEncryptionManager)
 
     private val priorityKey = stringPreferencesKey("priority_order")
     private val minQualityKey = stringPreferencesKey("min_quality")
@@ -107,7 +104,7 @@ class LosslessSourcePreferences @Inject constructor(
      * Note `catch {}` COMPLETES the flow: after an error these emit their fallback
      * once and never re-emit for the process lifetime.
      */
-    val enabled: Flow<Boolean> = context.losslessDataStore.data.map { prefs ->
+    val enabled: Flow<Boolean> = dataStore.data.map { prefs ->
         prefs[enabledKey] ?: true
     }.distinctUntilChanged().catch { emit(true) }
 
@@ -121,7 +118,7 @@ class LosslessSourcePreferences @Inject constructor(
      * every unrelated write) and fail-closed (a read error must not terminate a
      * `combine`).
      */
-    val customLosslessEndpoint: Flow<String?> = context.losslessDataStore.data.map { prefs ->
+    val customLosslessEndpoint: Flow<String?> = dataStore.data.map { prefs ->
         prefs[customLosslessEndpointKey]?.takeIf { it.isNotBlank() }
     }.distinctUntilChanged().catch { emit(null) }
 
@@ -129,7 +126,7 @@ class LosslessSourcePreferences @Inject constructor(
 
     suspend fun setCustomLosslessEndpoint(raw: String?) {
         val v = normaliseEndpoint(raw)
-        context.losslessDataStore.edit { prefs ->
+        dataStore.edit { prefs ->
             if (v == null) prefs.remove(customLosslessEndpointKey) else prefs[customLosslessEndpointKey] = v
         }
     }
@@ -142,7 +139,7 @@ class LosslessSourcePreferences @Inject constructor(
      * a BitChord server spends ONE person's Tidal account, so it is never shared
      * through the signed runtime config. Deduped and fail-closed.
      */
-    val bitchordEndpoint: Flow<String?> = context.losslessDataStore.data.map { prefs ->
+    val bitchordEndpoint: Flow<String?> = dataStore.data.map { prefs ->
         prefs[bitchordEndpointKey]?.takeIf { it.isNotBlank() }
     }.distinctUntilChanged().catch { emit(null) }
 
@@ -150,7 +147,7 @@ class LosslessSourcePreferences @Inject constructor(
 
     suspend fun setBitchordEndpoint(raw: String?) {
         val v = normaliseEndpoint(raw)
-        context.losslessDataStore.edit { prefs ->
+        dataStore.edit { prefs ->
             if (v == null) prefs.remove(bitchordEndpointKey) else prefs[bitchordEndpointKey] = v
         }
     }
@@ -160,7 +157,7 @@ class LosslessSourcePreferences @Inject constructor(
      * server runs open, or the token is already the endpoint's path prefix. A
      * secret: encrypted at rest with [EncryptionManager]. Never logged, never in the diagnostics bundle.
      */
-    val bitchordAccessToken: Flow<String?> = context.losslessDataStore.data.map { prefs ->
+    val bitchordAccessToken: Flow<String?> = dataStore.data.map { prefs ->
         prefs[bitchordAccessTokenKey]?.takeIf { it.isNotBlank() }?.let { encryption.decryptString(it) }
     }.distinctUntilChanged().catch { emit(null) }
 
@@ -169,7 +166,7 @@ class LosslessSourcePreferences @Inject constructor(
     suspend fun setBitchordAccessToken(raw: String?) {
         val v = raw?.trim()?.takeIf { it.isNotEmpty() }
         val encrypted = v?.let { encryption.encryptString(it) }
-        context.losslessDataStore.edit { prefs ->
+        dataStore.edit { prefs ->
             if (encrypted == null) prefs.remove(bitchordAccessTokenKey) else prefs[bitchordAccessTokenKey] = encrypted
         }
     }
@@ -182,7 +179,7 @@ class LosslessSourcePreferences @Inject constructor(
      * releases waiting downloads: they wait under the download mode, which this doesn't touch.
      */
     suspend fun setEnabled(value: Boolean) {
-        context.losslessDataStore.edit { prefs ->
+        dataStore.edit { prefs ->
             if (prefs[downloadModeKey] == null) prefs[downloadModeKey] = legacyDownloadMode(prefs).name
             prefs[enabledKey] = value
         }
@@ -197,14 +194,14 @@ class LosslessSourcePreferences @Inject constructor(
      * [migrateDownloadMode] stores it once at app start, so an existing user's downloads carry
      * on as they were.
      */
-    val downloadMode: Flow<DownloadMode> = context.losslessDataStore.data.map { prefs ->
+    val downloadMode: Flow<DownloadMode> = dataStore.data.map { prefs ->
         DownloadMode.fromName(prefs[downloadModeKey]) ?: legacyDownloadMode(prefs)
     }.distinctUntilChanged().catch { emit(DownloadMode.LOSSLESS) }
 
     suspend fun downloadModeNow(): DownloadMode = downloadMode.first()
 
     suspend fun setDownloadMode(mode: DownloadMode) {
-        context.losslessDataStore.edit { prefs -> prefs[downloadModeKey] = mode.name }
+        dataStore.edit { prefs -> prefs[downloadModeKey] = mode.name }
     }
 
     /**
@@ -214,7 +211,7 @@ class LosslessSourcePreferences @Inject constructor(
      */
     suspend fun migrateDownloadMode(): DownloadMode {
         var mode = DownloadMode.LOSSLESS
-        context.losslessDataStore.edit { prefs ->
+        dataStore.edit { prefs ->
             val stored = DownloadMode.fromName(prefs[downloadModeKey])
             mode = stored ?: legacyDownloadMode(prefs).also { prefs[downloadModeKey] = it.name }
         }
@@ -227,31 +224,31 @@ class LosslessSourcePreferences @Inject constructor(
 
     /** Tests: write keys as an older build stored them, bypassing today's setters. */
     internal suspend fun writeRawForTest(block: (androidx.datastore.preferences.core.MutablePreferences) -> Unit) {
-        context.losslessDataStore.edit { block(it) }
+        dataStore.edit { block(it) }
     }
 
     /**
      * Tidal's 320 kbps AAC when a song has no lossless version, for streaming and
      * downloads. Default ON; OFF keeps Tidal FLAC-only.
      */
-    val tidalAacFallback: Flow<Boolean> = context.losslessDataStore.data.map { prefs ->
+    val tidalAacFallback: Flow<Boolean> = dataStore.data.map { prefs ->
         prefs[tidalAacFallbackKey] ?: true
     }
 
     suspend fun tidalAacFallbackNow(): Boolean = tidalAacFallback.first()
 
     suspend fun setTidalAacFallback(value: Boolean) {
-        context.losslessDataStore.edit { prefs -> prefs[tidalAacFallbackKey] = value }
+        dataStore.edit { prefs -> prefs[tidalAacFallbackKey] = value }
     }
 
-    val youtubeFallbackEnabled: Flow<Boolean> = context.losslessDataStore.data.map { prefs ->
+    val youtubeFallbackEnabled: Flow<Boolean> = dataStore.data.map { prefs ->
         prefs[youtubeFallbackKey] ?: false
     }
 
     suspend fun youtubeFallbackEnabledNow(): Boolean = youtubeFallbackEnabled.first()
 
     suspend fun setYoutubeFallbackEnabled(value: Boolean) {
-        context.losslessDataStore.edit { prefs -> prefs[youtubeFallbackKey] = value }
+        dataStore.edit { prefs -> prefs[youtubeFallbackKey] = value }
         // Enabling YouTube fallback means deferred rows can now be
         // satisfied via the legacy yt-dlp pipeline — release them back
         // to PENDING. Disabling fallback is a no-op for the queue.
@@ -265,7 +262,7 @@ class LosslessSourcePreferences @Inject constructor(
      * OkHttp client attaches it to every squid.wtf request via
      * [com.stash.data.download.lossless.squid.SquidWtfCaptchaInterceptor].
      */
-    val captchaCookieValue: Flow<String?> = context.losslessDataStore.data.map { prefs ->
+    val captchaCookieValue: Flow<String?> = dataStore.data.map { prefs ->
         prefs[captchaCookieKey]?.takeIf { it.isNotBlank() }
     }
 
@@ -275,7 +272,7 @@ class LosslessSourcePreferences @Inject constructor(
      * value was cleared. Used by SquidCookieAutoRefresher to derive
      * cookie age and schedule the next refresh ~25 min after set.
      */
-    val captchaCookieSetAtMs: Flow<Long> = context.losslessDataStore.data.map { prefs ->
+    val captchaCookieSetAtMs: Flow<Long> = dataStore.data.map { prefs ->
         prefs[captchaCookieSetAtKey] ?: 0L
     }
 
@@ -283,7 +280,7 @@ class LosslessSourcePreferences @Inject constructor(
 
     suspend fun setCaptchaCookieValue(value: String?) {
         val now = System.currentTimeMillis()
-        context.losslessDataStore.edit { prefs ->
+        dataStore.edit { prefs ->
             val trimmed = value?.trim()?.takeIf { it.isNotEmpty() }
             if (trimmed == null) {
                 prefs.remove(captchaCookieKey)
@@ -302,7 +299,7 @@ class LosslessSourcePreferences @Inject constructor(
      * StashApplication). No-op when the keys are absent.
      */
     suspend fun purgeRetiredSourceKeys() {
-        context.losslessDataStore.edit { prefs ->
+        dataStore.edit { prefs ->
             prefs.remove(antraSessionKey)
             prefs.remove(antraCfClearanceKey)
             prefs.remove(antraUsernameKey)
@@ -315,30 +312,30 @@ class LosslessSourcePreferences @Inject constructor(
      * banner. Once dismissed, the banner never shows again — same
      * forever-dismissed semantics as `LastFmSessionPreference.bannerDismissed`.
      */
-    val bannerDismissed: Flow<Boolean> = context.losslessDataStore.data.map { prefs ->
+    val bannerDismissed: Flow<Boolean> = dataStore.data.map { prefs ->
         prefs[bannerDismissedKey] ?: false
     }.distinctUntilChanged().catch { emit(false) }
 
     suspend fun setBannerDismissed(dismissed: Boolean) {
-        context.losslessDataStore.edit { prefs -> prefs[bannerDismissedKey] = dismissed }
+        dataStore.edit { prefs -> prefs[bannerDismissedKey] = dismissed }
     }
 
     /**
      * Whether the user has dismissed the "No lossless right now" Home banner.
      * Forever-dismissed. Deduped and fail-closed for the same reason as [enabled].
      */
-    val losslessOfflineDismissed: Flow<Boolean> = context.losslessDataStore.data.map { prefs ->
+    val losslessOfflineDismissed: Flow<Boolean> = dataStore.data.map { prefs ->
         prefs[losslessOfflineDismissedKey] ?: false
     }.distinctUntilChanged().catch { emit(false) }
 
     suspend fun setLosslessOfflineDismissed(dismissed: Boolean) {
-        context.losslessDataStore.edit { prefs -> prefs[losslessOfflineDismissedKey] = dismissed }
+        dataStore.edit { prefs -> prefs[losslessOfflineDismissedKey] = dismissed }
     }
 
     /**
      * User-selected lossless quality tier.
      */
-    val qualityTier: Flow<LosslessQualityTier> = context.losslessDataStore.data.map { prefs ->
+    val qualityTier: Flow<LosslessQualityTier> = dataStore.data.map { prefs ->
         prefs[qualityTierKey]
             ?.let { runCatching { LosslessQualityTier.valueOf(it) }.getOrNull() }
             ?: defaultQualityTier(prefs)
@@ -347,7 +344,7 @@ class LosslessSourcePreferences @Inject constructor(
     suspend fun qualityTierNow(): LosslessQualityTier = qualityTier.first()
 
     suspend fun setQualityTier(tier: LosslessQualityTier) {
-        context.losslessDataStore.edit { prefs -> prefs[qualityTierKey] = tier.name }
+        dataStore.edit { prefs -> prefs[qualityTierKey] = tier.name }
     }
 
     private fun defaultQualityTier(prefs: Preferences): LosslessQualityTier {
@@ -359,7 +356,7 @@ class LosslessSourcePreferences @Inject constructor(
      * Emits the user's source-id priority order. Falls back to
      * [DEFAULT_PRIORITY] when no order has been explicitly saved.
      */
-    val priorityOrder: Flow<List<String>> = context.losslessDataStore.data.map { prefs ->
+    val priorityOrder: Flow<List<String>> = dataStore.data.map { prefs ->
         prefs[priorityKey]
             ?.split(",")
             ?.map { it.trim() }
@@ -372,7 +369,7 @@ class LosslessSourcePreferences @Inject constructor(
     suspend fun priorityOrderNow(): List<String> = priorityOrder.first()
 
     suspend fun setPriorityOrder(order: List<String>) {
-        context.losslessDataStore.edit { prefs ->
+        dataStore.edit { prefs ->
             prefs[priorityKey] = order.joinToString(",")
         }
     }
@@ -381,7 +378,7 @@ class LosslessSourcePreferences @Inject constructor(
      * Minimum acceptable quality. Sources whose [SourceResult.format]
      * doesn't meet this threshold are skipped during resolve.
      */
-    val minQuality: Flow<MinQuality> = context.losslessDataStore.data.map { prefs ->
+    val minQuality: Flow<MinQuality> = dataStore.data.map { prefs ->
         val raw = prefs[minQualityKey]
         raw?.let { runCatching { MinQuality.valueOf(it) }.getOrNull() }
             ?: MinQuality.LOSSLESS
@@ -390,7 +387,7 @@ class LosslessSourcePreferences @Inject constructor(
     suspend fun minQualityNow(): MinQuality = minQuality.first()
 
     suspend fun setMinQuality(value: MinQuality) {
-        context.losslessDataStore.edit { prefs -> prefs[minQualityKey] = value.name }
+        dataStore.edit { prefs -> prefs[minQualityKey] = value.name }
     }
 
     /**
@@ -407,6 +404,16 @@ class LosslessSourcePreferences @Inject constructor(
     }
 
     companion object {
+        private val dataStores = java.util.concurrent.ConcurrentHashMap<String, DataStore<Preferences>>()
+
+        internal fun getDataStore(file: java.io.File): DataStore<Preferences> =
+            dataStores.computeIfAbsent(file.canonicalPath) {
+                androidx.datastore.preferences.core.PreferenceDataStoreFactory.create(
+                    corruptionHandler = ReplaceFileCorruptionHandler { emptyPreferences() },
+                    produceFile = { file },
+                )
+            }
+
         val DEFAULT_PRIORITY: List<String> = listOf(
             "qbdlx_qobuz",
             "tidal_bitchord",

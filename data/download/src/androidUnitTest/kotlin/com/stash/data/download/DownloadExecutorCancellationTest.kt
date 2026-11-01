@@ -45,7 +45,7 @@ class DownloadExecutorCancellationTest {
     fun `cancelling a download interrupts the running yt-dlp call`() = runBlocking {
         coEvery { tokenManager.getYouTubeCookie() } returns null
         every { context.noBackupFilesDir } returns tmp.root
-        val executor = DownloadExecutor(ytDlpManager, context, tokenManager, remuxer)
+        val executor = AndroidDownloadExecutor(ytDlpManager, context, tokenManager, remuxer)
 
         val entered = CountDownLatch(1)
         val interrupted = CountDownLatch(1)

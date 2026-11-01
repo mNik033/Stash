@@ -202,6 +202,42 @@ object DesktopDatabaseModule {
 
     @Provides
     @Singleton
+    fun provideAudioDurationExtractor(impl: com.stash.core.data.audio.DesktopAudioDurationExtractor): com.stash.core.data.audio.AudioDurationExtractor =
+        impl
+
+    @Provides
+    @Singleton
+    fun provideChargingMonitor(impl: com.stash.core.data.audio.DesktopChargingMonitor): com.stash.core.data.audio.ChargingMonitor =
+        impl
+
+    @Provides
+    @Singleton
+    fun provideFFmpegBridge(impl: com.stash.core.data.audio.DesktopFFmpegBridge): com.stash.core.data.audio.FFmpegBridge =
+        impl
+
+    @Provides
+    @Singleton
+    fun provideLocalFileOps(impl: com.stash.core.data.files.DesktopLocalFileOps): com.stash.core.data.files.LocalFileOps =
+        impl
+
+    @Provides
+    @Singleton
+    fun provideSupporterRepository(
+        paths: AppPaths,
+        sharedClient: okhttp3.OkHttpClient,
+        encryption: com.stash.core.auth.crypto.EncryptionManager,
+    ): com.stash.core.data.supporter.SupporterRepository = com.stash.core.data.supporter.SupporterRepository(
+        store = androidx.datastore.preferences.core.PreferenceDataStoreFactory.create(
+            corruptionHandler = androidx.datastore.core.handlers.ReplaceFileCorruptionHandler { androidx.datastore.preferences.core.emptyPreferences() },
+            produceFile = { java.io.File(paths.filesDir, "datastore/" + com.stash.core.data.supporter.SupporterRepository.DATASTORE_FILE) }
+        ),
+        sharedClient = sharedClient,
+        tipJarUrl = "",
+        encryption = encryption,
+    )
+
+    @Provides
+    @Singleton
     fun provideAlbumCache(
         api: com.stash.data.ytmusic.YTMusicApiClient,
     ): com.stash.core.data.cache.AlbumCache = com.stash.core.data.cache.AlbumCache(

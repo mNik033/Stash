@@ -39,27 +39,27 @@ class ChargingMonitorTest {
     fun `plugged into AC reads as charging`() {
         stickBatteryBroadcast(BatteryManager.BATTERY_PLUGGED_AC)
 
-        assertThat(ChargingMonitor(context).isCharging()).isTrue()
+        assertThat(AndroidChargingMonitor(context).isCharging()).isTrue()
     }
 
     @Test
     fun `plugged into USB reads as charging`() {
         stickBatteryBroadcast(BatteryManager.BATTERY_PLUGGED_USB)
 
-        assertThat(ChargingMonitor(context).isCharging()).isTrue()
+        assertThat(AndroidChargingMonitor(context).isCharging()).isTrue()
     }
 
     @Test
     fun `unplugged reads as not charging`() {
         stickBatteryBroadcast(0)
 
-        assertThat(ChargingMonitor(context).isCharging()).isFalse()
+        assertThat(AndroidChargingMonitor(context).isCharging()).isFalse()
     }
 
     @Test
     fun `no sticky broadcast at all reads as not charging`() {
         // Defensive default: with nothing to read, assume battery so the
         // expensive path is skipped and the backfill worker picks it up.
-        assertThat(ChargingMonitor(context).isCharging()).isFalse()
+        assertThat(AndroidChargingMonitor(context).isCharging()).isFalse()
     }
 }

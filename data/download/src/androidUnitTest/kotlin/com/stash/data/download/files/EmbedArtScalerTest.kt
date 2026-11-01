@@ -19,7 +19,7 @@ class EmbedArtScalerTest {
         private val w: Int,
         private val h: Int,
         private val decode: (Int) -> Bitmap?,
-    ) : EmbedArtScaler() {
+    ) : AndroidEmbedArtScaler() {
         val samples = mutableListOf<Int>()
         override fun readBounds(bytes: ByteArray) = w to h
         override fun decodeSampled(bytes: ByteArray, sampleSize: Int): Bitmap? {
@@ -60,10 +60,10 @@ class EmbedArtScalerTest {
 
     @Test
     fun `the sample keeps at least the limit on the long side`() {
-        assertEquals(2, EmbedArtScaler.sampleSizeFor(4000, 1200))
-        assertEquals(2, EmbedArtScaler.sampleSizeFor(2400, 1200))
-        assertEquals(1, EmbedArtScaler.sampleSizeFor(2000, 1200))
-        assertEquals(1, EmbedArtScaler.sampleSizeFor(1300, 1200))
-        assertEquals(4, EmbedArtScaler.sampleSizeFor(4800, 1200))
+        assertEquals(2, AndroidEmbedArtScaler.sampleSizeFor(4000, 1200))
+        assertEquals(2, AndroidEmbedArtScaler.sampleSizeFor(2400, 1200))
+        assertEquals(1, AndroidEmbedArtScaler.sampleSizeFor(2000, 1200))
+        assertEquals(1, AndroidEmbedArtScaler.sampleSizeFor(1300, 1200))
+        assertEquals(4, AndroidEmbedArtScaler.sampleSizeFor(4800, 1200))
     }
 }

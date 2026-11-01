@@ -20,7 +20,7 @@ import org.robolectric.shadows.util.DataSource
 @RunWith(RobolectricTestRunner::class)
 class AudioDurationExtractorTest {
 
-    private val extractor = AudioDurationExtractor(ApplicationProvider.getApplicationContext())
+    private val extractor = AndroidAudioDurationExtractor(ApplicationProvider.getApplicationContext())
 
     private fun retrieverReports(path: String, mime: String) {
         ShadowMediaMetadataRetriever.addMetadata(path, MediaMetadataRetriever.METADATA_KEY_MIMETYPE, mime)

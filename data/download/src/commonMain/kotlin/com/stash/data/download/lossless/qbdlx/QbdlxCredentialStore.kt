@@ -1,6 +1,5 @@
 package com.stash.data.download.lossless.qbdlx
 
-import android.content.Context
 import com.stash.core.common.Log
 import androidx.datastore.core.DataStore
 import androidx.datastore.core.handlers.ReplaceFileCorruptionHandler
@@ -8,12 +7,10 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.stringPreferencesKey
-import androidx.datastore.preferences.preferencesDataStore
 import com.stash.core.auth.crypto.EncryptionManager
 import com.stash.core.auth.crypto.NoOpEncryptionManager
 import com.stash.core.auth.crypto.decryptString
 import com.stash.core.auth.crypto.encryptString
-import dagger.hilt.android.qualifiers.ApplicationContext
 import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -29,14 +26,7 @@ import kotlinx.coroutines.sync.withLock
 /** A user-connected Qobuz account: its token plus the app_id/secret it was minted under. */
 data class QbdlxLoginCredential(val token: String, val appId: String, val appSecret: String)
 
-/**
- * Its own preferences DataStore so the qbdlx token state lives apart from the cross-source
- * [com.stash.data.download.lossless.LosslessSourcePreferences] schema.
- */
-private val Context.qbdlxCredentialsDataStore: DataStore<Preferences> by preferencesDataStore(
-    name = "qbdlx_creds",
-    corruptionHandler = ReplaceFileCorruptionHandler { emptyPreferences() },
-)
+
 
 /**
  * The user's OWN connected Qobuz account — the only Qobuz credential Stash
@@ -49,16 +39,20 @@ private val Context.qbdlxCredentialsDataStore: DataStore<Preferences> by prefere
  */
 @Singleton
 class QbdlxCredentialStore @Inject constructor(
-    @ApplicationContext private val context: Context,
+    appPaths: com.stash.core.common.platform.AppPaths,
     private val webCreds: QobuzWebCredentials,
     private val encryption: EncryptionManager,
 ) : QbdlxSigningResolver {
 
+    private val dataStore: DataStore<Preferences> = getDataStore(
+        java.io.File(appPaths.filesDir, "datastore/qbdlx_creds.preferences_pb")
+    )
+
     /** Test constructor with default no-op encryption */
     constructor(
-        context: Context,
+        appPaths: com.stash.core.common.platform.AppPaths,
         webCreds: QobuzWebCredentials,
-    ) : this(context, webCreds, NoOpEncryptionManager)
+    ) : this(appPaths, webCreds, NoOpEncryptionManager)
 
     // ── User-connected account (bring-your-own Qobuz) ──────────────────────
     private val loginTokenKey = stringPreferencesKey("login_token")
@@ -89,11 +83,11 @@ class QbdlxCredentialStore @Inject constructor(
     internal var clock: () -> Long = { System.currentTimeMillis() }
 
     /** The read [loginCredential]'s one-time load is built from. A seam so tests can fail or cancel it. */
-    internal var readCredentials: suspend () -> Preferences = { context.qbdlxCredentialsDataStore.data.first() }
+    internal var readCredentials: suspend () -> Preferences = { dataStore.data.first() }
 
     /** The connected account's email, for a "Connected as …" label. Null when none. */
     suspend fun connectedEmail(): String? =
-        context.qbdlxCredentialsDataStore.data.first()[loginEmailKey]?.takeIf { it.isNotBlank() }
+        dataStore.data.first()[loginEmailKey]?.takeIf { it.isNotBlank() }
 
     /**
      * The connected account's email, or null — including for a MIGRATED pasted
@@ -107,7 +101,7 @@ class QbdlxCredentialStore @Inject constructor(
      * credential is not.
      */
     val connectedEmailFlow: Flow<String?> =
-        context.qbdlxCredentialsDataStore.data.map { p -> p[loginEmailKey]?.takeIf { it.isNotBlank() } }
+        dataStore.data.map { p -> p[loginEmailKey]?.takeIf { it.isNotBlank() } }
             // Same reasoning as hasLogin: dedupe DataStore's re-emit on every
             // unrelated write, and fail closed so one read error cannot terminate
             // the combine this feeds for the rest of the process.
@@ -120,7 +114,7 @@ class QbdlxCredentialStore @Inject constructor(
      * migration runs on the first [loginCredential].
      */
     val hasLogin: Flow<Boolean> =
-        context.qbdlxCredentialsDataStore.data.map { p ->
+        dataStore.data.map { p ->
             val t = p[loginTokenKey]
             val a = p[loginAppIdKey]
             val s = p[loginAppSecretKey]
@@ -197,7 +191,7 @@ class QbdlxCredentialStore @Inject constructor(
      * and takes no [Preferences] — datastore is an `implementation` dep here.
      */
     suspend fun purgeRetiredPoolKeys() = purgeRetiredPoolKeys(
-        runCatching { context.qbdlxCredentialsDataStore.data.first() }
+        runCatching { dataStore.data.first() }
             .onFailure { if (it is CancellationException) throw it }
             .getOrNull(),
     )
@@ -206,7 +200,7 @@ class QbdlxCredentialStore @Inject constructor(
     private suspend fun purgeRetiredPoolKeys(p: Preferences?) {
         if (p?.contains(STALE_POOL_KEY) != true && p?.contains(STALE_PINNED_KEY) != true) return
         runCatching {
-            context.qbdlxCredentialsDataStore.edit { it.remove(STALE_POOL_KEY); it.remove(STALE_PINNED_KEY) }
+            dataStore.edit { it.remove(STALE_POOL_KEY); it.remove(STALE_PINNED_KEY) }
         }
             // Only claim the purge when it actually happened — logging success over a
             // failed edit would assert that plaintext tokens are gone while they remain.
@@ -231,7 +225,7 @@ class QbdlxCredentialStore @Inject constructor(
         setUserCredential(pasted, creds.appId, creds.appSecret, email = null)
         // Only drop the value we actually migrated — a token pasted concurrently
         // must not be swallowed by this cleanup.
-        context.qbdlxCredentialsDataStore.edit { prefs ->
+        dataStore.edit { prefs ->
             val stored = prefs[pastedTokenKey]
             if (stored != null && encryption.decryptString(stored) == pasted) {
                 prefs.remove(pastedTokenKey)
@@ -253,7 +247,7 @@ class QbdlxCredentialStore @Inject constructor(
         val encToken = encryption.encryptString(token)
         val encAppId = encryption.encryptString(appId)
         val encAppSecret = encryption.encryptString(appSecret)
-        context.qbdlxCredentialsDataStore.edit {
+        dataStore.edit {
             it[loginTokenKey] = encToken
             it[loginAppIdKey] = encAppId
             it[loginAppSecretKey] = encAppSecret
@@ -265,7 +259,7 @@ class QbdlxCredentialStore @Inject constructor(
 
     /** Disconnect the account. Also drops any pasted token, so a disconnect sticks. */
     suspend fun clearUserCredential() {
-        context.qbdlxCredentialsDataStore.edit {
+        dataStore.edit {
             it.remove(loginTokenKey); it.remove(loginAppIdKey); it.remove(loginAppSecretKey); it.remove(loginEmailKey)
             // Without this, a migration whose cleanup edit failed would re-migrate,
             // re-reject and re-clear on every process start, forever.
@@ -350,7 +344,7 @@ class QbdlxCredentialStore @Inject constructor(
     // ── Legacy pasted token (migration only) ──────────────────────────────
 
     private suspend fun pastedToken(): String? =
-        context.qbdlxCredentialsDataStore.data.first()[pastedTokenKey]
+        dataStore.data.first()[pastedTokenKey]
             ?.takeIf { it.isNotBlank() }
             ?.let { encryption.decryptString(it) }
 
@@ -363,7 +357,7 @@ class QbdlxCredentialStore @Inject constructor(
         val t = token?.trim()
         if (!t.isNullOrEmpty()) recordAlive(t)
         val encrypted = t?.takeIf { it.isNotEmpty() }?.let { encryption.encryptString(it) }
-        context.qbdlxCredentialsDataStore.edit { prefs ->
+        dataStore.edit { prefs ->
             if (encrypted.isNullOrEmpty()) prefs.remove(pastedTokenKey) else prefs[pastedTokenKey] = encrypted
         }
         // This store is a process-wide singleton whose lazy login load is cached by
@@ -373,18 +367,27 @@ class QbdlxCredentialStore @Inject constructor(
     }
 
     /** Test-only: the backing store — the delegate above is file-private, so tests seed/read raw keys through here. */
-    internal val dataStoreForTest: DataStore<Preferences> get() = context.qbdlxCredentialsDataStore
+    internal val dataStoreForTest: DataStore<Preferences> get() = dataStore
 
     /** Test-only: wipe persisted pasted/login state + in-memory dead flags. */
     internal suspend fun clearPersistedForTest() {
         deadUntil.clear()
         cachedLogin = null
         loginLoaded = false
-        context.qbdlxCredentialsDataStore.edit { it.clear() }
+        dataStore.edit { it.clear() }
     }
 
     companion object {
         private const val TAG = "QbdlxCreds"
+        private val dataStores = ConcurrentHashMap<String, DataStore<Preferences>>()
+
+        internal fun getDataStore(file: java.io.File): DataStore<Preferences> =
+            dataStores.computeIfAbsent(file.canonicalPath) {
+                androidx.datastore.preferences.core.PreferenceDataStoreFactory.create(
+                    corruptionHandler = ReplaceFileCorruptionHandler { emptyPreferences() },
+                    produceFile = { file },
+                )
+            }
 
         // Dead-credential cooldown before the account is retried (circuit-breaker
         // style). 60s, deliberately SHORT: a cooled login is one fewer file-url path

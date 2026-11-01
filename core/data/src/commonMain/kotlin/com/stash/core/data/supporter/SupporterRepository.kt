@@ -1,23 +1,16 @@
 package com.stash.core.data.supporter
 
-import android.content.Context
 import com.stash.core.common.Log
 import androidx.datastore.core.DataStore
-import androidx.datastore.core.handlers.ReplaceFileCorruptionHandler
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
-import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.stringPreferencesKey
-import androidx.datastore.preferences.preferencesDataStore
 import com.stash.core.auth.crypto.EncryptionManager
 import com.stash.core.auth.crypto.NoOpEncryptionManager
 import com.stash.core.auth.crypto.decryptString
 import com.stash.core.auth.crypto.encryptString
-import com.stash.core.data.tipjar.SupportersJsonUrl
-import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.IOException
 import java.util.concurrent.TimeUnit
-import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
@@ -71,11 +64,6 @@ sealed interface ClaimResult {
     data object Unreachable : ClaimResult
 }
 
-private val Context.supporterDataStore: DataStore<Preferences> by preferencesDataStore(
-    name = "supporter",
-    corruptionHandler = ReplaceFileCorruptionHandler { emptyPreferences() },
-)
-
 /**
  * The Ko-fi supporter entitlement (spec 2026-10-17, "Supporters"): the email claim against the
  * tip-jar Worker and the token it hands back.
@@ -90,13 +78,6 @@ class SupporterRepository(
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
     private val encryption: EncryptionManager = NoOpEncryptionManager,
 ) {
-    @Inject constructor(
-        @ApplicationContext context: Context,
-        sharedClient: OkHttpClient,
-        @SupportersJsonUrl tipJarUrl: String,
-        encryption: EncryptionManager,
-    ) : this(context.supporterDataStore, sharedClient, tipJarUrl, encryption = encryption)
-
     /** Short timeouts: a person is waiting on the sheet, and a hung tip jar must say so. */
     private val httpClient: OkHttpClient = sharedClient.newBuilder()
         .connectTimeout(TIMEOUT_S, TimeUnit.SECONDS)
@@ -244,17 +225,20 @@ class SupporterRepository(
         private val JSON_MEDIA = "application/json".toMediaType()
 
         /** Header-safe and bounded (base64url / JWT-style segments). */
-        private val TOKEN_SHAPE = Regex("^[A-Za-z0-9_.-]{16,2048}$")
+        private val TOKEN_SHAPE = Regex("[A-Za-z0-9._~+/=-]{1,4096}")
 
-        /** Lowercased, whitespace-trimmed, and minimally sensible (`a@b.c`). */
+        /**
+         * [raw] trimmed and lower-cased when it looks like an email (one `@`, a dot after it,
+         * no spaces, at most 254 chars), else null. The tip jar does the real check.
+         */
         internal fun normaliseEmail(raw: String): String? {
-            val t = raw.trim().lowercase()
-            val at = t.indexOf('@')
-            if (at <= 0 || at == t.length - 1) return null
-            val domain = t.substring(at + 1)
-            if (!domain.contains('.') || domain.startsWith('.') || domain.endsWith('.')) return null
-            if (t.length > 254) return null
-            return t
+            val e = raw.trim().lowercase()
+            if (e.length !in 3..254 || e.any { it.isWhitespace() }) return null
+            val at = e.indexOf('@')
+            if (at <= 0 || at != e.lastIndexOf('@')) return null
+            val domain = e.substring(at + 1)
+            return e.takeIf { '.' in domain && !domain.startsWith('.') && !domain.endsWith('.') }
         }
     }
 }
+

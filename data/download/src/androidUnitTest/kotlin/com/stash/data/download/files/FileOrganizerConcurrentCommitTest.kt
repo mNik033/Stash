@@ -52,7 +52,7 @@ class FileOrganizerConcurrentCommitTest {
 
     @Test
     fun `two concurrent commits to one name each keep their own file`() = runBlocking {
-        val organizer = FileOrganizer(context, storagePreference, trackDao)
+        val organizer = AndroidFileOrganizer(context, storagePreference, trackDao)
         // Hold each name check until the other commit is checking too (or half
         // a second has passed): without a claim both pick the free name at once.
         val bothPicking = CountDownLatch(2)
@@ -75,7 +75,7 @@ class FileOrganizerConcurrentCommitTest {
 
     @Test
     fun `a commit right after another track's names its file apart until the row records it`() = runBlocking {
-        val organizer = FileOrganizer(context, storagePreference, trackDao)
+        val organizer = AndroidFileOrganizer(context, storagePreference, trackDao)
 
         val studio = organizer.commitDownload(temp("studio take"), "Artist", "Album A", "Intro", "opus", 1L)
         val live = organizer.commitDownload(temp("live take"), "Artist", "Live", "Intro", "opus", 2L)
@@ -86,7 +86,7 @@ class FileOrganizerConcurrentCommitTest {
 
     @Test
     fun `a track's own re-commit still replaces its file`() = runBlocking {
-        val organizer = FileOrganizer(context, storagePreference, trackDao)
+        val organizer = AndroidFileOrganizer(context, storagePreference, trackDao)
 
         val first = organizer.commitDownload(temp("opus take"), "Artist", "Album A", "Intro", "opus", 1L)
         val again = organizer.commitDownload(temp("better take"), "Artist", "Album A", "Intro", "opus", 1L)

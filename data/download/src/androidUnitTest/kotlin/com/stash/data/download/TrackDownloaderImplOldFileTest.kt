@@ -2,7 +2,7 @@ package com.stash.data.download
 
 import com.stash.core.data.db.dao.DownloadQueueDao
 import com.stash.core.data.db.dao.TrackDao
-import com.stash.core.data.files.LocalFileOps
+import com.stash.core.data.files.AndroidLocalFileOps
 import com.stash.core.data.files.TrackFileReplacement
 import com.stash.core.data.sync.TrackDownloadOutcome
 import com.stash.core.model.Track
@@ -34,7 +34,7 @@ class TrackDownloaderImplOldFileTest {
 
     // Real LocalFileOps over a mock Context: plain paths never touch the Context.
     private fun newSubject(): TrackDownloaderImpl {
-        val localFileOps = LocalFileOps(mockk(relaxed = true))
+        val localFileOps = AndroidLocalFileOps(mockk(relaxed = true))
         return TrackDownloaderImpl(
             downloadManager = downloadManager,
             downloadQueueDao = downloadQueueDao,

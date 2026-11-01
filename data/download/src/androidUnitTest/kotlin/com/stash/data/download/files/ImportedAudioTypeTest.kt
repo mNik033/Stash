@@ -10,7 +10,7 @@ class ImportedAudioTypeTest {
 
     @Test
     fun `every type it can return can end a library file name`() {
-        ImportedAudioType.EXTENSIONS.forEach { assertTrue(it, FileOrganizer.isSafeFormat(it)) }
+        ImportedAudioType.EXTENSIONS.forEach { assertTrue(it, AndroidFileOrganizer.isSafeFormat(it)) }
     }
 
     @Test

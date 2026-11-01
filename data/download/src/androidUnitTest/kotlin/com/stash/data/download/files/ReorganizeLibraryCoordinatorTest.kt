@@ -35,7 +35,7 @@ class ReorganizeLibraryCoordinatorTest {
     private val context = mockk<Context>(relaxed = true)
     private val trackDao = mockk<TrackDao>(relaxed = true)
     private val storagePreference = mockk<StoragePreference>()
-    private val fileOrganizer = mockk<FileOrganizer>()
+    private val fileOrganizer = mockk<AndroidFileOrganizer>()
     private val gate = LibraryRewriteGate()
 
     private lateinit var musicRoot: File

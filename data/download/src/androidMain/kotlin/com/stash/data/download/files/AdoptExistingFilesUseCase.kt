@@ -43,7 +43,7 @@ data class AdoptionResult(val scanned: Int, val adopted: Int)
 @Singleton
 class AdoptExistingFilesUseCase @Inject constructor(
     private val trackDao: TrackDao,
-    private val fileOrganizer: FileOrganizer,
+    private val fileOrganizer: AndroidFileOrganizer,
 ) {
     suspend fun adopt(): AdoptionResult {
         val candidates = trackDao.getAdoptionCandidates()
@@ -75,7 +75,7 @@ class AdoptExistingFilesUseCase @Inject constructor(
     }
 
     /** Resolves and adopts a single candidate. Returns true if it was adopted. */
-    private suspend fun adoptOne(index: FileOrganizer.SafIndex, c: TrackAdoptionCandidate): Boolean {
+    private suspend fun adoptOne(index: AndroidFileOrganizer.SafIndex, c: TrackAdoptionCandidate): Boolean {
         // Layout-aware lookup (#198/#104): probe the current structure first,
         // then legacy locations, so files downloaded under an earlier layout
         // (or before the user reorganized) are still recognized instead of

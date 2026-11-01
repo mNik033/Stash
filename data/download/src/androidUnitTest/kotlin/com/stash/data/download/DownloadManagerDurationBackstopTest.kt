@@ -1,5 +1,7 @@
 package com.stash.data.download
 
+import com.stash.data.download.files.CommittedTrack
+
 import com.google.common.truth.Truth.assertThat
 import com.stash.core.data.audio.AudioDurationExtractor
 import com.stash.core.data.db.dao.PlaylistDao
@@ -157,7 +159,7 @@ class DownloadManagerDurationBackstopTest {
         // Probe: first file is a 30s stub, second is full-length.
         every { audioDurationExtractor.extractMs(any()) } returnsMany listOf(30_000L, 240_000L)
 
-        val committed = FileOrganizer.CommittedTrack(
+        val committed = CommittedTrack(
             filePath = "/library/Sample Artist/Sample.flac",
             sizeBytes = 1234L,
         )
@@ -193,7 +195,7 @@ class DownloadManagerDurationBackstopTest {
         }
         every { audioDurationExtractor.extractMs(any()) } returns 240_000L
         coEvery { trackFinalizer.finalizeFile(any(), any(), any()) } returns
-            TrackFinalizer.FinalizeResult.Success(FileOrganizer.CommittedTrack("/library/x.flac", 1L), meta = null)
+            TrackFinalizer.FinalizeResult.Success(CommittedTrack("/library/x.flac", 1L), meta = null)
 
         newSubject().tryLosslessDownload(stubTrack())
         newSubject().tryLosslessDownload(stubTrack())

@@ -1,5 +1,7 @@
 package com.stash.data.download.files
 
+import com.stash.data.download.files.CommittedTrack
+
 import android.content.ContentResolver
 import android.content.Context
 import androidx.documentfile.provider.DocumentFile
@@ -55,9 +57,9 @@ class FileOrganizerSafCommitTest {
         unmockkStatic(DocumentFile::class)
     }
 
-    private fun organizer() = FileOrganizer(context, storagePreference, trackDao)
+    private fun organizer() = AndroidFileOrganizer(context, storagePreference, trackDao)
 
-    private suspend fun commit(): FileOrganizer.CommittedTrack {
+    private suspend fun commit(): CommittedTrack {
         val temp = tmp.newFile("dl_7.opus").apply { writeBytes(NEW) }
         return organizer().commitDownload(temp, "Evanescence", "Synthesis", "Lacrymosa", "opus", 7L)
     }

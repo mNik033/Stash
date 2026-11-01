@@ -11,7 +11,7 @@ import com.stash.core.model.QualityTier
 import com.stash.core.model.TrackItem
 import com.stash.data.download.DownloadExecutor
 import com.stash.data.download.DownloadResult
-import com.stash.data.download.files.FileOrganizer.CommittedTrack
+import com.stash.data.download.files.CommittedTrack
 import com.stash.data.download.jiosaavn.JioSaavnResolver
 import com.stash.data.download.lossless.AudioFormat
 import com.stash.data.download.lossless.LosslessSourcePreferences

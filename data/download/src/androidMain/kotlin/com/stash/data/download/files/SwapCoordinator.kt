@@ -1,4 +1,4 @@
-﻿package com.stash.data.download.files
+package com.stash.data.download.files
 
 import com.stash.core.common.Log
 import com.stash.core.data.audio.AudioDurationExtractor
@@ -102,14 +102,14 @@ sealed interface SwapOutcome {
  *
  * The Failed Matches UI lets users pick a replacement YouTube video for
  * a track they've flagged as wrong. Until Phase 5, that download lived
- * on `FailedMatchesViewModel`'s `viewModelScope` â€” which gets cancelled
+ * on `FailedMatchesViewModel`'s `viewModelScope` — which gets cancelled
  * as soon as the user navigates away. In practice that meant a user
  * could approve a swap, hit back before the ~10-second download
  * finished, and end up with the DB pointing at a deleted file while
  * the new audio was never persisted.
  *
  * This coordinator owns its own `CoroutineScope(SupervisorJob() +
- * Dispatchers.IO)` â€” same pattern [LocalImportCoordinator] already uses
+ * Dispatchers.IO)` — same pattern [LocalImportCoordinator] already uses
  * for long-running imports. The swap survives screen navigation; the
  * only thing that can abort it mid-flight is process death, which is
  * rare during the few seconds between "user taps approve" and "download
@@ -144,11 +144,11 @@ sealed interface SwapOutcome {
 @Singleton
 class SwapCoordinator @Inject constructor(
     private val downloadExecutor: DownloadExecutor,
-    private val fileOrganizer: FileOrganizer,
+    private val fileOrganizer: AndroidFileOrganizer,
     private val qualityPrefs: QualityPreferencesManager,
     private val trackDao: TrackDao,
     private val blocklistGuard: com.stash.core.data.blocklist.BlocklistGuard,
-    private val localFileOps: com.stash.core.data.files.LocalFileOps,
+    private val localFileOps: com.stash.core.data.files.AndroidLocalFileOps,
     private val trackIdentityEvents: TrackIdentityEvents,
     private val audioExtractor: AudioDurationExtractor,
     private val metadataEmbedder: MetadataEmbedder,
@@ -181,7 +181,7 @@ class SwapCoordinator @Inject constructor(
     private val _running = MutableStateFlow<Set<Long>>(emptySet())
 
     /**
-     * Tracks whose swap is running now: the screen shows them as "Swappingâ€¦",
+     * Tracks whose swap is running now: the screen shows them as "Swapping…",
      * a re-created screen included. One swap per track (see [swap]).
      */
     val running: StateFlow<Set<Long>> = _running.asStateFlow()
@@ -246,7 +246,7 @@ class SwapCoordinator @Inject constructor(
             Log.w(TAG, "swap: unexpected error for videoId=$newVideoId", e)
             SwapOutcome.DownloadFailed(trackId, newVideoId, title = "")
         }
-        // Done before the report, so the screen no longer shows "Swappingâ€¦"
+        // Done before the report, so the screen no longer shows "Swapping…"
         // when the message arrives.
         _running.update { it - trackId }
         _outcomes.emit(outcome)
@@ -415,11 +415,11 @@ class SwapCoordinator @Inject constructor(
         val meta = readAudioMetadata(tempFile)
         return when (val saved = saveReplacement(before, newVideoId, tempFile, meta, tagged)) {
             is Save.Done -> {
-                // The cached StreamUrl was resolved against the OLD youtubeId â€”
+                // The cached StreamUrl was resolved against the OLD youtubeId —
                 // without evicting it, buildMediaItemForTrack keeps serving the
                 // stale (possibly-expired, definitely wrong-song) URL after a swap.
                 trackIdentityEvents.emitIdentityChanged(trackId)
-                Log.i(TAG, "swap: completed trackId=$trackId â†’ videoId=$newVideoId path=${saved.path}")
+                Log.i(TAG, "swap: completed trackId=$trackId → videoId=$newVideoId path=${saved.path}")
                 SwapOutcome.Swapped(trackId, newVideoId, title)
             }
             Save.VideoTaken ->

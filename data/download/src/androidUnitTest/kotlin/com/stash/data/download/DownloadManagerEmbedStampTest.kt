@@ -1,5 +1,7 @@
 package com.stash.data.download
 
+import com.stash.data.download.files.CommittedTrack
+
 import com.stash.core.data.db.dao.PlaylistDao
 import com.stash.core.data.audio.AudioMetadata
 import com.stash.core.data.db.dao.TrackDao
@@ -161,7 +163,7 @@ class DownloadManagerEmbedStampTest {
             sampleRateHz = 44_100,
         )
         coEvery { trackFinalizer.finalizeFile(any(), any(), any()) } returns TrackFinalizer.FinalizeResult.Success(
-            FileOrganizer.CommittedTrack(filePath = "/library/Sample Artist/Sample.m4a", sizeBytes = 1234L),
+            CommittedTrack(filePath = "/library/Sample Artist/Sample.m4a", sizeBytes = 1234L),
             meta = null,
         )
     }
@@ -213,7 +215,7 @@ class DownloadManagerEmbedStampTest {
             format = "aac",
             sampleRateHz = 44_100,
         )
-        val committed = FileOrganizer.CommittedTrack(
+        val committed = CommittedTrack(
             filePath = "/library/Sample Artist/Sample.m4a",
             sizeBytes = 1234L,
         )
@@ -266,7 +268,7 @@ class DownloadManagerEmbedStampTest {
             Result.success(destination)
         }
 
-        val committed = FileOrganizer.CommittedTrack(
+        val committed = CommittedTrack(
             filePath = "/library/Sample Artist/Sample.flac",
             sizeBytes = 1234L,
         )
@@ -303,7 +305,7 @@ class DownloadManagerEmbedStampTest {
             Result.success(destination)
         }
 
-        val committed = FileOrganizer.CommittedTrack(
+        val committed = CommittedTrack(
             filePath = "/library/Sample Artist/Sample.flac",
             sizeBytes = 1234L,
         )

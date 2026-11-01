@@ -36,7 +36,7 @@ class AlbumArtCacheTest {
 
     /** Bytes the fake scaler "runs out of memory" on, as a 4000px decode might. */
     private var outOfMemoryOn: (ByteArray) -> Boolean = { false }
-    private val scaler = object : EmbedArtScaler() {
+    private val scaler = object : EmbedArtScaler {
         override suspend fun fit(bytes: ByteArray, maxPx: Int): EmbedArtScaler.Fitted? =
             if (outOfMemoryOn(bytes)) null else EmbedArtScaler.Fitted(bytes, longSideOf(bytes))
     }

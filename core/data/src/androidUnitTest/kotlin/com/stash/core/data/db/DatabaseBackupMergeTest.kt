@@ -155,7 +155,8 @@ class DatabaseBackupMergeTest {
     @Test
     fun `replace refuses a backup that cannot be migrated and leaves the live database in place`() =
         runTest {
-            val old = File(tmpDir, "schema-2.db")
+            val old = File.createTempFile("schema-2", ".db")
+            old.delete()
             android.database.sqlite.SQLiteDatabase.openOrCreateDatabase(old, null).use {
                 it.execSQL("CREATE TABLE tracks(id INTEGER PRIMARY KEY, title TEXT)")
                 it.version = 2
@@ -182,6 +183,7 @@ class DatabaseBackupMergeTest {
                 // The live instance was never closed for a swap.
                 assertEquals(listOf("Still Here"), live.trackDao().getAllForIntegrityScan().map { it.title })
             } finally {
+                old.delete()
                 liveFile.delete()
             }
         }

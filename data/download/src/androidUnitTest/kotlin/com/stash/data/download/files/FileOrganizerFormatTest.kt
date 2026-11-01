@@ -40,7 +40,7 @@ class FileOrganizerFormatTest {
         every { storagePreference.libraryLayout } returns flowOf(LibraryLayout.ARTIST_ALBUM)
     }
 
-    private fun organizer() = FileOrganizer(context, storagePreference, trackDao)
+    private fun organizer() = AndroidFileOrganizer(context, storagePreference, trackDao)
 
     private val unsafeFormats = listOf(
         "mp3/../../a1",

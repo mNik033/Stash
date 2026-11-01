@@ -55,3 +55,4 @@ object FlacPictureBlock {
         return bos.toByteArray()
     }
 }
+

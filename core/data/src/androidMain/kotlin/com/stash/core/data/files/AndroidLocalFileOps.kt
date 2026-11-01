@@ -14,24 +14,6 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /** Health of a downloaded row's backing local file, for the repair sweep. */
-enum class LocalFileState {
-    /** Present and large enough to be real audio — keep as-is. */
-    OK,
-
-    /** Present but below the floor (a failed download's garbage body) — delete + un-mark. */
-    TOO_SMALL,
-
-    /** Reliably absent (null path, or an internal file that doesn't exist) — un-mark, nothing to delete. */
-    MISSING,
-
-    /**
-     * Couldn't determine — a SAF document whose provider didn't report a size,
-     * or a transient read failure at cold start. The sweep must do NOTHING with
-     * these: deleting or un-marking on an ambiguous read would damage a real
-     * external-storage library on a flaky boot.
-     */
-    INCONCLUSIVE,
-}
 
 /**
  * SAF-aware helpers for the size, health, and deletion of a local download file.
@@ -44,9 +26,9 @@ enum class LocalFileState {
  * floor, the download validation gate, and the startup repair sweep.
  */
 @Singleton
-class LocalFileOps @Inject constructor(
+class AndroidLocalFileOps @Inject constructor(
     @ApplicationContext private val context: Context,
-) {
+) : LocalFileOps {
     /**
      * Mount-state probe for the volume containing a plain path. Overridable in
      * unit tests (Environment is Android framework). Defaults to "is the
@@ -76,7 +58,7 @@ class LocalFileOps @Inject constructor(
         f.path.replace(File.separatorChar, '/').startsWith("/data/") || volumeMounted(f)
 
     /** Size of the file behind [path] in bytes; 0 if null/blank/missing/unreadable. */
-    fun sizeBytes(path: String?): Long {
+    override fun sizeBytes(path: String?): Long {
         if (path.isNullOrBlank()) return 0L
         return runCatching {
             if (path.startsWith("content://")) {
@@ -94,7 +76,7 @@ class LocalFileOps @Inject constructor(
      * so it errs hard toward [LocalFileState.INCONCLUSIVE] for SAF, whose
      * `exists()`/`length()` can transiently fail at process start.
      */
-    fun classify(path: String?, minBytes: Long): LocalFileState {
+    override fun classify(path: String?, minBytes: Long): LocalFileState {
         if (path.isNullOrBlank()) return LocalFileState.MISSING
         return try {
             if (path.startsWith("content://")) {
@@ -131,7 +113,7 @@ class LocalFileOps @Inject constructor(
      * downloaded. Apply this at EVERY `markAsDownloaded` site so junk can never
      * masquerade as a completed download.
      */
-    fun acceptDownloadOrDelete(path: String?): Boolean {
+    override fun acceptDownloadOrDelete(path: String?): Boolean {
         if (sizeBytes(path) >= StashConstants.MIN_PLAYABLE_LOCAL_BYTES) return true
         delete(path)
         return false
@@ -141,7 +123,7 @@ class LocalFileOps @Inject constructor(
      * Best-effort delete of the file behind [path]. True when a file was
      * deleted; false for null/blank/missing paths and failed deletes.
      */
-    fun delete(path: String?): Boolean {
+    override fun delete(path: String?): Boolean {
         if (path.isNullOrBlank()) return false
         return runCatching {
             if (path.startsWith("content://")) {
@@ -170,7 +152,7 @@ class LocalFileOps @Inject constructor(
     }
 
     /** True when a file is at [path]: checked on disk, or asked of the SAF provider. */
-    fun exists(path: String?): Boolean {
+    override fun exists(path: String?): Boolean {
         if (path.isNullOrBlank()) return false
         return runCatching {
             if (path.startsWith("content://")) {
@@ -243,7 +225,7 @@ class LocalFileOps @Inject constructor(
      * or the same SAF document. Documents compare by document id, so a tree
      * URI and a single-document URI for one file match.
      */
-    fun isSameFile(a: String?, b: String?): Boolean {
+    override fun isSameFile(a: String?, b: String?): Boolean {
         if (a.isNullOrBlank() || b.isNullOrBlank()) return false
         if (a == b) return true
         val aIsDocument = a.startsWith("content://")

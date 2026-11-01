@@ -18,11 +18,11 @@ class FileOrganizerExistenceSessionTest {
     private val context: Context = mockk(relaxed = true)
     private val trackDao: TrackDao = mockk(relaxed = true)
 
-    private fun organizer(treeUri: android.net.Uri? = null): FileOrganizer {
+    private fun organizer(treeUri: android.net.Uri? = null): AndroidFileOrganizer {
         val prefs: StoragePreference = mockk {
             every { externalTreeUri } returns flowOf(treeUri)
         }
-        return FileOrganizer(context, prefs, trackDao)
+        return AndroidFileOrganizer(context, prefs, trackDao)
     }
 
     @Test
@@ -70,7 +70,7 @@ class FileOrganizerExistenceSessionTest {
     @Test
     fun `tree-wide fallback ignores a bare title owned by another artist`() {
         val otherArtistsFile: androidx.documentfile.provider.DocumentFile = mockk(relaxed = true)
-        val index = FileOrganizer.SafIndex(
+        val index = AndroidFileOrganizer.SafIndex(
             byDirKey = emptyMap(),
             // "Intro" by SOMEONE ELSE, sitting somewhere in the tree.
             byFileName = mapOf("intro.opus" to listOf(otherArtistsFile)),
@@ -92,7 +92,7 @@ class FileOrganizerExistenceSessionTest {
     @Test
     fun `tree-wide fallback still matches an artist qualified name`() {
         val ourFile: androidx.documentfile.provider.DocumentFile = mockk(relaxed = true)
-        val index = FileOrganizer.SafIndex(
+        val index = AndroidFileOrganizer.SafIndex(
             byDirKey = emptyMap(),
             byFileName = mapOf("our-artist-intro.opus" to listOf(ourFile)),
         )
@@ -121,9 +121,9 @@ class FileOrganizerExistenceSessionTest {
             "primary%3AMusic%2Fevanescence%2Fsynthesis%2Flacrymosa-7.opus"
         val siblingsFile: androidx.documentfile.provider.DocumentFile = mockk(relaxed = true)
         val spied = spyk(organizer(treeUri = mockk(relaxed = true)))
-        io.mockk.coEvery { spied.buildSafIndex() } returns FileOrganizer.SafIndex(
+        io.mockk.coEvery { spied.buildSafIndex() } returns AndroidFileOrganizer.SafIndex(
             byDirKey = mapOf(
-                "evanescence/synthesis" to FileOrganizer.AlbumIndex(
+                "evanescence/synthesis" to AndroidFileOrganizer.AlbumIndex(
                     mockk(relaxed = true),
                     mapOf("lacrymosa.opus" to siblingsFile),
                 ),

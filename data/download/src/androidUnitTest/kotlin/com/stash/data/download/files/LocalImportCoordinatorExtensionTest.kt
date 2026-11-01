@@ -1,5 +1,7 @@
 package com.stash.data.download.files
 
+import com.stash.data.download.files.CommittedTrack
+
 import android.content.ContentResolver
 import android.content.Context
 import android.media.MediaMetadataRetriever
@@ -41,7 +43,7 @@ class LocalImportCoordinatorExtensionTest {
 
     private val contentResolver = mockk<ContentResolver>()
     private val context = mockk<Context>()
-    private val fileOrganizer = mockk<FileOrganizer>()
+    private val fileOrganizer = mockk<AndroidFileOrganizer>()
     private val musicRepository = mockk<MusicRepository>(relaxed = true)
     private lateinit var tempDir: File
 
@@ -73,7 +75,7 @@ class LocalImportCoordinatorExtensionTest {
             val temp = firstArg<File>()
             val size = temp.length()
             temp.delete()
-            FileOrganizer.CommittedTrack("/music/imported.${arg<String>(4)}", size)
+            CommittedTrack("/music/imported.${arg<String>(4)}", size)
         }
 
         // What the provider says its file is called. Set per test via [share].

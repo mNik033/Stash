@@ -44,11 +44,11 @@ import javax.inject.Singleton
  * completes, which copies the temp file to the final location and cleans up.
  */
 @Singleton
-class FileOrganizer @Inject constructor(
+class AndroidFileOrganizer @Inject constructor(
     @ApplicationContext private val context: Context,
     private val storagePreference: StoragePreference,
     private val trackDao: TrackDao,
-) {
+) : FileOrganizer {
     /** Root directory for all internally-stored downloaded music files. */
     private val musicDir: File get() = File(context.filesDir, "music").also { it.mkdirs() }
 
@@ -84,7 +84,7 @@ class FileOrganizer @Inject constructor(
         artist: String,
         album: String?,
         title: String,
-        trackId: Long? = null,
+        trackId: Long?,
         layout: LibraryLayout? = null,
     ): LibraryLayoutResolver.ResolvedLocation {
         val effectiveLayout = layout ?: currentLayout()
@@ -188,7 +188,7 @@ class FileOrganizer @Inject constructor(
      * names its temp files apart, so what a cancelled or crashed attempt
      * leaves is never reused, and would otherwise sit there.
      */
-    fun getTempDir(): File {
+    override fun getTempDir(): File {
         val dir = File(context.cacheDir, "downloads").also { it.mkdirs() }
         if (tempDirSwept.compareAndSet(false, true)) {
             val cutoff = System.currentTimeMillis() - STALE_TEMP_AGE_MS
@@ -415,7 +415,7 @@ class FileOrganizer @Inject constructor(
     class AlbumIndex(val dir: DocumentFile, val filesByName: Map<String, DocumentFile>)
 
     /** Directory for cached album artwork files. */
-    fun getAlbumArtDir(): File = File(context.cacheDir, "albumart").also { it.mkdirs() }
+    override fun getAlbumArtDir(): File = File(context.cacheDir, "albumart").also { it.mkdirs() }
 
     /** Returns the file path for a specific album's artwork. */
     fun getAlbumArtFile(albumId: String): File = File(getAlbumArtDir(), "$albumId.jpg")
@@ -631,15 +631,15 @@ class FileOrganizer @Inject constructor(
      * named like a downloaded song wrote over the download, and both rows
      * pointed at the one file, so deleting either broke the other.
      */
-    suspend fun commitDownload(
+    override suspend fun commitDownload(
         tempFile: File,
         artist: String,
         album: String?,
         title: String,
         format: String,
-        trackId: Long? = null,
-        nameSuffix: String? = null,
-        asNewFile: Boolean = false,
+        trackId: Long?,
+        nameSuffix: String?,
+        asNewFile: Boolean,
     ): CommittedTrack {
         requireSafeFormat(format)
         val size = tempFile.length()
@@ -1011,9 +1011,5 @@ class FileOrganizer @Inject constructor(
      * URI string (SAF target); `sizeBytes` is the track's size at the
      * moment it was written.
      */
-    data class CommittedTrack(
-        val filePath: String,
-        val sizeBytes: Long,
-    )
 }
 

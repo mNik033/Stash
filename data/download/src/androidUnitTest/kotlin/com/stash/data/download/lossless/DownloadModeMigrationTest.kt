@@ -27,7 +27,7 @@ class DownloadModeMigrationTest {
     fun setUp() {
         context = ApplicationProvider.getApplicationContext()
         context.filesDir.resolve("datastore/lossless_source_preferences.preferences_pb").delete()
-        prefs = LosslessSourcePreferences(context, mockk<DownloadQueueDao>(relaxed = true))
+        prefs = LosslessSourcePreferences(com.stash.core.data.platform.AndroidAppPaths(context), mockk<DownloadQueueDao>(relaxed = true))
         // The DataStore instance outlives a test (one per process): start each from nothing.
         kotlinx.coroutines.runBlocking { prefs.writeRawForTest { it.clear() } }
     }

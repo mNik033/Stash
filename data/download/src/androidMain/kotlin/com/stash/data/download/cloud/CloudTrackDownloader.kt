@@ -1,4 +1,4 @@
-﻿package com.stash.data.download.cloud
+package com.stash.data.download.cloud
 
 import com.stash.core.common.Log
 import com.stash.core.data.db.dao.TrackDao
@@ -12,6 +12,7 @@ import com.stash.data.cloud.playback.CloudLinkResolver
 import com.stash.data.cloud.provider.CloudLink
 import com.stash.data.cloud.provider.gdrive.GoogleDriveProvider
 import com.stash.data.download.TrackDownloadResult
+import com.stash.data.download.files.AndroidFileOrganizer
 import com.stash.data.download.files.FileOrganizer
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -140,7 +141,7 @@ class CloudTrackDownloader @Inject constructor(
         internal fun extensionFor(format: String): String = when (val f = format.lowercase()) {
             "alac", "aac" -> "m4a"
             "oga", "vorbis" -> "ogg"
-            else -> f.takeIf { FileOrganizer.isSafeFormat(it) } ?: "bin"
+            else -> f.takeIf { AndroidFileOrganizer.isSafeFormat(it) } ?: "bin"
         }
     }
 }
