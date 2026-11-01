@@ -69,6 +69,7 @@ import com.stash.core.model.DownloadMode
 import com.stash.core.model.QualityTier
 import com.stash.core.ui.theme.StashCyan
 import com.stash.core.ui.theme.StashPurple
+import com.stash.data.download.lossless.RoutingState
 import com.stash.data.download.lossless.qbdlx.QobuzLoginResult
 import com.stash.desktop.di.DesktopComponent
 import kotlinx.coroutines.launch
@@ -92,6 +93,8 @@ fun DesktopSettingsScreen(
     val qbdlxCredentialStore = component.qbdlxCredentialStore()
     val qobuzAccountConnector = component.qobuzAccountConnector()
     val losslessSourcePreferences = component.losslessSourcePreferences()
+    val losslessAvailability = component.losslessAvailability()
+    val losslessConfigFetcher = component.losslessConfigFetcher()
     val syncViewModel = component.syncViewModel()
 
     val mpvStatusMessage = if (component.mpvPlaybackEngine().isNativeEngineAvailable) {
@@ -106,15 +109,20 @@ fun DesktopSettingsScreen(
     var showSpotifyDialog by remember { mutableStateOf(false) }
     var showYouTubeDialog by remember { mutableStateOf(false) }
     var showQobuzDialog by remember { mutableStateOf(false) }
+    var showCustomQobuzEndpointDialog by remember { mutableStateOf(false) }
     var showBitChordDialog by remember { mutableStateOf(false) }
 
     // Reactive states
     val isStreamingEnabled by streamingPreference.enabled.collectAsState(initial = true)
+    val isLosslessStreamingEnabled by losslessSourcePreferences.enabled.collectAsState(initial = true)
     val currentQualityTier by qualityPreference.qualityTier.collectAsState(initial = QualityTier.MAX)
     val currentDownloadMode by losslessSourcePreferences.downloadMode.collectAsState(initial = DownloadMode.LOSSLESS)
     val youtubeFallback by losslessSourcePreferences.youtubeFallbackEnabled.collectAsState(initial = false)
+    val customLosslessEndpoint by losslessSourcePreferences.customLosslessEndpoint.collectAsState(initial = null)
     val bitchordEndpoint by losslessSourcePreferences.bitchordEndpoint.collectAsState(initial = null)
     val bitchordAccessToken by losslessSourcePreferences.bitchordAccessToken.collectAsState(initial = null)
+    val routingRows by losslessAvailability.routingRows.collectAsState(initial = emptyList())
+    val configTidalRelay by losslessConfigFetcher.tidalRelay.collectAsState()
 
     val spotifyAuthState by tokenManager.spotifyAuthState.collectAsState()
     val youTubeAuthState by tokenManager.youTubeAuthState.collectAsState()
@@ -257,6 +265,37 @@ fun DesktopSettingsScreen(
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
+                        text = "Lossless FLAC Streaming",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = "Prioritize studio-quality 16-bit/24-bit FLAC from Qobuz & Tidal when streaming online",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Switch(
+                    checked = isLosslessStreamingEnabled,
+                    onCheckedChange = { scope.launch { losslessSourcePreferences.setEnabled(it) } },
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
+                        checkedTrackColor = MaterialTheme.colorScheme.primary,
+                    ),
+                )
+            }
+
+            SettingsDivider()
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
                         text = "Lossy Fallback when FLAC Unavailable",
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Medium,
@@ -277,6 +316,84 @@ fun DesktopSettingsScreen(
                         checkedTrackColor = MaterialTheme.colorScheme.primary,
                     ),
                 )
+            }
+
+            if (routingRows.isNotEmpty()) {
+                SettingsDivider()
+                Text(
+                    text = "Active Lossless Routing Status",
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    routingRows.forEach { row ->
+                        val isActive = row.state != RoutingState.NOT_CONFIGURED
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(8.dp)
+                                        .background(
+                                            if (isActive) Color(0xFF10B981) else MaterialTheme.colorScheme.outline,
+                                            shape = RoundedCornerShape(4.dp),
+                                        ),
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = row.label,
+                                    fontSize = 13.sp,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                )
+                            }
+                            Text(
+                                text = row.detail,
+                                fontSize = 12.sp,
+                                fontWeight = if (isActive) FontWeight.SemiBold else FontWeight.Normal,
+                                color = if (isActive) Color(0xFF10B981) else MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                    val tidalActive = !bitchordEndpoint.isNullOrBlank() || configTidalRelay != null
+                    val tidalDetail = when {
+                        !bitchordEndpoint.isNullOrBlank() -> "custom ($bitchordEndpoint)"
+                        configTidalRelay != null -> "configured (Stash relay)"
+                        else -> "not configured"
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier
+                                    .size(8.dp)
+                                    .background(
+                                        if (tidalActive) Color(0xFF10B981) else MaterialTheme.colorScheme.outline,
+                                        shape = RoundedCornerShape(4.dp),
+                                    ),
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Tidal Lossless (BitChord)",
+                                fontSize = 13.sp,
+                                color = MaterialTheme.colorScheme.onSurface,
+                            )
+                        }
+                        Text(
+                            text = tidalDetail,
+                            fontSize = 12.sp,
+                            fontWeight = if (tidalActive) FontWeight.SemiBold else FontWeight.Normal,
+                            color = if (tidalActive) Color(0xFF10B981) else MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
             }
         }
         Spacer(modifier = Modifier.height(24.dp))
@@ -339,12 +456,29 @@ fun DesktopSettingsScreen(
             )
             SettingsDivider()
 
+            // Custom Qobuz Relay Endpoint
+            val isCustomQobuzConfigured = !customLosslessEndpoint.isNullOrBlank()
+            SettingsServiceRow(
+                serviceName = "Custom Qobuz Lossless Endpoint",
+                detail = if (isCustomQobuzConfigured) "Custom Qobuz relay configured: $customLosslessEndpoint" else "Optional: Connect a custom self-hosted Qobuz lossless relay URL",
+                status = if (isCustomQobuzConfigured) "Configured" else "Configure",
+                accentColor = Color(0xFF6366F1),
+                isConnected = isCustomQobuzConfigured,
+                onAction = { showCustomQobuzEndpointDialog = true },
+            )
+            SettingsDivider()
+
             // BitChord / Tidal Relay
-            val isBitChordConfigured = !bitchordEndpoint.isNullOrBlank()
+            val isBitChordConfigured = !bitchordEndpoint.isNullOrBlank() || configTidalRelay != null
+            val bitChordDetail = when {
+                !bitchordEndpoint.isNullOrBlank() -> "Custom relay configured: $bitchordEndpoint"
+                configTidalRelay != null -> "Stash Tidal relay active (click to override with self-hosted BitChord)"
+                else -> "Connect self-hosted BitChord instance for Tidal HiFi lossless streaming"
+            }
             SettingsServiceRow(
                 serviceName = "BitChord / Tidal Lossless Relay",
-                detail = if (isBitChordConfigured) "Custom relay configured: $bitchordEndpoint" else "Connect self-hosted BitChord instance for Tidal HiFi lossless streaming",
-                status = if (isBitChordConfigured) "Configured" else "Configure",
+                detail = bitChordDetail,
+                status = if (!bitchordEndpoint.isNullOrBlank()) "Custom" else if (configTidalRelay != null) "Active" else "Configure",
                 accentColor = Color(0xFF00B4D8),
                 isConnected = isBitChordConfigured,
                 onAction = { showBitChordDialog = true },
@@ -635,6 +769,52 @@ fun DesktopSettingsScreen(
             },
             dismissButton = {
                 TextButton(onClick = { showQobuzDialog = false }, enabled = !isLoggingIn) {
+                    Text("Cancel")
+                }
+            },
+        )
+    }
+
+    // Custom Qobuz Endpoint Dialog
+    if (showCustomQobuzEndpointDialog) {
+        var customEndpointInput by remember { mutableStateOf(customLosslessEndpoint.orEmpty()) }
+
+        AlertDialog(
+            onDismissRequest = { showCustomQobuzEndpointDialog = false },
+            title = { Text("Configure Custom Qobuz Endpoint") },
+            text = {
+                Column {
+                    Text(
+                        text = "Enter the HTTPS base URL of a custom Qobuz lossless relay (e.g., https://my-qobuz-relay.workers.dev). Leave blank to clear.",
+                        fontSize = 13.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    OutlinedTextField(
+                        value = customEndpointInput,
+                        onValueChange = { customEndpointInput = it },
+                        label = { Text("Custom Qobuz Relay URL") },
+                        placeholder = { Text("https://relay.example.com") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        scope.launch {
+                            losslessSourcePreferences.setCustomLosslessEndpoint(customEndpointInput.trim().ifBlank { null })
+                            showCustomQobuzEndpointDialog = false
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = StashPurple),
+                ) {
+                    Text("Save")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showCustomQobuzEndpointDialog = false }) {
                     Text("Cancel")
                 }
             },
