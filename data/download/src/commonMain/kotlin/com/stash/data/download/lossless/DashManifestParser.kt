@@ -75,6 +75,72 @@ object DashManifestParser {
         return DashPlan(initUrl = resolve(base, init), mediaUrls = mediaUrls)
     }
 
+    /**
+     * Converts a single-representation fMP4 DASH [mpd] into an HLS v7 VOD playlist (`.m3u8`)
+     * with `#EXT-X-MAP:URI="<initUrl>"`.
+     *
+     * Used on Desktop (particularly macOS, where Homebrew builds `ffmpeg`/`libmpv` without
+     * `libxml2` and therefore omits the `dash` demuxer while always including the `hls` and
+     * `mov,mp4` demuxers).
+     */
+    fun toHlsM3u8(mpd: String, mpdUrl: String): String {
+        val templateAttrs = TEMPLATE.find(mpd)?.groupValues?.get(1)
+            ?: throw DashManifestException("no SegmentTemplate")
+        val attrs = attributes(templateAttrs)
+        val init = attrs["initialization"]?.takeIf { it.isNotBlank() }
+            ?: throw DashManifestException("no initialization URL")
+        val media = attrs["media"]?.takeIf { it.isNotBlank() }
+            ?: throw DashManifestException("no media template")
+        if (!NUMBER_TOKEN.containsMatchIn(media)) throw DashManifestException("media template lacks \$Number\$")
+        val startNumber = attrs["startNumber"]?.let {
+            it.toLongOrNull() ?: throw DashManifestException("bad startNumber '$it'")
+        } ?: 1L
+        val timescale = attrs["timescale"]?.toLongOrNull()?.takeIf { it > 0L } ?: 44100L
+
+        val timeline = TIMELINE.find(mpd)?.groupValues?.get(1)
+            ?: throw DashManifestException("no SegmentTimeline")
+        val base = baseFor(mpd, mpdUrl)
+        val initUrl = resolve(base, init)
+
+        val segments = ArrayList<Pair<Double, String>>()
+        var curNumber = startNumber
+        var maxDurSec = 1.0
+
+        for (s in S_ELEMENT.findAll(timeline)) {
+            val sAttrs = attributes(s.groupValues[1])
+            val r = sAttrs["r"]?.let {
+                it.toLongOrNull() ?: throw DashManifestException("bad r '$it'")
+            } ?: 0L
+            if (r < 0) throw DashManifestException("open-ended repeat (r=$r) unsupported")
+            val d = sAttrs["d"]?.toLongOrNull()?.takeIf { it > 0L } ?: (timescale * 4L)
+            val durSec = d.toDouble() / timescale.toDouble()
+            if (durSec > maxDurSec) maxDurSec = durSec
+
+            for (i in 0..r) {
+                if (segments.size >= MAX_SEGMENTS) throw DashManifestException("too many segments")
+                val segUrl = resolve(base, expand(media, curNumber))
+                segments.add(durSec to segUrl)
+                curNumber++
+            }
+        }
+        if (segments.isEmpty()) throw DashManifestException("empty SegmentTimeline")
+
+        val targetDuration = kotlin.math.ceil(maxDurSec).toInt().coerceAtLeast(1)
+        return buildString {
+            appendLine("#EXTM3U")
+            appendLine("#EXT-X-VERSION:7")
+            appendLine("#EXT-X-TARGETDURATION:$targetDuration")
+            appendLine("#EXT-X-MEDIA-SEQUENCE:$startNumber")
+            appendLine("#EXT-X-PLAYLIST-TYPE:VOD")
+            appendLine("#EXT-X-MAP:URI=\"$initUrl\"")
+            for ((durSec, segUrl) in segments) {
+                appendLine("#EXTINF:${String.format(java.util.Locale.US, "%.6f", durSec)},")
+                appendLine(segUrl)
+            }
+            appendLine("#EXT-X-ENDLIST")
+        }
+    }
+
     private fun attributes(raw: String): Map<String, String> =
         ATTR.findAll(raw).associate { m ->
             val value = m.groups[3]?.value ?: m.groups[4]?.value ?: ""

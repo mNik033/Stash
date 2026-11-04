@@ -38,6 +38,7 @@ class DesktopPlayerRepository @Inject constructor(
 ) : PlayerRepository {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private var playJob: Job? = null
+    private var prefetchJob: Job? = null
     private var unshuffledQueue: List<Track> = emptyList()
 
     private val _playerState = MutableStateFlow(PlayerState())
@@ -118,7 +119,7 @@ class DesktopPlayerRepository @Inject constructor(
                             fileFormat = if (liveFormat.codec.isNotBlank()) liveFormat.codec else current.fileFormat,
                             qualityKbps = if (liveFormat.bitrateKbps > 0) liveFormat.bitrateKbps else current.qualityKbps,
                             sampleRateHz = liveFormat.sampleRateHz ?: current.sampleRateHz,
-                            bitsPerSample = liveFormat.bitsPerSample ?: current.bitsPerSample,
+                            bitsPerSample = current.bitsPerSample ?: liveFormat.bitsPerSample,
                         )
                         if (refined != current) {
                             _playerState.value = _playerState.value.copy(
@@ -234,12 +235,12 @@ class DesktopPlayerRepository @Inject constructor(
         )
         if (current != null) {
             playTrackItem(current)
-            prefetchNextTrack(tracks, safeIndex)
         }
     }
 
     private fun playTrackItem(track: Track) {
         playJob?.cancel()
+        prefetchJob?.cancel()
         playJob = scope.launch {
             try {
                 val resolved = streamResolver.resolveForTrack(track)
@@ -290,6 +291,8 @@ class DesktopPlayerRepository @Inject constructor(
                     isPlaying = shouldPlay,
                     isBuffering = false,
                 )
+                val latestState = _playerState.value
+                prefetchNextTrack(latestState.queue, latestState.currentIndex)
             } catch (e: Exception) {
                 if (e is CancellationException) throw e
                 _playerState.value = _playerState.value.copy(isPlaying = false, isBuffering = false)
@@ -302,7 +305,8 @@ class DesktopPlayerRepository @Inject constructor(
         val nextIndex = currentIndex + 1
         if (nextIndex in queue.indices) {
             val nextTrack = queue[nextIndex]
-            scope.launch(Dispatchers.IO) {
+            prefetchJob?.cancel()
+            prefetchJob = scope.launch(Dispatchers.IO) {
                 runCatching { streamResolver.resolveForTrack(nextTrack) }
             }
         }
@@ -486,11 +490,11 @@ class DesktopPlayerRepository @Inject constructor(
             isBuffering = true,
         )
         playTrackItem(track)
-        prefetchNextTrack(s.queue, index)
     }
 
     override suspend fun playTrack(track: Track): StreamRoutingResult {
         playJob?.cancel()
+        prefetchJob?.cancel()
         engine.stop()
 
         _playerState.value = _playerState.value.copy(

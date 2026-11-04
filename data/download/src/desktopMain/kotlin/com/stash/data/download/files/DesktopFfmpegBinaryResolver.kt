@@ -11,7 +11,8 @@ class DesktopFfmpegBinaryResolver @Inject constructor(
 ) : FfmpegBinaryResolver {
 
     override fun resolveFfmpegBinary(): File? {
-        val exeName = if (System.getProperty("os.name").lowercase().contains("windows")) "ffmpeg.exe" else "ffmpeg"
+        val isWindows = System.getProperty("os.name").lowercase().contains("windows")
+        val exeName = if (isWindows) "ffmpeg.exe" else "ffmpeg"
         val binDir = File(appPaths.filesDir, "bin")
         val inBin = File(binDir, exeName)
         if (inBin.exists() && inBin.canExecute()) return inBin
@@ -24,8 +25,16 @@ class DesktopFfmpegBinaryResolver @Inject constructor(
         val pathEnv = System.getenv("PATH") ?: ""
         val separator = File.pathSeparator
         for (dir in pathEnv.split(separator)) {
+            if (dir.isBlank()) continue
             val candidate = File(dir, exeName)
             if (candidate.exists() && candidate.canExecute()) return candidate
+        }
+
+        if (!isWindows) {
+            for (dir in listOf("/opt/homebrew/bin", "/usr/local/bin", "/usr/bin")) {
+                val candidate = File(dir, exeName)
+                if (candidate.exists() && candidate.canExecute()) return candidate
+            }
         }
         return null
     }

@@ -56,6 +56,13 @@ class MpvPlaybackEngine @Inject constructor() : PlaybackEngine, Closeable {
                 lib.mpv_set_option_string(h, "load-scripts", "no")
                 lib.mpv_set_option_string(h, "ytdl", "no")
                 lib.mpv_set_option_string(h, "load-unsafe-playlists", "no")
+                // Allow local HLS (.m3u8) playlists materialized from Tidal DASH (.mpd) manifests
+                // to open HTTPS fMP4 init/media segments via FFmpeg's hls demuxer.
+                lib.mpv_set_option_string(
+                    h,
+                    "demuxer-lavf-o",
+                    "protocol_whitelist=[file,http,https,tcp,tls,crypto,data]"
+                )
                 lib.mpv_set_option_string(h, "vo", "null")
                 lib.mpv_set_option_string(h, "vid", "no")
                 lib.mpv_set_option_string(h, "terminal", "no")

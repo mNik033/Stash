@@ -1,12 +1,14 @@
 package com.stash.core.media
 
 import com.stash.core.common.Log
+import com.stash.core.common.platform.AppPaths
 import com.stash.core.data.prefs.QualityPreference
 import com.stash.core.model.QualityTier
 import com.stash.core.model.Track
 import com.stash.core.model.YouTubeVideoId
 import com.stash.data.download.jiosaavn.JioSaavnResolver
 import com.stash.data.download.jiosaavn.toJioSaavnKbps
+import com.stash.data.download.lossless.DashManifestParser
 import com.stash.data.download.lossless.LosslessSourcePreferences
 import com.stash.data.download.lossless.LosslessSourceRegistry
 import com.stash.data.download.lossless.TrackQuery
@@ -28,7 +30,10 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import okhttp3.OkHttpClient
+import okhttp3.Request
 import java.io.File
+import java.security.MessageDigest
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -54,25 +59,43 @@ class DesktopStreamResolver @Inject constructor(
     private val qualityPreference: QualityPreference,
     private val tidalAacResolver: TidalAacResolver,
     private val jioSaavnResolver: JioSaavnResolver,
+    private val okHttpClient: OkHttpClient,
+    private val appPaths: AppPaths,
 ) {
     companion object {
         private const val TAG = "DesktopStreamResolver"
         private const val CACHE_TTL_MS = 2 * 60 * 60 * 1000L // 2 hours
+        private const val LOSSLESS_CACHE_TTL_MS = 30 * 60 * 1000L // 30 minutes
         private const val MAX_CACHE_ENTRIES = 256
     }
 
     private val streamCache = java.util.concurrent.ConcurrentHashMap<String, Pair<ResolvedDesktopStream, Long>>()
+    private val resolvedTrackCache = java.util.concurrent.ConcurrentHashMap<String, Pair<ResolvedDesktopStream, Long>>()
     private val canonicalIdCache = java.util.concurrent.ConcurrentHashMap<String, String>()
+
+    private fun trackIdentityKey(track: Track): String {
+        val isrc = track.isrc?.trim()?.uppercase()?.takeIf { it.isNotEmpty() }
+        if (isrc != null) return "isrc:$isrc"
+        val artist = track.artist.trim().lowercase()
+        val title = track.title.trim().lowercase()
+        return "t:$artist::$title::${track.id}"
+    }
 
     fun invalidate(track: Track) {
         val rawId = track.youtubeId
         if (!rawId.isNullOrBlank()) {
             streamCache.remove(rawId)
+            QualityTier.entries.forEach { tier -> streamCache.remove("${rawId}_${tier.name}") }
         }
         val artist = track.artist.trim().lowercase()
         val title = track.title.trim().lowercase()
         val matchKey = "$artist::$title"
-        canonicalIdCache.remove(matchKey)?.let { streamCache.remove(it) }
+        canonicalIdCache.remove(matchKey)?.let { ytId ->
+            streamCache.remove(ytId)
+            QualityTier.entries.forEach { tier -> streamCache.remove("${ytId}_${tier.name}") }
+        }
+        val prefix = trackIdentityKey(track)
+        resolvedTrackCache.keys.removeIf { it.startsWith(prefix) }
     }
 
     suspend fun resolveStreamUrl(videoId: String, forceFresh: Boolean = false): String? {
@@ -271,6 +294,20 @@ class DesktopStreamResolver @Inject constructor(
 
         val qualityTier = qualityPreference.qualityTier.first()
         val losslessEnabled = losslessPrefs.enabledNow()
+        val now = System.currentTimeMillis()
+        val resolvedCacheKey = "${trackIdentityKey(track)}|${qualityTier.name}|$losslessEnabled"
+
+        resolvedTrackCache[resolvedCacheKey]?.let { (cached, expiresAt) ->
+            val localStillExists = cached.uri.startsWith("http://", ignoreCase = true) ||
+                cached.uri.startsWith("https://", ignoreCase = true) ||
+                File(cached.uri).exists()
+            if (now < expiresAt && localStillExists) {
+                Log.d(TAG, "Resolved track cache hit for '${track.title}' (${cached.streamOrigin} ${cached.fileFormat})")
+                return@withContext cached
+            } else {
+                resolvedTrackCache.remove(resolvedCacheKey)
+            }
+        }
 
         val trackQuery = TrackQuery(
             artist = track.artist,
@@ -283,7 +320,7 @@ class DesktopStreamResolver @Inject constructor(
             trackId = track.id.takeIf { it > 0 },
         ).forLibrarySource(track.source, track.musicVideoType)
 
-        // 2. Lossless Waterfall (Qobuz / Tidal FLAC / Relay via LosslessSourceRegistry)
+        // 2. Lossless Waterfall (Qobuz / Tidal FLAC / Relay)
         if ((qualityTier == QualityTier.MAX || qualityTier == QualityTier.BEST) && losslessEnabled) {
             // First: Direct Qobuz immediate resolve (bypasses background breaker/bucket, requests specific quality tier)
             val qobuzResult = runCatching {
@@ -292,15 +329,24 @@ class DesktopStreamResolver @Inject constructor(
             }.getOrNull()
 
             if (qobuzResult != null && !qobuzResult.downloadUrl.isNullOrBlank()) {
-                Log.i(TAG, "Resolved Qobuz lossless stream for '${track.title}'")
-                return@withContext ResolvedDesktopStream(
-                    uri = qobuzResult.downloadUrl,
-                    fileFormat = qobuzResult.format.codec.lowercase(),
-                    qualityKbps = qobuzResult.format.bitrateKbps,
-                    sampleRateHz = qobuzResult.format.sampleRateHz.takeIf { it > 0 },
-                    bitsPerSample = qobuzResult.format.bitsPerSample.takeIf { it > 0 },
-                    streamOrigin = "qbdlx",
-                )
+                val playableUri = if (qobuzResult.isDash || isDashManifestUrl(qobuzResult.downloadUrl)) {
+                    materializeDashAsHls(qobuzResult.downloadUrl)
+                } else {
+                    qobuzResult.downloadUrl
+                }
+                if (!playableUri.isNullOrBlank()) {
+                    Log.i(TAG, "Resolved Qobuz lossless stream for '${track.title}'")
+                    val resolved = ResolvedDesktopStream(
+                        uri = playableUri,
+                        fileFormat = qobuzResult.format.codec.lowercase(),
+                        qualityKbps = qobuzResult.format.bitrateKbps,
+                        sampleRateHz = qobuzResult.format.sampleRateHz.takeIf { it > 0 },
+                        bitsPerSample = qobuzResult.format.bitsPerSample.takeIf { it > 0 },
+                        streamOrigin = "qbdlx",
+                    )
+                    cacheResolvedTrack(resolvedCacheKey, resolved, now + LOSSLESS_CACHE_TTL_MS)
+                    return@withContext resolved
+                }
             }
 
             // Second: Tidal via BitChord (handles both progressive FLAC and Hi-Res DASH .mpd)
@@ -309,32 +355,25 @@ class DesktopStreamResolver @Inject constructor(
             }.getOrNull()
 
             if (tidalResult != null && !tidalResult.url.isNullOrBlank()) {
-                Log.i(TAG, "Resolved Tidal lossless stream for '${track.title}' (codec=${tidalResult.codec}, dash=${tidalResult.isDash})")
-                return@withContext ResolvedDesktopStream(
-                    uri = tidalResult.url,
-                    fileFormat = tidalResult.codec.lowercase(),
-                    qualityKbps = tidalResult.bitrateKbps,
-                    sampleRateHz = tidalResult.sampleRateHz.takeIf { it > 0 },
-                    bitsPerSample = tidalResult.bitDepth.takeIf { it > 0 },
-                    streamOrigin = "tidal",
-                )
-            }
-
-            // Third: Generic fallback to any other registered lossless source
-            val losslessResult = runCatching {
-                losslessSourceRegistry.resolve(trackQuery, bypassRateLimit = true)
-            }.getOrNull()
-
-            if (losslessResult != null && !losslessResult.downloadUrl.isNullOrBlank()) {
-                Log.i(TAG, "Resolved lossless stream for '${track.title}' via ${losslessResult.sourceId}")
-                return@withContext ResolvedDesktopStream(
-                    uri = losslessResult.downloadUrl,
-                    fileFormat = losslessResult.format.codec.lowercase(),
-                    qualityKbps = losslessResult.format.bitrateKbps,
-                    sampleRateHz = losslessResult.format.sampleRateHz.takeIf { it > 0 },
-                    bitsPerSample = losslessResult.format.bitsPerSample.takeIf { it > 0 },
-                    streamOrigin = losslessResult.sourceId,
-                )
+                val playableUri = if (tidalResult.isDash || isDashManifestUrl(tidalResult.url)) {
+                    materializeDashAsHls(tidalResult.url)
+                } else {
+                    tidalResult.url
+                }
+                if (!playableUri.isNullOrBlank()) {
+                    Log.i(TAG, "Resolved Tidal lossless stream for '${track.title}' (codec=${tidalResult.codec}, dash=${tidalResult.isDash})")
+                    val resolved = ResolvedDesktopStream(
+                        uri = playableUri,
+                        fileFormat = tidalResult.codec.lowercase(),
+                        qualityKbps = tidalResult.bitrateKbps,
+                        sampleRateHz = tidalResult.sampleRateHz.takeIf { it > 0 },
+                        bitsPerSample = tidalResult.bitDepth.takeIf { it > 0 },
+                        streamOrigin = "tidal",
+                    )
+                    val expiry = minOf(now + LOSSLESS_CACHE_TTL_MS, tidalResult.expiresAtMs.takeIf { it > now } ?: (now + LOSSLESS_CACHE_TTL_MS))
+                    cacheResolvedTrack(resolvedCacheKey, resolved, expiry)
+                    return@withContext resolved
+                }
             }
         }
 
@@ -347,15 +386,25 @@ class DesktopStreamResolver @Inject constructor(
                 }.getOrNull()
 
                 if (tidalResult is TidalAac.Found) {
-                    Log.i(TAG, "Resolved Tidal AAC stream for '${track.title}'")
-                    return@withContext ResolvedDesktopStream(
-                        uri = tidalResult.source.downloadUrl,
-                        fileFormat = "m4a",
-                        qualityKbps = 320,
-                        sampleRateHz = 44100,
-                        bitsPerSample = 16,
-                        streamOrigin = "tidal",
-                    )
+                    val rawUrl = tidalResult.source.downloadUrl
+                    val playableUri = if (tidalResult.source.isDash || isDashManifestUrl(rawUrl)) {
+                        materializeDashAsHls(rawUrl)
+                    } else {
+                        rawUrl
+                    }
+                    if (!playableUri.isNullOrBlank()) {
+                        Log.i(TAG, "Resolved Tidal AAC stream for '${track.title}'")
+                        val resolved = ResolvedDesktopStream(
+                            uri = playableUri,
+                            fileFormat = "m4a",
+                            qualityKbps = 320,
+                            sampleRateHz = 44100,
+                            bitsPerSample = 16,
+                            streamOrigin = "tidal",
+                        )
+                        cacheResolvedTrack(resolvedCacheKey, resolved, now + LOSSLESS_CACHE_TTL_MS)
+                        return@withContext resolved
+                    }
                 }
             }
 
@@ -366,7 +415,7 @@ class DesktopStreamResolver @Inject constructor(
 
             if (jioSaavnResult != null && !jioSaavnResult.downloadUrl.isNullOrBlank()) {
                 Log.i(TAG, "Resolved JioSaavn AAC stream for '${track.title}'")
-                return@withContext ResolvedDesktopStream(
+                val resolved = ResolvedDesktopStream(
                     uri = jioSaavnResult.downloadUrl,
                     fileFormat = "m4a",
                     qualityKbps = jioSaavnResult.format.bitrateKbps,
@@ -374,6 +423,8 @@ class DesktopStreamResolver @Inject constructor(
                     bitsPerSample = 16,
                     streamOrigin = "jiosaavn",
                 )
+                cacheResolvedTrack(resolvedCacheKey, resolved, now + LOSSLESS_CACHE_TTL_MS)
+                return@withContext resolved
             }
         }
 
@@ -382,11 +433,69 @@ class DesktopStreamResolver @Inject constructor(
         if (ytId != null) {
             val ytStream = resolveYouTubeStream(ytId, qualityTier)
             if (ytStream != null) {
+                cacheResolvedTrack(resolvedCacheKey, ytStream, now + CACHE_TTL_MS)
                 return@withContext ytStream
             }
         }
 
         null
+    }
+
+    private fun isDashManifestUrl(url: String): Boolean {
+        val path = url.substringBefore('?')
+        return path.endsWith(".mpd", ignoreCase = true)
+    }
+
+    /**
+     * Fetches a DASH `.mpd` manifest and materializes an HLS v7 `.m3u8` VOD playlist in the cache
+     * directory (`dash_hls/dash_<hash>.m3u8`).
+     *
+     * On macOS, Homebrew builds `ffmpeg` (and therefore `libmpv`) without `--enable-libxml2`, so
+     * `libavformat` lacks the `dash` demuxer and rejects `.mpd` URLs with `Failed to recognize file format`.
+     * All `ffmpeg`/`libmpv` builds include the `hls` and `mov,mp4` demuxers, which natively stream
+     * fMP4 FLAC segments referenced by an HLS v7 `#EXT-X-MAP` playlist.
+     */
+    private fun materializeDashAsHls(mpdUrl: String): String? {
+        return runCatching {
+            val req = Request.Builder().url(mpdUrl).get().build()
+            val mpdXml = okHttpClient.newCall(req).execute().use { resp ->
+                if (!resp.isSuccessful) {
+                    Log.w(TAG, "Failed to fetch DASH MPD (HTTP ${resp.code})")
+                    return@runCatching null
+                }
+                resp.body?.string()
+            } ?: return@runCatching null
+
+            val m3u8Content = DashManifestParser.toHlsM3u8(mpdXml, mpdUrl)
+            val hlsDir = File(appPaths.cacheDir, "dash_hls").apply { mkdirs() }
+            val now = System.currentTimeMillis()
+            // Best-effort cleanup of stale .m3u8 files older than 1 hour
+            hlsDir.listFiles()?.forEach { f ->
+                if (now - f.lastModified() > 60 * 60 * 1000L) {
+                    runCatching { f.delete() }
+                }
+            }
+            val digest = MessageDigest.getInstance("SHA-256")
+                .digest(mpdUrl.toByteArray(Charsets.UTF_8))
+                .take(12)
+                .joinToString("") { "%02x".format(it) }
+            val outFile = File(hlsDir, "dash_$digest.m3u8")
+            outFile.writeText(m3u8Content, Charsets.UTF_8)
+            outFile.absolutePath
+        }.onFailure { e ->
+            Log.w(TAG, "Failed to materialize DASH MPD as HLS: ${e.javaClass.simpleName}: ${e.message}")
+        }.getOrNull()
+    }
+
+    private fun cacheResolvedTrack(key: String, stream: ResolvedDesktopStream, expiresAtMs: Long) {
+        val now = System.currentTimeMillis()
+        if (resolvedTrackCache.size >= MAX_CACHE_ENTRIES) {
+            resolvedTrackCache.entries.removeIf { it.value.second < now }
+            if (resolvedTrackCache.size >= MAX_CACHE_ENTRIES) {
+                resolvedTrackCache.keys.firstOrNull()?.let { resolvedTrackCache.remove(it) }
+            }
+        }
+        resolvedTrackCache[key] = stream to expiresAtMs
     }
 
     private suspend fun findYoutubeIdForTrack(track: Track): String? {

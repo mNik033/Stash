@@ -142,7 +142,8 @@ class DesktopAudioDurationExtractor @Inject constructor(
     }
 
     private fun resolveFfprobeBinary(): File? {
-        val exeName = if (System.getProperty("os.name").lowercase().contains("windows")) "ffprobe.exe" else "ffprobe"
+        val isWindows = System.getProperty("os.name").lowercase().contains("windows")
+        val exeName = if (isWindows) "ffprobe.exe" else "ffprobe"
         // 1. Files in bin/
         val binDir = File(appPaths.filesDir, "bin")
         val inBin = File(binDir, exeName)
@@ -158,8 +159,17 @@ class DesktopAudioDurationExtractor @Inject constructor(
         val pathEnv = System.getenv("PATH") ?: ""
         val separator = File.pathSeparator
         for (dir in pathEnv.split(separator)) {
+            if (dir.isBlank()) continue
             val candidate = File(dir, exeName)
             if (candidate.exists() && candidate.canExecute()) return candidate
+        }
+
+        // 4. Common macOS / Linux install locations (GUI apps launched from Finder don't inherit shell PATH)
+        if (!isWindows) {
+            for (dir in listOf("/opt/homebrew/bin", "/usr/local/bin", "/usr/bin")) {
+                val candidate = File(dir, exeName)
+                if (candidate.exists() && candidate.canExecute()) return candidate
+            }
         }
 
         return null
