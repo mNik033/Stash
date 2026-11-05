@@ -307,7 +307,9 @@ class DesktopPlayerRepository @Inject constructor(
             val nextTrack = queue[nextIndex]
             prefetchJob?.cancel()
             prefetchJob = scope.launch(Dispatchers.IO) {
-                runCatching { streamResolver.resolveForTrack(nextTrack) }
+                // speculative: a Tidal-only next-up is left to the real play (the user may skip
+                // it); the shared Tidal relay pool is small and paces requests per seat.
+                runCatching { streamResolver.resolveForTrack(nextTrack, speculative = true) }
             }
         }
     }

@@ -14,6 +14,7 @@ import com.stash.data.download.lossless.LosslessSourceRegistry
 import com.stash.data.download.lossless.TrackQuery
 import com.stash.data.download.lossless.forLibrarySource
 import com.stash.data.download.lossless.bitchord.BitchordClient
+import com.stash.data.download.lossless.bitchord.TidalLookup
 import com.stash.data.download.lossless.qbdlx.QbdlxQobuzSource
 import com.stash.data.download.lossless.tidal.TidalAac
 import com.stash.data.download.lossless.tidal.TidalAacResolver
@@ -274,7 +275,20 @@ class DesktopStreamResolver @Inject constructor(
 
     private data class Tuple4<A, B, C, D>(val a: A, val b: B, val c: C, val d: D)
 
-    suspend fun resolveForTrack(track: Track): ResolvedDesktopStream? = withContext(Dispatchers.IO) {
+    /**
+     * Resolves a playable stream for [track].
+     *
+     * [speculative] (next-up prefetch): mirrors Android's `StreamSourceRegistry` speculative mode.
+     * The shared Tidal relay pool is small and paces `/search` + `/stream` per seat, so a
+     * look-ahead must never make it search: when serving the track would require asking the relay
+     * (nothing cached, or the pool is busy), the resolve stops and returns null, leaving Tidal to
+     * the real play. It also never falls through to a lossy rung in that case, so no lossy URL is
+     * cached for a track the real play would stream as FLAC.
+     */
+    suspend fun resolveForTrack(
+        track: Track,
+        speculative: Boolean = false,
+    ): ResolvedDesktopStream? = withContext(Dispatchers.IO) {
         // 1. If downloaded file exists on disk, play locally
         val filePath = track.filePath
         if (!filePath.isNullOrBlank()) {
@@ -349,10 +363,20 @@ class DesktopStreamResolver @Inject constructor(
                 }
             }
 
+            // Speculative (prefetch): never make the shared Tidal relay search for a look-ahead.
+            if (speculative && tidalNeedsRelay(trackQuery, allowAac = false)) {
+                Log.d(TAG, "Speculative resolve of '${track.title}' stops before Tidal; the real play asks it")
+                return@withContext null
+            }
+
             // Second: Tidal via BitChord (handles both progressive FLAC and Hi-Res DASH .mpd)
-            val tidalResult = runCatching {
-                bitchordClient.resolve(trackQuery, allowAac = false)
-            }.getOrNull()
+            val tidalResult = if (speculative) {
+                null // cacheOnly lookups never return a stream; the real play fetches it
+            } else {
+                runCatching {
+                    bitchordClient.resolve(trackQuery, allowAac = false)
+                }.getOrNull()
+            }
 
             if (tidalResult != null && !tidalResult.url.isNullOrBlank()) {
                 val playableUri = if (tidalResult.isDash || isDashManifestUrl(tidalResult.url)) {
@@ -380,7 +404,11 @@ class DesktopStreamResolver @Inject constructor(
         // 3. High-Bitrate Lossy AAC Fallback (Tidal 320k AAC & JioSaavn 320k AAC)
         if (qualityTier == QualityTier.MAX || qualityTier == QualityTier.BEST) {
             val tidalAacAllowed = losslessPrefs.tidalAacFallbackNow() || !losslessEnabled
-            if (tidalAacAllowed) {
+            if (tidalAacAllowed && speculative && tidalNeedsRelay(trackQuery, allowAac = true)) {
+                Log.d(TAG, "Speculative resolve of '${track.title}' stops before Tidal AAC; the real play asks it")
+                return@withContext null
+            }
+            if (tidalAacAllowed && !speculative) {
                 val tidalResult = runCatching {
                     tidalAacResolver.resolve(trackQuery, foreground = true)
                 }.getOrNull()
@@ -439,6 +467,19 @@ class DesktopStreamResolver @Inject constructor(
         }
 
         null
+    }
+
+    /**
+     * True when the Tidal rung could only answer [query] by asking the relay right now (nothing
+     * cached for this mode), or when the relay pool is busy. Makes no request (`cacheOnly`).
+     * A definitive cached miss, a spent daily allowance or no relay configured return false:
+     * the real play would skip Tidal too, so the lossy rungs may run.
+     */
+    private suspend fun tidalNeedsRelay(query: TrackQuery, allowAac: Boolean): Boolean {
+        val cached = runCatching {
+            bitchordClient.lookup(query, allowAac = allowAac, cacheOnly = true)
+        }.getOrNull() ?: return false
+        return cached == TidalLookup.NeedsRelay || cached is TidalLookup.Busy
     }
 
     private fun isDashManifestUrl(url: String): Boolean {
