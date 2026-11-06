@@ -23,6 +23,9 @@ actual fun artistProfileViewModel(): ArtistProfileViewModel = hiltViewModel<Andr
 @Composable
 actual fun albumDiscoveryViewModel(): AlbumDiscoveryViewModel = hiltViewModel<AndroidAlbumDiscoveryViewModel>()
 
+@Composable
+actual fun moodBrowseViewModel(): MoodBrowseViewModel = hiltViewModel<AndroidMoodBrowseViewModel>()
+
 @DrawableRes
 fun socialIconFor(kind: String): Int? = when (kind.lowercase()) {
     "instagram" -> R.drawable.ic_social_instagram
@@ -58,4 +61,28 @@ private tailrec fun Context.findActivity(): Activity? = when (this) {
     is Activity -> this
     is ContextWrapper -> baseContext.findActivity()
     else -> null
+}
+
+@Composable
+actual fun monthlyListenersLabel(count: Long?): String {
+    if (count == null) return ""
+    val locale = androidx.compose.ui.platform.LocalConfiguration.current.locales[0] ?: java.util.Locale.getDefault()
+    val short = remember(count, locale) { shortMonthlyListeners(count, locale) }
+    return androidx.compose.ui.res.pluralStringResource(
+        R.plurals.artist_monthly_listeners,
+        short.shown.coerceAtMost(Int.MAX_VALUE.toLong()).toInt(),
+        short.text,
+    )
+}
+
+internal actual fun shortMonthlyListeners(count: Long, locale: java.util.Locale): ShortCount {
+    val format = android.icu.text.CompactDecimalFormat.getInstance(locale, android.icu.text.CompactDecimalFormat.CompactStyle.SHORT)
+    format.minimumSignificantDigits = 1
+    format.maximumSignificantDigits = 3
+    val separator = format.decimalFormatSymbols.decimalSeparator
+    val wholeDigits = format.format(count).substringBefore(separator).count(Char::isDigit)
+    val digits = maxOf(wholeDigits, 2)
+    format.maximumSignificantDigits = digits
+    val shown = java.math.BigDecimal.valueOf(count).round(java.math.MathContext(digits, java.math.RoundingMode.HALF_EVEN)).toLong()
+    return ShortCount(text = format.format(count), shown = shown)
 }

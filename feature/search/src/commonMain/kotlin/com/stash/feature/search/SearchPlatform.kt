@@ -13,7 +13,13 @@ expect fun artistProfileViewModel(): ArtistProfileViewModel
 expect fun albumDiscoveryViewModel(): AlbumDiscoveryViewModel
 
 @Composable
+expect fun moodBrowseViewModel(): MoodBrowseViewModel
+
+@Composable
 expect fun rememberSocialPainter(kind: String): Painter?
 
 @Composable
 expect fun StatusBarIcons(light: Boolean)
+
+@Composable
+expect fun monthlyListenersLabel(count: Long?): String

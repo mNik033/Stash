@@ -1,6 +1,7 @@
 package com.stash.core.ui.ambient
 
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.AnimationSpec
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animate
@@ -20,7 +21,7 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import com.stash.core.ui.theme.LocalIsAmoledTheme
 import com.stash.core.ui.theme.LocalIsDarkTheme
-import com.stash.core.ui.theme.StashPurple
+import com.stash.core.ui.theme.StashDarkColorScheme
 
 /*
  * One album colour for the whole app. The player-level source (app's AlbumColorSource) reads the
@@ -60,7 +61,8 @@ const val TAB_COLOUR_MS = 180
  *
  * Song-bound colours ([accent], [onAccent], [ink], [wash], [pageTint], [dom], [vib], [mut]) follow
  * the current song whether it plays or not. [wordmark] and [selectedTab] are tinted only while a
- * song plays (see [tintedWhilePlaying]).
+ * song plays (see [tintedWhilePlaying]); [tint] says how far, for anything else that follows the
+ * same rule.
  */
 @Stable
 class AlbumChrome internal constructor(
@@ -68,6 +70,7 @@ class AlbumChrome internal constructor(
     private val animatorRef: () -> AccentAnimator,
     private val wordmarkRef: () -> Color,
     private val selectedTabRef: () -> Color,
+    private val tintRef: () -> Float = { 0f },
 ) {
     private val animator: AccentAnimator get() = animatorRef()
 
@@ -98,11 +101,23 @@ class AlbumChrome internal constructor(
     /** The Now Playing ambient's muted colour (lifted on light). */
     val mut: Color get() = animator.role { it.mut }
 
+    /** Home's glow ([AccentRoles.glow]), crossfading: read at draw time by [albumGlow]. */
+    val glow: Color get() = animator.role { it.glow }
+
     /** The wordmark's one ink: plain when idle or paused, the contrast-checked mood tint while a song plays. */
     val wordmark: Color get() = wordmarkRef()
 
     /** The selected tab: the song's [ink] while playing, else the theme's neutral selected colour. */
     val selectedTab: Color get() = selectedTabRef()
+
+    /**
+     * How tinted the chrome is right now: 1 while a song plays, 0 idle or paused ([tintedWhilePlaying], collected
+     * once for the whole app), fading between them in step with [wordmark] (800 ms; at once with animations off).
+     * For a surface that wears the album colour only while a song plays and is neutral otherwise: blend its neutral
+     * ink toward [accent] by this, and it changes exactly when the wordmark and the tab bar do, on every screen,
+     * with no copy of the rule of its own. Read it where it's drawn and only that redraws.
+     */
+    val tint: Float get() = tintRef()
 
     /** Every song-bound role as displayed now (one snapshot; prefer the single getters per frame). */
     val roles: AccentRoles get() = animator.displayed()
@@ -117,7 +132,7 @@ class AlbumChrome internal constructor(
 }
 
 /**
- * The idle chrome outside any [ProvideAlbumChrome] (previews, tests): Stash purple, white wordmark,
+ * The idle chrome outside any [ProvideAlbumChrome] (previews, tests): neutral, white wordmark,
  * on the dark ground. A CompositionLocal's default is built without a composition, so it can't
  * see the theme; everything the app draws sits under ProvideAlbumChrome, which does.
  */
@@ -125,7 +140,8 @@ private val IdleAnimator = AccentAnimator(brandRoles(Ground.DARK))
 private val IdleChrome = AlbumChrome(
     animatorRef = { IdleAnimator },
     wordmarkRef = { WordmarkPlainDark },
-    selectedTabRef = { StashPurple },
+    selectedTabRef = { StashDarkColorScheme.primary },
+    tintRef = { 0f },
 )
 
 /** The app's album colours. Provided once, at the scaffold. */
@@ -186,16 +202,24 @@ fun ProvideAlbumChrome(colors: AlbumColors, content: @Composable () -> Unit) {
     // Keyed by the ground too, so they switch with the theme rather than fading across it.
     val wordmark = key(ground) { animateColorAsState(wordmarkTarget, wordmarkFade, label = "albumWordmark") }
     val tab = key(ground) { animateColorAsState(tabTarget, fade, label = "albumTab") }
+    // The same timing as the wordmark, so a surface blending by it turns with the wordmark.
+    val tint = animateFloatAsState(
+        targetValue = if (colors.tinted) 1f else 0f,
+        animationSpec = if (reduced) snap() else tween(fadeMs, easing = FastOutSlowInEasing),
+        label = "albumTint",
+    )
     // One holder for the app's lifetime (its identity never changes, so nothing holding it goes
     // stale); it reads the current animator and inks through these references.
     val animatorRef = rememberUpdatedState(animator)
     val wordmarkRef = rememberUpdatedState(wordmark)
     val tabRef = rememberUpdatedState(tab)
+    val tintRef = rememberUpdatedState(tint)
     val chrome = remember {
         AlbumChrome(
             animatorRef = { animatorRef.value },
             wordmarkRef = { wordmarkRef.value.value },
             selectedTabRef = { tabRef.value.value },
+            tintRef = { tintRef.value.value },
         )
     }
     CompositionLocalProvider(LocalAlbumChrome provides chrome, content = content)

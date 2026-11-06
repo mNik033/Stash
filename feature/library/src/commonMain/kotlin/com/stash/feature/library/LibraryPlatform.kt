@@ -42,6 +42,9 @@ expect fun shareMixViewModel(playlistId: Long): ShareMixViewModel
 expect fun rememberMultipleAudioPicker(onAudioPicked: (List<String>) -> Unit): () -> Unit
 
 @Composable
+expect fun rememberPlaylistFilePicker(onFilePicked: (String) -> Unit): () -> Unit
+
+@Composable
 expect fun rememberImagePicker(onImagePicked: (String) -> Unit): () -> Unit
 
 @Composable

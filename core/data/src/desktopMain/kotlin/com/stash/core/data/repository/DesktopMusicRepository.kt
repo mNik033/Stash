@@ -1,6 +1,9 @@
 package com.stash.core.data.repository
 
 import com.stash.core.common.matchesArtistCredits
+import com.stash.core.data.album.SavedAlbum
+import com.stash.core.data.album.SavedAlbums
+import com.stash.core.data.album.toSavedAlbum
 import com.stash.core.data.blocklist.BlocklistGuard
 import com.stash.core.data.db.dao.AlbumSummary
 import com.stash.core.data.db.dao.ArtistSummary
@@ -18,6 +21,7 @@ import com.stash.core.data.db.entity.PlaylistTrackCrossRef
 import com.stash.core.data.db.entity.SyncHistoryEntity
 import com.stash.core.data.db.entity.TrackEntity
 import com.stash.core.data.library.canonicalWordsForSave
+import com.stash.core.data.library.findLibraryCopy
 import com.stash.core.data.library.findReusableByWords
 import com.stash.core.data.mapper.toDomain
 import com.stash.core.data.mapper.toEntity
@@ -120,6 +124,19 @@ class DesktopMusicRepository @Inject constructor(
 
     override fun getAllAlbums(): Flow<List<AlbumSummary>> =
         libraryScope { includeNotDownloaded, libraryOnly -> trackDao.getAllAlbums(includeNotDownloaded, libraryOnly) }
+            .flowOn(Dispatchers.Default)
+
+    override fun observeSavedAlbums(): Flow<List<SavedAlbum>> =
+        playlistDao.observeSavedAlbums()
+            .distinctUntilChanged()
+            .map { rows -> rows.map { it.toSavedAlbum() } }
+            .flowOn(Dispatchers.Default)
+
+    override fun getLibraryAlbums(): Flow<List<SavedAlbum>> =
+        combine(observeSavedAlbums(), streamingPreference.enabled) { albums, streamOnly ->
+            SavedAlbums.forLibrary(albums, streamOnly)
+        }
+            .distinctUntilChanged()
             .flowOn(Dispatchers.Default)
 
     override fun getRecentlyAdded(limit: Int): Flow<List<Track>> =
@@ -310,9 +327,28 @@ class DesktopMusicRepository @Inject constructor(
         return true
     }
 
-    override suspend fun queueDownload(trackId: Long): Boolean {
-        val entity = trackDao.getById(trackId) ?: return false
-        if (entity.isDownloaded) return false
+    override suspend fun queueDownload(trackId: Long): Boolean =
+        requestDownload(trackId) == DownloadRequestResult.QUEUED
+
+    override suspend fun requestDownload(trackId: Long): DownloadRequestResult {
+        val entity = trackDao.getById(trackId) ?: return DownloadRequestResult.NOT_QUEUED
+        if (entity.soundCloudPreview) return DownloadRequestResult.NOT_QUEUED
+        if (entity.isDownloaded) return DownloadRequestResult.NOT_QUEUED
+
+        val copy = runCatching {
+            trackDao.findLibraryCopy(
+                title = entity.title,
+                artist = entity.artist,
+                durationMs = entity.durationMs,
+                youtubeId = entity.youtubeId,
+                soundCloudId = entity.soundCloudId,
+                excludeTrackId = entity.id,
+                explicit = entity.explicit,
+            )
+        }.getOrNull()
+        if (copy != null) {
+            return DownloadRequestResult.ALREADY_ON_PHONE
+        }
 
         val existingId = downloadQueueDao.getByTrackId(trackId)?.id
         val queueId = existingId?.takeIf { downloadQueueDao.requeueForTap(it) == 1 }
@@ -326,7 +362,7 @@ class DesktopMusicRepository @Inject constructor(
                 )
             )
         downloadQueueTrigger.triggerDrain()
-        return true
+        return DownloadRequestResult.QUEUED
     }
     override suspend fun downloadWaitReason(trackId: Long): DownloadWaitReason? =
         downloadQueueDao.getByTrackId(trackId)
@@ -438,6 +474,14 @@ class DesktopMusicRepository @Inject constructor(
 
     override suspend fun setPlaylistPinnedToHome(playlistId: Long, pinnedAt: Long?) {
         playlistDao.setPinnedToHome(playlistId, pinnedAt)
+    }
+
+    override suspend fun setMixFavorite(playlistId: Long, favorite: Boolean) {
+        playlistDao.setHomeVisibility(
+            playlistId,
+            hidden = false,
+            pinnedAt = if (favorite) System.currentTimeMillis() else null,
+        )
     }
 
     override suspend fun cleanOrphanedMixTracks(): Int = 0

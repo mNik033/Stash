@@ -29,6 +29,9 @@ actual fun castViewModel(): CastViewModel = hiltViewModel<AndroidCastViewModel>(
 actual fun signalPathViewModel(): SignalPathViewModel = hiltViewModel<AndroidSignalPathViewModel>()
 
 @Composable
+actual fun streamingQualityViewModel(): StreamingQualityViewModel = hiltViewModel<AndroidStreamingQualityViewModel>()
+
+@Composable
 actual fun rememberTouchExplorationEnabled(): Boolean {
     val context = LocalContext.current
     return remember(context) {

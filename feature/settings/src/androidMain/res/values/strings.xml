@@ -45,21 +45,46 @@
     <string name="settings_about_section">About</string>
     <string name="settings_update_on_latest">You\'re on the latest version (%1$s)</string>
     <string name="settings_update_available">Update available: %1$s</string>
-    <string name="update_sheet_title">Stash %1$s is ready</string>
-    <string name="update_sheet_whats_new">What\'s new</string>
+    <!-- The update sheet (UpdateSheet.kt). Header: "Update available", "Stash 0.9.123", "You have 0.9.122 · 174 MB". -->
+    <string name="update_sheet_eyebrow">Update available</string>
+    <string name="update_sheet_title">Stash %1$s</string>
+    <string name="update_sheet_you_have">You have %1$s</string>
+    <!-- Under the highlights: what else is in the notes, e.g. "+4 new · 4 improvements · 10 fixes", opening them all. -->
+    <string name="update_sheet_more_new">+%1$d new</string>
+    <plurals name="update_sheet_improvements">
+        <item quantity="one">%1$d improvement</item>
+        <item quantity="other">%1$d improvements</item>
+    </plurals>
+    <plurals name="update_sheet_fixes">
+        <item quantity="one">%1$d fix</item>
+        <item quantity="other">%1$d fixes</item>
+    </plurals>
+    <string name="update_sheet_all_notes">See all the notes</string>
+    <string name="update_sheet_notes_on_github">Full notes on GitHub</string>
     <string name="update_sheet_update_now">Update now</string>
     <string name="update_sheet_later">Later</string>
+    <string name="update_sheet_skip">Skip this version</string>
+    <string name="update_sheet_hide">Hide</string>
+    <string name="update_sheet_close">Close</string>
     <string name="update_sheet_downloading">Downloading…</string>
     <string name="update_sheet_downloading_pct">Downloading… %1$d%%</string>
-    <string name="update_sheet_installing">Installing… Android asks you to confirm.</string>
-    <string name="update_sheet_permission">Android needs your OK to install updates from Stash. Turn on “Allow from this source”, then come back. You only do this once.</string>
+    <!-- "82 of 174 MB": the megabytes downloaded so far, then the whole size. -->
+    <string name="update_sheet_progress">%1$d of %2$s</string>
+    <string name="update_sheet_downloading_note">You can keep using Stash. The update installs when the download is done.</string>
+    <string name="update_sheet_installing">Almost done. If Android asks, tap Update.</string>
+    <string name="update_sheet_ready">Downloaded and checked. Tap Install now, then Update when Android asks.</string>
+    <string name="update_sheet_install_now">Install now</string>
+    <string name="update_sheet_permission_title">One more step, just this once</string>
+    <string name="update_sheet_permission_step_1">Tap Open settings.</string>
+    <string name="update_sheet_permission_step_2">Turn on “Allow from this source”.</string>
+    <string name="update_sheet_permission_step_3">Come back here. The update carries on.</string>
     <string name="update_sheet_open_settings">Open settings</string>
     <string name="update_sheet_try_again">Try again</string>
-    <string name="update_sheet_github">Get it from GitHub</string>
+    <string name="update_sheet_github">Download from GitHub</string>
     <string name="update_failed_not_an_update">This download isn\'t a Stash update, so nothing was installed.</string>
     <string name="update_failed_already_newer">You already have this version or a newer one.</string>
-    <string name="update_failed_download">Couldn\'t download the update. Check your connection and try again.</string>
-    <string name="update_failed_install">Android couldn\'t install the update. Try again, or get it from GitHub.</string>
+    <string name="update_failed_download">The download stopped. Check your connection and try again.</string>
+    <string name="update_failed_install">Android couldn\'t install the update. Try again, or download it from GitHub.</string>
     <string name="settings_update_see_releases">see Releases</string>
     <string name="settings_update_check_failed">Couldn\'t check for updates — try again later</string>
     <string name="settings_version_label">Version</string>
@@ -79,7 +104,7 @@
     <string name="settings_search_no_results">No settings found for \"%1$s\"</string>
     <string name="settings_search_placeholder">Search settings</string>
     <string name="settings_search_clear">Clear search</string>
-    <string name="settings_search_stream_or_download">Stream or download</string>
+    <string name="settings_search_online_or_offline">Online or offline</string>
     <string name="settings_search_sync_your_likes">Sync your likes</string>
 
     <!-- Settings > Support Banner -->
@@ -96,6 +121,17 @@
     <string name="settings_donate_upi">UPI (India)</string>
     <string name="settings_donate_upi_hint">UPI is for supporters in India.</string>
     <string name="settings_support_star">Star</string>
+    <!-- The Support card (2026-11): one line under "Support Stash", beside the two makers' pictures. -->
+    <string name="settings_support_tagline">Keeps Stash running and updated, and pays for its servers and hosting.</string>
+    <!-- The month's goal, as stashfm.app shows it: "$168 of $200 this month". -->
+    <string name="settings_support_goal">%1$s of %2$s this month</string>
+    <!-- A supporter's card: thanks and their status instead of the ask. -->
+    <string name="settings_support_thanks_title">Thank you for supporting Stash</string>
+    <string name="settings_support_thanks_line">You\'re a supporter: unlimited Tidal &amp; Qobuz is on.</string>
+    <string name="settings_support_donate_again">Donate again</string>
+    <!-- Settings › About: the GitHub star moved here from the Support card. -->
+    <string name="settings_about_star">Star Stash on GitHub</string>
+    <string name="settings_about_star_detail">github.com/rawnaldclark/Stash</string>
 
     <!-- Settings > Accounts & Sync -->
     <string name="settings_accounts_connections_section">Connections</string>
@@ -168,6 +204,15 @@
     <string name="settings_like_mirror_row_title">Like on %1$s too</string>
     <string name="settings_like_mirror_lastfm_title">Love on Last.fm too</string>
     <string name="settings_like_mirror_row_subtitle">Songs you heart in Stash from now on</string>
+    <string name="settings_like_status_up_to_date">Up to date</string>
+    <string name="settings_like_status_waiting">%1$d waiting</string>
+    <string name="settings_like_status_offline">%1$d waiting for a connection</string>
+    <string name="settings_like_status_retrying">%1$d waiting · retrying</string>
+    <string name="settings_like_status_needs_you">Last error: %1$s · tap to retry</string>
+    <string name="settings_like_error_signed_out">sign-in expired</string>
+    <string name="settings_like_error_rate_limited">too many requests</string>
+    <string name="settings_like_error_refused">not accepted</string>
+    <string name="settings_like_error_offline">no connection</string>
     <string name="settings_listenbrainz_dialog_title">Connect ListenBrainz</string>
     <string name="settings_scrobbles_send_now">Send now</string>
     <plurals name="settings_scrobbles_waiting">
@@ -182,7 +227,7 @@
 
     <!-- Settings > Accounts > LikeMirrorWarningDialog -->
     <string name="settings_like_mirror_warning_title">Mirror likes to %1$s?</string>
-    <string name="settings_like_mirror_warning_body">Hearting a track in Stash will also Like it on %1$s, and removing a heart will remove the Like there too. Only likes you add from now on are mirrored.\n\nThis uses the same private endpoint the %1$s web player uses — not an official API. It can stop working at any time and, rarely, unofficial access can get an account flagged. Consider enabling this only on a secondary or backup account.</string>
+    <string name="settings_like_mirror_risk_body">Hearting a song in Stash will also Like it on %1$s, and removing the heart takes that Like away again, but never a Like that was already there. Only likes you add from now on are mirrored.\n\nThis uses the private endpoint the %1$s web player uses, not an official API. It can stop working at any time, and in rare cases unofficial access can get an account flagged.</string>
     <string name="settings_like_mirror_warning_confirm">I understand</string>
 
     <!-- Settings > Accounts > YouTubeHistorySyncSection -->
@@ -203,7 +248,7 @@
     <string name="settings_yt_sync_retry">Retry YouTube sync</string>
     <string name="settings_yt_status_up_to_date">Up to date</string>
     <string name="settings_yt_status_pending">%1$d pending</string>
-    <string name="settings_yt_status_pending_offline">%1$d pending · offline</string>
+    <string name="settings_yt_status_pending_offline">%1$d pending · YouTube Music can\'t be reached</string>
     <string name="settings_yt_status_auth_failed">YT Music connection lost — reconnect</string>
     <string name="settings_yt_status_protocol_broken">Disabled due to errors — will re-enable in next update</string>
     <string name="settings_yt_status_disabled">Off</string>
@@ -264,6 +309,10 @@
     <string name="settings_ui_scale_subtitle">Text and layout size across the app</string>
     <string name="settings_amoled_title">Pure black (AMOLED)</string>
     <string name="settings_amoled_subtitle">Black backgrounds in dark theme</string>
+    <string name="settings_album_colours_title">Album colours</string>
+    <string name="settings_album_colours_subtitle">Buttons, switches and highlights take the colour of the song that’s on</string>
+    <string name="settings_album_colours_follow">Follow the song</string>
+    <string name="settings_album_colours_neutral">Neutral</string>
     <string name="settings_now_playing_section">Now Playing</string>
     <string name="settings_ambient_motion_title">Ambient motion</string>
     <string name="settings_ambient_motion_subtitle">Moving color behind Now Playing</string>
@@ -305,8 +354,12 @@
     <string name="settings_start_tab_home">Home</string>
     <string name="settings_start_tab_library">Library</string>
     <string name="settings_start_tab_search">Search</string>
+    <!-- Settings > Appearance > Search: whether Search shows the Moods & moments and Genres tiles before you type. -->
+    <string name="settings_search_section">Search</string>
+    <string name="settings_search_browse_title">Moods &amp; genres in Search</string>
+    <string name="settings_search_browse_subtitle">Tiles to browse before you type</string>
     <string name="settings_home_layout_section">Home layout</string>
-    <string name="settings_home_layout_desc">Arrange Home\'s sections or hide the ones you don\'t use. The Discover hero stays on top.</string>
+    <string name="settings_home_layout_desc">Drag Home\'s sections into the order you like, or hide the ones you don\'t use.</string>
     <string name="settings_home_section_community_desc">Playlists and songs other Stash listeners are into. Your posts show your name.</string>
     <string name="settings_home_section_listening_desc">Recently played and your History. Appears after your first listen.</string>
     <string name="settings_home_section_record_desc">Every year you’ve listened, pressed into a record.</string>
@@ -325,6 +378,10 @@
     <string name="settings_home_section_your_record">Your record</string>
     <string name="settings_home_section_record_mixes">From your record</string>
     <string name="settings_home_section_record_mixes_desc">Mixes only your years of listening can make. Shows once your history is in.</string>
+    <string name="settings_home_section_new_from_artists">New from your artists</string>
+    <string name="settings_home_section_new_from_artists_desc">The newest albums and singles from the artists you play most.</string>
+    <string name="settings_home_section_because_you_like">Because you like…</string>
+    <string name="settings_home_section_because_you_like_desc">Songs like the ones you play most lately. Appears once you’ve listened a while.</string>
     <string name="settings_home_section_move_up">Move %1$s up</string>
     <string name="settings_home_section_move_down">Move %1$s down</string>
     <string name="settings_home_section_show_desc">Show %1$s on Home</string>
@@ -340,8 +397,8 @@
     <string name="settings_flac_quality_title">FLAC quality</string>
     <string name="settings_youtube_quality_title">YouTube quality</string>
     <string name="settings_download_quality_rates_desc">Sets YouTube downloads at the rates below, and JioSaavn at 96 kbps on Low and Normal, 160 on High, 320 on Best and Max.</string>
-    <string name="settings_save_data_title">Save Data</string>
-    <string name="settings_save_data_subtitle">Lowest JioSaavn and YouTube quality</string>
+    <string name="settings_save_data_title">Data saver</string>
+    <string name="settings_data_saver_subtitle">On mobile data and metered Wi-Fi: lower quality streams, smaller pictures, no prefetch. Downloads unaffected.</string>
     <string name="settings_lossless_title">Lossless</string>
     <string name="settings_lossless_subtitle_off">Off: songs play from JioSaavn or YouTube</string>
     <string name="settings_lossless_subtitle_no_source">No lossless source set up yet</string>
@@ -374,7 +431,6 @@
     <string name="settings_streaming_section">Streaming</string>
     <string name="settings_on_wifi">On Wi-Fi</string>
     <string name="settings_on_cellular">On cellular</string>
-    <string name="settings_save_data_lossless_subtitle">CD quality on every network</string>
     <string name="settings_prefer_cloud_copies_title">Play my cloud copies first</string>
     <string name="settings_prefer_cloud_copies_subtitle">Your lossless files in cloud storage, before Qobuz or Tidal</string>
     <string name="settings_prefer_tidal_aac_streaming_title">Prefer Tidal AAC while streaming</string>
@@ -434,7 +490,7 @@
     <string name="settings_supporter_remove_from_device">Remove from this device</string>
     <string name="settings_supporter_offer">Unlimited Tidal &amp; Qobuz for supporters</string>
     <string name="settings_supporter_sheet_title">Unlimited Tidal &amp; Qobuz</string>
-    <string name="settings_supporter_sheet_desc">Any amount on Ko-fi unlocks unlimited Tidal and Qobuz, FLAC and AAC. Enter the email you used on Ko-fi and we\'ll send you a code.</string>
+    <string name="settings_supporter_sheet_desc">$5 or more on Ko-fi unlocks unlimited Tidal and Qobuz, FLAC and AAC. Enter the email you used on Ko-fi and we\'ll send you a code.</string>
     <string name="settings_supporter_kofi_email_label">Ko-fi email</string>
     <string name="settings_supporter_email_code_button">Email me a code</string>
     <string name="settings_supporter_code_sent_desc">If %1$s is on our Ko-fi list, a code is on its way. It can take a minute.</string>
@@ -458,8 +514,9 @@
     <string name="settings_lossless_routing_footer">Lossless comes from the sources above. Misses try JioSaavn before falling back to YouTube, shown as \"via YT\" while it plays.</string>
 
     <!-- Settings > Playback -->
-    <string name="settings_mode_stream_only">Stream only</string>
-    <string name="settings_mode_download">Download</string>
+    <!-- The one mode switch. Online: everything plays, and songs that aren't downloaded stream. Offline: only downloaded songs play (Sync still downloads over the network). -->
+    <string name="settings_mode_online">Online</string>
+    <string name="settings_mode_offline">Offline</string>
     <string name="settings_stream_on_cellular_title">Stream on cellular</string>
     <string name="settings_stream_on_cellular_desc">Uses mobile data</string>
     <string name="settings_stream_via_youtube_title">Stream via YouTube</string>
@@ -473,6 +530,10 @@
     <string name="settings_autoplay_radio_desc">A radio keeps playing when the queue ends</string>
     <string name="settings_crossfade_title">Crossfade</string>
     <string name="settings_crossfade_desc">Blend into the next song. Skips still cut.</string>
+    <!-- Settings > Playback, last line. Stash follows Android's Battery Saver on its own; there is no Stash switch for it. -->
+    <string name="settings_battery_saver_note">When Battery Saver is on, Stash pauses its looping animations and background prefetching.</string>
+    <!-- Settings search: the name the Battery Saver note is found by. -->
+    <string name="settings_search_battery_saver">Battery Saver</string>
     <string name="settings_crossfade_duration_label">Duration</string>
     <plurals name="settings_crossfade_duration_seconds">
         <item quantity="one">%d sec</item>
@@ -776,6 +837,31 @@
     <string name="settings_library_health_section_flac_upgrades">FLAC upgrades</string>
     <string name="settings_library_health_flac_upgrades_desc">Look for lossless versions of downloaded tracks that aren\'t FLAC yet. Keeps running in the background. To run this after every sync, turn it on in Audio &amp; Quality.</string>
     <string name="settings_library_health_check_upgrades_button">Check for upgrades</string>
+    <string name="settings_library_health_section_duplicates">Duplicates</string>
+    <plurals name="settings_duplicates_count">
+        <item quantity="one">%d possible duplicate: two rows that may be one song.</item>
+        <item quantity="other">%d possible duplicates: pairs of rows that may be one song.</item>
+    </plurals>
+    <string name="settings_duplicates_none">No possible duplicates.</string>
+    <string name="settings_duplicates_last_run">Tidied on %1$s: %2$d merged, %3$d unused mix songs removed.</string>
+    <string name="settings_duplicates_review">Review</string>
+    <string name="settings_duplicates_title">Possible duplicates</string>
+    <string name="settings_duplicates_desc">Pairs of rows that may be one song. Merge keeps the one you tick, with both rows\' playlists, plays and likes. Not a duplicate hides the pair for good.</string>
+    <string name="settings_duplicates_kind_same_song">The same song</string>
+    <string name="settings_duplicates_kind_two_uploads">Two uploads or listings of one song</string>
+    <string name="settings_duplicates_kind_two_files">The same song, on your phone twice</string>
+    <string name="settings_duplicates_kind_version_words">Same title and length, different version words</string>
+    <string name="settings_duplicates_merge">Merge</string>
+    <string name="settings_duplicates_not_duplicate">Not a duplicate</string>
+    <string name="settings_duplicates_confirm_title">Remove the extra copy?</string>
+    <string name="settings_duplicates_confirm_text">Both are on your phone. Merging keeps “%1$s” and deletes the other file (%2$s).</string>
+    <string name="settings_duplicates_confirm_yes">Merge and remove</string>
+    <string name="settings_duplicates_cancel">Cancel</string>
+    <string name="settings_duplicates_merged">Merged.</string>
+    <string name="settings_duplicates_merged_file_removed">Merged. The extra copy was removed.</string>
+    <string name="settings_duplicates_not_merged">Couldn\'t merge these two.</string>
+    <string name="settings_duplicates_kept_file_missing">The copy you\'re keeping isn\'t on your phone any more. Keep the other one.</string>
+    <string name="settings_duplicates_dismissed">Won\'t be shown again.</string>
     <string name="settings_library_health_section_lyrics">Lyrics</string>
     <string name="settings_library_health_fetch_lyrics_title">Fetch lyrics</string>
     <string name="settings_library_health_fetch_lyrics_queued_desc">Queued, waiting for a suitable connection. Tap to start now on any network.</string>
@@ -856,20 +942,42 @@
     </plurals>
     <string name="settings_web_link_reading_code">Reading the code…</string>
     <string name="settings_web_link_confirm_title">Link %s?</string>
-    <string name="settings_web_link_confirm_body_before_code">Your computer will ask you to check </string>
+    <string name="settings_web_link_confirm_body_before_code">"Your computer will ask you to check "</string>
     <string name="settings_web_link_confirm_body_after_code">. It will see what you\'re playing here, and you can choose to mirror your library with it.</string>
     <string name="settings_web_link_confirm_from_link_warning">Only continue if you just opened Link your phone on your own computer, and it\'s in front of you now.</string>
     <string name="settings_web_link_action_link">Link</string>
-    <string name="settings_web_link_waiting_computer">Waiting for your computer… · </string>
+    <string name="settings_web_link_waiting_computer">"Waiting for your computer… · "</string>
     <string name="settings_web_link_waiting_desc">Check that %s shows the same six digits, then tap Link there.</string>
     <string name="settings_web_link_linked_to">Linked to %s</string>
     <string name="settings_web_link_linked_desc">Linked. Nothing is mirrored yet.</string>
-    <string name="settings_web_link_code_label">Code </string>
+    <string name="settings_web_link_code_label">"Code "</string>
     <string name="settings_web_link_scan_again">Scan again</string>
     <string name="settings_web_link_action_rename">Rename</string>
     <string name="settings_web_link_rename_dialog_title">Rename</string>
     <string name="settings_web_link_rename_me_hint">Your linked devices see this name.</string>
     <string name="settings_web_link_rename_other_hint">This name stays on this phone.</string>
+
+    <!-- Settings > Library & Storage > Your Stash: the link's page, which also gathers supporter status, cloud and backups -->
+    <string name="settings_your_stash_title">Your Stash</string>
+    <string name="settings_your_stash_nav_subtitle">Link the web player, see your devices, supporter status, cloud and backups</string>
+    <string name="settings_your_stash_posture">Your Stash is your devices. No account, no email. What your phone and browsers share with each other is encrypted before it leaves them.</string>
+    <string name="settings_your_stash_section_devices">Devices</string>
+    <string name="settings_your_stash_no_browser_yet">No browser linked yet</string>
+    <string name="settings_your_stash_section_supporter">Supporter</string>
+    <string name="settings_your_stash_supporter_offer_subtitle">Gave $5 or more on Ko-fi? Unlock it with your Ko-fi email.</string>
+    <string name="settings_your_stash_supporter_code_here">Your supporter code is on this phone</string>
+    <string name="settings_your_stash_section_cloud">Cloud</string>
+    <string name="settings_your_stash_cloud_connect_title">Connect your cloud storage</string>
+    <string name="settings_your_stash_cloud_signed_out">Signed out on this phone: reconnect</string>
+    <string name="settings_your_stash_section_backups">Backups</string>
+    <string name="settings_your_stash_section_coming">What\'s coming</string>
+    <string name="settings_your_stash_coming_passkey_title">Recover with a passkey</string>
+    <string name="settings_your_stash_coming_passkey_desc">Lose your phone and a passkey brings Your Stash back. Still no email, no password.</string>
+    <string name="settings_your_stash_coming_backup_title">Nightly encrypted backup</string>
+    <string name="settings_your_stash_coming_backup_desc">Your library and settings, backed up each night and encrypted on your phone first, so only you can read them.</string>
+    <string name="settings_your_stash_coming_restore_title">Restore on a new phone</string>
+    <string name="settings_your_stash_coming_restore_desc">Your library, likes and settings on a new phone. Sign-ins stay behind.</string>
+    <string name="settings_your_stash_coming_note">Planned, not built yet. No dates.</string>
 
     <!-- Settings > Link Stash on the Web > Mirror -->
     <string name="settings_mirror_dir_off">Off</string>
@@ -879,17 +987,17 @@
     <string name="settings_mirror_section_title">Mirror between your devices</string>
     <string name="settings_mirror_section_desc">Off keeps a separate library on each. What mirrors is end-to-end encrypted.</string>
     <string name="settings_mirror_likes_title">Likes</string>
-    <string name="settings_mirror_likes_waiting_share"> · Waiting for %s to share its likes.</string>
-    <string name="settings_mirror_likes_choose_combine"> · Choose how to combine them</string>
+    <string name="settings_mirror_likes_waiting_share">" · Waiting for %s to share its likes."</string>
+    <string name="settings_mirror_likes_choose_combine">" · Choose how to combine them"</string>
     <string name="settings_mirror_playlists_title">Playlists</string>
     <plurals name="settings_mirror_playlists_chosen">
-        <item quantity="one"> · %d chosen</item>
-        <item quantity="other"> · %d chosen</item>
+        <item quantity="one">" · %d chosen"</item>
+        <item quantity="other">" · %d chosen"</item>
     </plurals>
     <string name="settings_mirror_choose_playlists_title">Choose playlists</string>
     <string name="settings_mirror_choose_playlists_subtitle">Spotify and YouTube Music playlists go to the web only, read-only there.</string>
     <string name="settings_mirror_plays_title">Plays</string>
-    <string name="settings_mirror_plays_subtitle_note"> · Plays from the web show in History, never in your Stash Mixes</string>
+    <string name="settings_mirror_plays_subtitle_note">" · Plays from the web show in History, never in your Stash Mixes"</string>
     <plurals name="settings_mirror_held_unlikes">
         <item quantity="one">Mirroring is holding %1$d unlike from this phone. Send it to %2$s, or keep that like?</item>
         <item quantity="other">Mirroring is holding %1$d unlikes from this phone. Send them to %2$s, or keep those likes?</item>
@@ -902,8 +1010,8 @@
         <item quantity="one">1 song</item>
         <item quantity="other">%d songs</item>
     </plurals>
-    <string name="settings_mirror_playlist_readonly_web"> · From your phone, read-only on the web</string>
-    <string name="settings_mirror_playlist_shared_mix"> · Shared mix</string>
+    <string name="settings_mirror_playlist_readonly_web">" · From your phone, read-only on the web"</string>
+    <string name="settings_mirror_playlist_shared_mix">" · Shared mix"</string>
     <string name="settings_mirror_switch_off_note">Switching one off stops mirroring it and leaves every copy where it is.</string>
     <string name="settings_mirror_first_merge_title">Your likes: %1$d on %2$s, %3$d here</string>
     <string name="settings_mirror_first_merge_changed">Your likes changed since you answered. Check the numbers again.</string>
@@ -939,7 +1047,7 @@
         <item quantity="one">%d song</item>
         <item quantity="other">%,d songs</item>
     </plurals>
-    <string name="settings_picker_shared_mix"> · Shared mix</string>
+    <string name="settings_picker_shared_mix">" · Shared mix"</string>
 
     <!-- Settings > Link Stash on the Web > InboxPrompt -->
     <string name="settings_inbox_sent_you">sent you %s.</string>

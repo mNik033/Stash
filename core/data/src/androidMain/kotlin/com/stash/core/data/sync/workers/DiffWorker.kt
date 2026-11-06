@@ -19,8 +19,10 @@ import com.stash.core.data.db.entity.PlaylistEntity
 import com.stash.core.data.db.entity.PlaylistTrackCrossRef
 import com.stash.core.data.db.entity.RemotePlaylistSnapshotEntity
 import com.stash.core.data.db.entity.RemoteTrackSnapshotEntity
+import com.stash.core.data.db.entity.TrackAliasEntity
 import com.stash.core.data.db.entity.TrackEntity
 import com.stash.core.data.library.SameSongRule
+import com.stash.core.data.library.libraryCopiesOf
 import com.stash.core.data.repository.MusicRepository
 import com.stash.core.data.sync.SyncPreferencesManager
 import com.stash.core.data.sync.SyncStateManager
@@ -64,8 +66,16 @@ internal fun defaultSyncEnabled(type: PlaylistType, online: Boolean): Boolean = 
  * pinned playlist would sit on Home with nothing on the phone, so it waits for
  * its Save switch like before.
  */
-internal fun pinOnDiscovery(type: PlaylistType, streamingMode: Boolean, pinNewPlaylists: Boolean): Boolean =
-    pinNewPlaylists && streamingMode && type == PlaylistType.CUSTOM
+internal fun pinOnDiscovery(
+    type: PlaylistType,
+    streamingMode: Boolean,
+    pinNewPlaylists: Boolean,
+    source: MusicSource,
+    sourceId: String,
+): Boolean =
+    pinNewPlaylists && streamingMode && type == PlaylistType.CUSTOM &&
+        // A saved album lives in Library › Albums: 300 synced albums would flood Your playlists.
+        !com.stash.core.data.album.SavedAlbums.isSavedAlbum(type, source, sourceId)
 
 /**
  * The type to re-write onto an existing playlist row, or null to leave it.
@@ -150,6 +160,11 @@ internal fun reconciledPlaylistType(
 internal fun shouldEnqueueForDownload(streamingMode: Boolean, syncEnabled: Boolean): Boolean =
     !streamingMode && syncEnabled
 
+/** A saved album the Spotify sync files (source SPOTIFY, `album:spotify:` key): stamped once mirrored. */
+internal fun isSpotifySavedAlbum(playlist: PlaylistEntity): Boolean =
+    playlist.source == MusicSource.SPOTIFY &&
+        com.stash.core.data.album.SavedAlbums.isSavedAlbum(playlist.type, playlist.source, playlist.sourceId)
+
 /**
  * Second worker in the sync chain. Compares remote playlist/track snapshots
  * against the local database to find new tracks that need downloading.
@@ -180,6 +195,8 @@ class DiffWorker @AssistedInject constructor(
     private val syncLog: com.stash.core.data.sync.SyncLog,
     private val canonicalRecompute: com.stash.core.data.library.CanonicalRecomputeRunner,
     private val soundCloudAccounts: com.stash.core.auth.soundcloud.SoundCloudAccountManager? = null,
+    /** Whether Spotify Liked Songs were fetched in full: like mirroring reads "not liked there" only from such a fetch. */
+    private val likedSongsFetch: com.stash.core.data.social.SpotifyLikedSongsFetch? = null,
 ) : CoroutineWorker(appContext, params) {
 
     companion object {
@@ -334,10 +351,15 @@ class DiffWorker @AssistedInject constructor(
                 // in Online mode everything links. Offline mode keeps the skip for
                 // switched-off playlists, except one kept on the phone (#474): its
                 // Download switch needs what the playlist gained linked here, or the
-                // sweep below has nothing new to queue.
+                // sweep below has nothing new to queue. A Spotify saved album always links
+                // too (item 5): its songs were read only because it is new or changed, and
+                // a mirror left unlinked is never stamped, so a switched-off album would
+                // be read again every sync. Linking never downloads. (YouTube Music's
+                // albums carry no stamp, so theirs keep the skip.)
                 if (!localPlaylist.syncEnabled &&
                     !localPlaylist.keepOffline &&
                     localPlaylist.type != PlaylistType.DAILY_MIX &&
+                    !isSpotifySavedAlbum(localPlaylist) &&
                     !streamingMode
                 ) {
                     Log.d(TAG, "Playlist '${playlistSnapshot.playlistName}' sync disabled, skipping")
@@ -623,7 +645,7 @@ class DiffWorker @AssistedInject constructor(
             // Home is decided by PlaylistDao.getAllVisible, not by this flag:
             // Online, a playlist holding streamable tracks shows regardless.
             syncEnabled = defaultSyncEnabled(snapshot.playlistType, streamingMode),
-            pinnedToHomeAt = if (pinOnDiscovery(snapshot.playlistType, streamingMode, pinNewPlaylists)) {
+            pinnedToHomeAt = if (pinOnDiscovery(snapshot.playlistType, streamingMode, pinNewPlaylists, snapshot.source, snapshot.sourcePlaylistId)) {
                 System.currentTimeMillis()
             } else {
                 null
@@ -632,7 +654,11 @@ class DiffWorker @AssistedInject constructor(
         val id = playlistDao.insert(newPlaylist)
         // A playlist or mix that wasn't here before is news â€” arguably the most
         // interesting thing a sync can report, and previously invisible.
-        val kind = if (snapshot.playlistType == PlaylistType.DAILY_MIX) "mix" else "playlist"
+        val kind = when {
+            snapshot.playlistType == PlaylistType.DAILY_MIX -> "mix"
+            com.stash.core.data.album.SavedAlbums.isSavedAlbum(snapshot.playlistType, snapshot.source, snapshot.sourcePlaylistId) -> "album"
+            else -> "playlist"
+        }
         syncLog.success("New $kind: ${snapshot.playlistName}")
         return newPlaylist.copy(id = id)
     }
@@ -742,7 +768,16 @@ class DiffWorker @AssistedInject constructor(
         val soundCloudIsrcs = allowedSnapshots.filter { it.soundCloudId != null }.mapNotNull { it.isrc }
             .filter { it.matches(Regex("[A-Z]{2}[A-Z0-9]{3}[0-9]{7}")) }.distinct()
         val isrcCandidates = soundCloudIsrcs.chunked(900).flatMap { trackDao.findByIsrcs(it) }
-        val candidates = (isrcCandidates + trackDao.findExistingForBatch(spotifyUris, youtubeIds, canonicalIdentities) + soundCloudCandidates).distinctBy { it.id }
+        val direct = (isrcCandidates + trackDao.findExistingForBatch(spotifyUris, youtubeIds, canonicalIdentities) + soundCloudCandidates).distinctBy { it.id }
+        // Ids a merge took away (track_aliases, schema 76): a merged row's other video or Spotify
+        // id finds the row it went into, so this sync never makes the merged duplicate again. The
+        // rows they point at join the candidates; the id's own column still wins below.
+        val duplicateDao = database.duplicateDao()
+        val spotifyAliases = duplicateDao.aliases(TrackAliasEntity.KIND_SPOTIFY_URI, spotifyUris)
+        val youtubeAliases = duplicateDao.aliases(TrackAliasEntity.KIND_YOUTUBE_ID, youtubeIds)
+        val directIds = direct.mapTo(HashSet()) { it.id }
+        val aliasTargets = (spotifyAliases + youtubeAliases).map { it.trackId }.distinct().filterNot { it in directIds }
+        val candidates = direct + trackDao.getByIds(aliasTargets)
         val candidateTracks = candidates.associate { candidate ->
             candidate.id to BatchTrack(candidate, isNew = false)
         }
@@ -770,6 +805,9 @@ class DiffWorker @AssistedInject constructor(
         }
 
         candidateTracks.values.forEach(::registerBatchTrack)
+        // After the rows' own ids, so a row that holds an id in its column always owns it.
+        for (alias in spotifyAliases) candidateTracks[alias.trackId]?.let { bySpotifyUri.putIfAbsent(alias.value, it) }
+        for (alias in youtubeAliases) candidateTracks[alias.trackId]?.let { byYoutubeId.putIfAbsent(alias.value, it) }
 
         // A canonical-title/artist match is only safe to reuse under
         // SameSongRule, the rule every path that finds a row by its words
@@ -945,11 +983,42 @@ class DiffWorker @AssistedInject constructor(
         // Home can show it. This site once tested raw `!streamingMode`, and every
         // track of every rotating mix was queued (#368: "it downloads 6000+ from
         // users playlists and Spotify mixes that I don't need"). The protection
-        // is now the switch â€” discovered mixes start off â€” not the type.
+        // is now the switch — discovered mixes start off — not the type.
+        var linkedCopies = 0
+        // Copies of new songs already on the phone, by copy id: written after [crossRefsToInsert]
+        // and insert-if-absent, so they never move or revive a link that is already there.
+        val copyLinks = linkedMapOf<Long, PlaylistTrackCrossRef>()
         if (shouldEnqueueForDownload(streamingMode, localPlaylist.syncEnabled)) {
+            // A new song already on the phone as another row (cause 4 of the duplicates: a Spotify
+            // row downloaded under one video while this YouTube playlist holds another upload, so
+            // the ids keep them two rows) is not downloaded again: its copy is linked here, where
+            // the song sits, and the new row keeps its own ids for the next sync. The link is
+            // insert-if-absent ([copyLinks]): a copy already in this playlist keeps its place, and
+            // one the user took out (a removal mark written while this sync ran included) is not
+            // linked back; the song is still not downloaded twice. The shared check every download
+            // path asks (SameSongRule.isLibraryCopy), its candidates read once per playlist.
+            val copies = trackDao.libraryCopiesOf(
+                newTracks.filterNot { it.entity.soundCloudPreview }
+                    .map { it.entity.copy(id = checkNotNull(it.persistedId)) },
+            )
+            val firstPositionOf = newOccurrences.groupBy({ it.first }, { it.second.position })
+                .mapValues { (_, positions) -> positions.min() }
             for (batchTrack in newTracks) {
                 if (batchTrack.entity.soundCloudPreview) continue // A preview is never queued for download.
                 val trackId = checkNotNull(batchTrack.persistedId)
+                val copy = copies[trackId]
+                if (copy != null) {
+                    copyLinks.putIfAbsent(
+                        copy.id,
+                        PlaylistTrackCrossRef(
+                            playlistId = localPlaylist.id,
+                            trackId = copy.id,
+                            position = firstPositionOf[batchTrack] ?: 0,
+                        ),
+                    )
+                    linkedCopies++
+                    continue
+                }
                 downloadEntries.add(
                     DownloadQueueEntity(
                         trackId = trackId,
@@ -1039,6 +1108,9 @@ class DiffWorker @AssistedInject constructor(
         if (crossRefsToInsert.isNotEmpty()) {
             playlistDao.insertAllCrossRefs(crossRefsToInsert.values.toList())
         }
+        if (copyLinks.isNotEmpty()) {
+            playlistDao.insertCrossRefsIfAbsent(copyLinks.values.toList())
+        }
         if (downloadEntries.isNotEmpty()) {
             downloadQueueDao.insertAll(downloadEntries)
         }
@@ -1050,7 +1122,7 @@ class DiffWorker @AssistedInject constructor(
                 TAG,
                 "Playlist '${playlistSnapshot.playlistName}' (id=${localPlaylist.id}): " +
                     "$newTrackCount new track(s), streamingMode=$streamingMode, " +
-                    "downloadsQueued=${downloadEntries.size}",
+                    "downloadsQueued=${downloadEntries.size}, alreadyOnPhone=$linkedCopies",
             )
         }
 
@@ -1110,6 +1182,12 @@ class DiffWorker @AssistedInject constructor(
         syncMode: SyncMode,
     ) {
         playlistDao.updateLastSynced(localPlaylist.id, System.currentTimeMillis())
+        if (localPlaylist.type == PlaylistType.LIKED_SONGS && localPlaylist.source == MusicSource.SPOTIFY) {
+            val complete = !snapshotUnreliable(playlistSnapshot, trackSnapshots)
+            // Bookkeeping for like mirroring only: never the sync's failure
+            runCatching { likedSongsFetch?.fetched(complete, System.currentTimeMillis()) }
+                .onFailure { if (it is kotlin.coroutines.cancellation.CancellationException) throw it else Log.w(TAG, "couldn't note the Liked Songs fetch", it) }
+        }
         if (snapshotUnreliable(playlistSnapshot, trackSnapshots)) {
             // #343: an unreliable fetch was NOT mirrored (see processPlaylist).
             // Stamping it would make the next sync skip this playlist as

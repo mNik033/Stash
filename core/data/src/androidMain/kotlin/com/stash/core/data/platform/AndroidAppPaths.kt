@@ -9,7 +9,7 @@ import javax.inject.Singleton
 
 @Singleton
 class AndroidAppPaths @Inject constructor(
-    @ApplicationContext private val context: Context,
+    @ApplicationContext val context: Context,
 ) : AppPaths {
     override val filesDir: File
         get() = context.filesDir

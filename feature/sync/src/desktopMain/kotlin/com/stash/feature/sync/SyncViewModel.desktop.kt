@@ -49,6 +49,9 @@ actual open class SyncViewModel(
     private val _uiState = MutableStateFlow(SyncUiState())
     actual val uiState: StateFlow<SyncUiState> = _uiState.asStateFlow()
 
+    actual val downloadsSummary: StateFlow<DownloadsSummary> =
+        MutableStateFlow(DownloadsSummary())
+
     actual val blockedCount: StateFlow<Int> =
         blocklistGuard?.observeCount()?.stateIn(
             scope = viewModelScope,
@@ -319,28 +322,6 @@ actual open class SyncViewModel(
         // Desktop queue processor drains on IO; triggering no-op or drain cancel
     }
 
-    actual fun onTogglePlaylistSync(playlistId: Long, enabled: Boolean) {
-        viewModelScope.launch {
-            playlistDao?.setKeepOffline(playlistId, enabled)
-            playlistDao?.setSyncEnabled(playlistId, enabled)
-            if (enabled) {
-                val streamOnly = streamingPreference?.enabled?.first() ?: true
-                if (!streamOnly) {
-                    musicRepository?.queueDownloadsForPlaylist(playlistId)
-                    downloadQueueTrigger?.triggerDrain()
-                }
-            } else {
-                musicRepository?.removeDownloadsForPlaylist(playlistId)
-            }
-        }
-    }
-
-    actual fun onToggleHideFromHome(playlistId: Long, hidden: Boolean) {
-        viewModelScope.launch {
-            playlistDao?.setHideFromHome(playlistId, hidden)
-        }
-    }
-
     actual fun onSetSyncTime(hour: Int, minute: Int) {}
     actual fun onToggleAutoSync() {}
     actual fun onToggleWifiOnly() {}
@@ -359,6 +340,9 @@ actual open class SyncViewModel(
     }
     actual fun onDiscoverAutoMixesChanged(enabled: Boolean) {
         _uiState.update { it.copy(discoverAutoMixes = enabled) }
+    }
+    actual fun onSyncSpotifySavedAlbumsChanged(enabled: Boolean) {
+        _uiState.update { it.copy(syncSpotifySavedAlbums = enabled) }
     }
     actual fun onSyncDaysChanged(bitmask: Int) {
         _uiState.update { it.copy(syncDays = bitmask) }

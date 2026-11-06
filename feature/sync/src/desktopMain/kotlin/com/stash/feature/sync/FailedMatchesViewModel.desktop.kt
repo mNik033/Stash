@@ -31,13 +31,14 @@ actual open class FailedMatchesViewModel(
     actual val previewState: StateFlow<PreviewState> = MutableStateFlow(PreviewState.Idle)
     actual val approvedDownloads: StateFlow<ApprovedDownloads> = MutableStateFlow(ApprovedDownloads())
     actual val userMessages: Flow<String> = emptyFlow()
+    actual val manualSearch: StateFlow<ManualSearch?> = MutableStateFlow(null)
 
     actual fun resync() {}
     actual fun approveAll() {}
     actual fun dismissAll() {}
     actual fun previewRejectedMatch(videoId: String) {}
     actual fun stopPreview() {}
-    actual fun approveMatch(trackId: Long, queueEntryId: Long, candidate: ResyncCandidate) {}
+    actual fun approveMatch(trackId: Long, queueEntryId: Long, candidate: ResyncCandidate, userPicked: Boolean) {}
     actual fun approveSwap(row: FlaggedTrackRow, candidate: ResyncCandidate) {}
     actual fun unflagTrack(trackId: Long) {
         viewModelScope.launch {
@@ -49,4 +50,9 @@ actual open class FailedMatchesViewModel(
             musicRepository?.dismissMatch(trackId)
         }
     }
+    actual fun openFinderFor(trackId: Long) {}
+    actual fun toggleManualSearch(trackId: Long, artist: String, title: String) {}
+    actual fun searchManually(query: String) {}
+    actual fun pickManualMatch(candidate: ResyncCandidate) {}
+    actual fun closeManualSearch() {}
 }

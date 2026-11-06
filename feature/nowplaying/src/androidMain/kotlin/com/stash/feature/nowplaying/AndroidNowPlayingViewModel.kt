@@ -3,8 +3,8 @@ package com.stash.feature.nowplaying
 import android.content.Context
 import coil3.SingletonImageLoader
 import com.stash.core.data.backcover.AlbumBackCovers
-import com.stash.core.data.lastfm.TrackAlbums
 import com.stash.core.data.lossless.LosslessUpgrader
+import com.stash.core.data.prefs.DataSaver
 import com.stash.core.data.prefs.LyricsPreference
 import com.stash.core.data.prefs.NowPlayingPreference
 import com.stash.core.data.repository.MusicRepository
@@ -35,7 +35,7 @@ class AndroidNowPlayingViewModel @Inject constructor(
     userActionScope: UserActionScope,
     lyricsOutputOffsets: LyricsOutputOffsets,
     backCovers: AlbumBackCovers,
-    trackAlbums: TrackAlbums,
+    dataSaver: DataSaver,
     @ApplicationContext private val appContext: Context,
 ) : NowPlayingViewModel(
     playerRepository = playerRepository,
@@ -52,7 +52,7 @@ class AndroidNowPlayingViewModel @Inject constructor(
     userActionScope = userActionScope,
     lyricsOutputOffsets = lyricsOutputOffsets,
     backCovers = backCovers,
-    trackAlbums = trackAlbums,
+    dataSaver = dataSaver,
 ) {
     override fun fetchBackImage(url: String) {
         SingletonImageLoader.get(appContext).enqueue(backCoverRequest(appContext, url))

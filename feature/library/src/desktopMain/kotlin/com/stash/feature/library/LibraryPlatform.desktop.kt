@@ -95,6 +95,30 @@ actual fun rememberMultipleAudioPicker(onAudioPicked: (List<String>) -> Unit): (
 }
 
 @Composable
+actual fun rememberPlaylistFilePicker(onFilePicked: (String) -> Unit): () -> Unit {
+    val scope = rememberCoroutineScope()
+    return remember {
+        {
+            scope.launch(Dispatchers.IO) {
+                val chooser = JFileChooser().apply {
+                    dialogTitle = "Select Playlist File"
+                    fileFilter = FileNameExtensionFilter(
+                        "Playlist Files (*.m3u, *.m3u8, *.pls, *.csv, *.txt)",
+                        "m3u", "m3u8", "pls", "csv", "txt"
+                    )
+                }
+                if (chooser.showOpenDialog(null) == JFileChooser.APPROVE_OPTION) {
+                    val uri = chooser.selectedFile.toURI().toString()
+                    withContext(Dispatchers.Main) {
+                        onFilePicked(uri)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
 actual fun rememberImagePicker(onImagePicked: (String) -> Unit): () -> Unit {
     val scope = rememberCoroutineScope()
     return remember {

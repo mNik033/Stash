@@ -12,6 +12,7 @@ val LocalNowPlayingViewModel = staticCompositionLocalOf<NowPlayingViewModel?> { 
 val LocalListenTogetherViewModel = staticCompositionLocalOf<ListenTogetherViewModel?> { null }
 val LocalCastViewModel = staticCompositionLocalOf<CastViewModel?> { null }
 val LocalSignalPathViewModel = staticCompositionLocalOf<SignalPathViewModel?> { null }
+val LocalStreamingQualityViewModel = staticCompositionLocalOf<StreamingQualityViewModel?> { null }
 
 @Composable
 actual fun nowPlayingViewModel(): NowPlayingViewModel {
@@ -35,6 +36,12 @@ actual fun castViewModel(): CastViewModel {
 actual fun signalPathViewModel(): SignalPathViewModel {
     return LocalSignalPathViewModel.current
         ?: error("LocalSignalPathViewModel not provided in Desktop composition hierarchy")
+}
+
+@Composable
+actual fun streamingQualityViewModel(): StreamingQualityViewModel {
+    return LocalStreamingQualityViewModel.current
+        ?: error("LocalStreamingQualityViewModel not provided in Desktop composition hierarchy")
 }
 
 @Composable

@@ -6,11 +6,12 @@ import androidx.hilt.work.HiltWorker
 import androidx.work.Constraints
 import androidx.work.CoroutineWorker
 import androidx.work.ExistingWorkPolicy
-import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import com.stash.core.data.audio.AudioDurationExtractor
+import com.stash.core.data.db.dao.PlaylistDao
 import com.stash.core.data.db.dao.TrackDao
 import com.stash.core.data.lastfm.LastFmApiClient
 import com.stash.core.data.lastfm.LastFmApiException
@@ -19,11 +20,13 @@ import com.stash.core.data.lastfm.LastFmCredentials
 import com.stash.core.data.lastfm.LastFmEnrichmentBackoff
 import com.stash.core.data.lastfm.LastFmLookupRules
 import com.stash.core.data.lastfm.LastFmTrackInfo
+import com.stash.core.data.prefs.DataSaverSnapshot
 import com.stash.core.model.YouTubeVideoId
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 
 /**
  * Backfill that repairs Discovery-pipeline metadata gaps. Three passes run
@@ -74,6 +77,7 @@ class ArtBackfillWorker @AssistedInject constructor(
     @Assisted appContext: Context,
     @Assisted params: WorkerParameters,
     private val trackDao: TrackDao,
+    private val playlistDao: PlaylistDao,
     private val lastFmApiClient: LastFmApiClient,
     private val credentials: LastFmCredentials,
     private val audioDurationExtractor: AudioDurationExtractor,
@@ -110,7 +114,8 @@ class ArtBackfillWorker @AssistedInject constructor(
          * anything to do ([ArtBackfillSchedule]); a cold start with nothing
          * new costs three small queries and no request.
          */
-        fun enqueueOneTime(context: Context) = enqueue(context, ExistingWorkPolicy.KEEP)
+        fun enqueueOneTime(context: Context) =
+            enqueue(context, ExistingWorkPolicy.KEEP, constraints(DataSaverSnapshot.isOn(context)))
 
         /**
          * After each [StashMixRefreshWorker] cycle, so freshly-created
@@ -120,19 +125,47 @@ class ArtBackfillWorker @AssistedInject constructor(
          * up the stubs the refresh just made (a run already under way may have
          * read its batch before they existed); the queued run does nothing if
          * there turns out to be nothing new.
+         *
+         * @param userAsked the refresh was of a mix the user made or refreshed by hand: its art comes
+         *   on any connection under Data saver too (their choice, like the refresh itself), and a run
+         *   waiting for Wi-Fi is replaced, not appended behind, or it would hold this one as well.
          */
-        fun enqueueFromMixRefresh(context: Context) = enqueue(context, ExistingWorkPolicy.APPEND_OR_REPLACE)
+        suspend fun enqueueFromMixRefresh(context: Context, userAsked: Boolean = false) {
+            val dataSaverOn = DataSaverSnapshot.isOn(context)
+            if (!userAsked || !dataSaverOn) {
+                enqueue(context, ExistingWorkPolicy.APPEND_OR_REPLACE, constraints(dataSaverOn))
+                return
+            }
+            val running = WorkManager.getInstance(context).getWorkInfosForUniqueWorkFlow(WORK_NAME).first()
+                .any { it.state == WorkInfo.State.RUNNING }
+            // A run under way keeps going and this one follows it; otherwise it takes the waiting one's place.
+            val policy = if (running) ExistingWorkPolicy.APPEND_OR_REPLACE else ExistingWorkPolicy.REPLACE
+            enqueue(context, policy, constraints(dataSaverOn = false))
+        }
 
-        private fun enqueue(context: Context, policy: ExistingWorkPolicy) {
-            val constraints = Constraints.Builder()
-                .setRequiredNetworkType(NetworkType.CONNECTED)
-                .build()
-            val work = OneTimeWorkRequestBuilder<ArtBackfillWorker>()
-                .setConstraints(constraints)
-                .build()
+        /**
+         * The Data saver switch flipped: a run still waiting for its network is queued again with the
+         * new constraint ([requeueIfWaiting]), so turning Data saver off lets a run held for Wi-Fi go
+         * on mobile data. A run under way, or none waiting, is left alone.
+         */
+        suspend fun requeueIfWaiting(context: Context, dataSaverOn: Boolean): Boolean =
+            WorkManager.getInstance(context).requeueIfWaiting(WORK_NAME, request(constraints(dataSaverOn)))
+
+        /**
+         * Any connection; only Wi-Fi while Data saver is on ([backgroundNetworkType]): a pass is up
+         * to [BATCH_SIZE] Last.fm look-ups nobody is waiting on.
+         */
+        internal fun constraints(dataSaverOn: Boolean): Constraints = Constraints.Builder()
+            .setRequiredNetworkType(backgroundNetworkType(dataSaverOn))
+            .build()
+
+        private fun request(constraints: Constraints) =
+            OneTimeWorkRequestBuilder<ArtBackfillWorker>().setConstraints(constraints).build()
+
+        private fun enqueue(context: Context, policy: ExistingWorkPolicy, constraints: Constraints) {
             val workManager = WorkManager.getInstance(context)
             workManager.cancelUniqueWork(RETIRED_MIX_REFRESH_WORK_NAME)
-            workManager.enqueueUniqueWork(WORK_NAME, policy, work)
+            workManager.enqueueUniqueWork(WORK_NAME, policy, request(constraints))
         }
     }
 
@@ -157,6 +190,7 @@ class ArtBackfillWorker @AssistedInject constructor(
         runArtPass(startedAt)
         runDurationPass()
         runStreamableMetadataPass(startedAt)
+        if (stats.artFilled > 0) refreshMixCovers()
         Log.i(
             TAG,
             "run done: lastfm network=${stats.network} cached=${stats.cached} " +
@@ -165,12 +199,32 @@ class ArtBackfillWorker @AssistedInject constructor(
         return Result.success()
     }
 
+    /**
+     * Rebuilds every Stash Mix's cover ([PlaylistDao.refreshMixCover]) after
+     * this run filled art. A mix refresh builds the cover from its songs' art
+     * when it links them, and fresh discovery stubs have none until this
+     * worker runs, so a Daily Discover made of them showed a blank cover on
+     * Home until its membership next changed. Cosmetic: a failure is logged.
+     */
+    private suspend fun refreshMixCovers() {
+        try {
+            playlistDao.getStashMixPlaylistIds().forEach { playlistDao.refreshMixCover(it) }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w(TAG, "couldn't rebuild the mix covers", e)
+        }
+    }
+
     /** How the lookups of one run went, for the log line that proves the traffic. */
     private class Stats {
         var network = 0
         var cached = 0
         var unlookable = 0
         var transient = 0
+
+        /** Songs any pass gave art this run: the Stash Mix covers are rebuilt when there are some. */
+        var artFilled = 0
     }
 
     private var stats = Stats()
@@ -279,6 +333,7 @@ class ArtBackfillWorker @AssistedInject constructor(
             if (lookup?.fromNetwork == true) delay(REQUEST_INTERVAL_MS)
         }
         backoff.recordFailures(LastFmEnrichmentBackoff.Pass.ART_BACKFILL, unfillable, startedAt)
+        stats.artFilled += filled
         Log.i(TAG, "art backfill done: filled=$filled unfillable=${unfillable.size} (backed off)")
     }
 
@@ -383,6 +438,7 @@ class ArtBackfillWorker @AssistedInject constructor(
             if (art == null || ms == null) unfillable += row.id
         }
         backoff.recordFailures(LastFmEnrichmentBackoff.Pass.ART_BACKFILL, unfillable, startedAt)
+        stats.artFilled += artFilled
         Log.i(
             TAG,
             "stream-only backfill done: art=$artFilled duration=$durationFilled " +

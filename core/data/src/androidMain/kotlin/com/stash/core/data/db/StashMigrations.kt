@@ -2,6 +2,10 @@ package com.stash.core.data.db
 
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
+import com.stash.core.data.lastfm.LastFmLookupRules
+import com.stash.core.data.lastfm.LastFmTrackInfo
+import com.stash.core.data.lastfm.lastFmCacheKey
+import kotlinx.serialization.json.Json
 
 /**
  * Historical Room migrations for the Android SQLite database.
@@ -1738,6 +1742,40 @@ object StashMigrations {
             }
         }
 
+        /**
+         * v75 -> v76: duplicates (plan 2026-11-01 §2, steps 4-5). Three new tables, all empty, and
+         * nothing else changes: `track_aliases` (the ids a merge takes away, pointing at the row
+         * that stays, so a sync or a like never makes the merged row again), `track_merge_log`
+         * (one line per row the cleanup or a Merge took out) and `duplicate_dismissals` ("Not a
+         * duplicate"). The merging itself runs after the migration, in
+         * [com.stash.core.data.library.duplicates.DuplicateCleanup]: SQL can't run the same-song
+         * rule.
+         */
+        val MIGRATION_75_76 = object : Migration(75, 76) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `track_aliases` (`kind` TEXT NOT NULL, `value` TEXT NOT NULL, " +
+                        "`track_id` INTEGER NOT NULL, `created_at` INTEGER NOT NULL, PRIMARY KEY(`kind`, `value`), " +
+                        "FOREIGN KEY(`track_id`) REFERENCES `tracks`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+                )
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_track_aliases_track_id` ON `track_aliases` (`track_id`)")
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `track_merge_log` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "`at` INTEGER NOT NULL, `reason` TEXT NOT NULL, `kept_track_id` INTEGER, " +
+                        "`removed_track_id` INTEGER NOT NULL, `title` TEXT NOT NULL, `artist` TEXT NOT NULL, " +
+                        "`detail` TEXT NOT NULL)",
+                )
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_track_merge_log_at` ON `track_merge_log` (`at`)")
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `duplicate_dismissals` (`track_a` INTEGER NOT NULL, " +
+                        "`track_b` INTEGER NOT NULL, `dismissed_at` INTEGER NOT NULL, PRIMARY KEY(`track_a`, `track_b`), " +
+                        "FOREIGN KEY(`track_a`) REFERENCES `tracks`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE , " +
+                        "FOREIGN KEY(`track_b`) REFERENCES `tracks`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+                )
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_duplicate_dismissals_track_b` ON `duplicate_dismissals` (`track_b`)")
+            }
+        }
+
         /** Edit order tables start empty, so existing playlists retain their native order. */
         val MIGRATION_73_74 = object : Migration(73, 74) {
             override fun migrate(db: SupportSQLiteDatabase) {
@@ -1890,6 +1928,7 @@ object StashMigrations {
                 MIGRATION_72_73,
                 MIGRATION_73_74,
                 MIGRATION_74_75,
+                MIGRATION_75_76,
             )
         }
 }

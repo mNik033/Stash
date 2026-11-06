@@ -77,4 +77,9 @@ dependencies {
     testImplementation(libs.robolectric)
     testImplementation(libs.androidx.test.core)
     testImplementation(libs.kotlinx.serialization.json)
+    // RailFirstCardTest composes the artist page's rails on Robolectric. The Compose BOM is only
+    // on the main classpath (stash.compose.library), so it is applied again for the test one.
+    testImplementation(platform(libs.compose.bom))
+    testImplementation("androidx.compose.ui:ui-test-junit4")
+    testImplementation("androidx.compose.ui:ui-test-manifest")
 }

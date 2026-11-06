@@ -58,6 +58,8 @@ kotlin {
             implementation(libs.work.runtime.ktx)
             implementation(libs.hilt.work)
             implementation(libs.kotlinx.coroutines.android)
+            // ProcessLifecycleOwner: AppUpdater opens Android's install confirm only while a Stash screen is started.
+            implementation(libs.lifecycle.process)
             implementation("androidx.documentfile:documentfile:1.0.1")
         }
         desktopMain.dependencies {

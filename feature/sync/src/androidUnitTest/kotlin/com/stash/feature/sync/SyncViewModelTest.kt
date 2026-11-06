@@ -59,6 +59,10 @@ class SyncViewModelTest {
     // restate its behaviour while hiding the flow the VM collects at init.
     private val syncLog = com.stash.core.data.sync.SyncLog()
     private val downloadQueueDao = mockk<com.stash.core.data.db.dao.DownloadQueueDao>(relaxed = true)
+    // A relaxed mock can't stand in for SharedFlow.collect (it returns Nothing); the Downloads row gets a real, silent flow.
+    private val downloadManager = mockk<com.stash.data.download.DownloadManager>(relaxed = true) {
+        every { progress } returns kotlinx.coroutines.flow.MutableSharedFlow()
+    }
     private val musicRepository = mockk<com.stash.core.data.repository.MusicRepository>(relaxed = true)
     private val blocklistGuard = mockk<com.stash.core.data.blocklist.BlocklistGuard>(relaxed = true)
     private val librarySizeHolder = mockk<com.stash.data.download.files.LibrarySizeHolder>(relaxed = true)
@@ -71,6 +75,7 @@ class SyncViewModelTest {
         every { prefs.spotifySyncMode } returns emptyFlow()
         every { prefs.youtubeSyncMode } returns emptyFlow()
         every { prefs.youtubeLikedStudioOnly } returns emptyFlow()
+        every { prefs.syncSpotifySavedAlbums } returns emptyFlow()
         every { prefs.syncDays } returns emptyFlow()
         every { tokenManager.spotifyAuthState } returns MutableStateFlow(AuthState.NotConnected)
         every { tokenManager.youTubeAuthState } returns MutableStateFlow(AuthState.NotConnected)
@@ -108,6 +113,7 @@ class SyncViewModelTest {
         streamingPreference = streamingPreference,
         lastFmRecommendationSource = mockk(relaxed = true),
         playerRepository = mockk(relaxed = true),
+        downloadManager = downloadManager,
     )
 
     @Before fun setUp() {
@@ -118,6 +124,78 @@ class SyncViewModelTest {
 
     @After fun tearDown() {
         Dispatchers.resetMain()
+    }
+
+    // -- Spotify saved albums (item 5, 2026-11-02) --------------------------------------------
+
+    private fun spotifyRow(id: Long, sourceId: String) = com.stash.core.data.db.entity.PlaylistEntity(
+        id = id, name = "Row $id", source = MusicSource.SPOTIFY, sourceId = sourceId,
+        type = com.stash.core.model.PlaylistType.CUSTOM,
+    )
+
+    @Test
+    fun `a synced saved album is marked as an album, a playlist is not`() {
+        every { playlistDao.getSpotifyPlaylistsForPreferences() } returns kotlinx.coroutines.flow.flowOf(
+            listOf(spotifyRow(1, "album:spotify:FakeAlb1xxxxxxxxxxxxxx"), spotifyRow(2, "FakePlaylist1xxxxxxxxx")),
+        )
+
+        val rows = newVm().uiState.value.spotifyPlaylists
+
+        assertEquals(listOf(true, false), rows.map { it.album })
+    }
+
+    @Test
+    fun `the saved albums switch shows the setting and writes it`() {
+        every { prefs.syncSpotifySavedAlbums } returns MutableStateFlow(false)
+        val vm = newVm()
+        assertEquals(false, vm.uiState.value.syncSpotifySavedAlbums)
+
+        vm.onSyncSpotifySavedAlbumsChanged(true)
+
+        io.mockk.coVerify { prefs.setSyncSpotifySavedAlbums(true) }
+    }
+
+    // -- "synced N ago" counts from when the last sync really finished (2026-11-02) --------
+
+    private fun lastSyncAt(row: com.stash.core.data.db.entity.SyncHistoryEntity): Long? {
+        every { syncHistoryDao.getRecentSyncs(any()) } returns kotlinx.coroutines.flow.flowOf(listOf(row))
+        return newVm().uiState.value.lastSyncFinishedAt
+    }
+
+    private val threeAm = java.time.Instant.parse("2026-11-02T03:00:00Z")
+
+    @Test
+    fun `a finished sync counts from its finish`() {
+        val row = com.stash.core.data.db.entity.SyncHistoryEntity(
+            id = 1, startedAt = threeAm, completedAt = threeAm.plusSeconds(20 * 60),
+            status = com.stash.core.model.SyncState.COMPLETED,
+        )
+        assertEquals(threeAm.plusSeconds(20 * 60).toEpochMilli(), lastSyncAt(row))
+    }
+
+    /**
+     * Auto-sync starts at 03:00 and the phone reboots part-way. The 09:00 launch closes the row
+     * as SyncHistoryDao.resetStaleSyncs does: FAILED, "Interrupted", ended at 09:00. Counting
+     * from that end would read "synced just now" at 09:00; it counts from 03:00.
+     */
+    @Test
+    fun `a sync the next launch closed as interrupted counts from its start`() {
+        val row = com.stash.core.data.db.entity.SyncHistoryEntity(
+            id = 2, startedAt = threeAm, completedAt = threeAm.plusSeconds(6 * 3600),
+            status = com.stash.core.model.SyncState.FAILED,
+            errorMessage = com.stash.core.data.sync.INTERRUPTED_ERROR_MARKER,
+        )
+        assertEquals(threeAm.toEpochMilli(), lastSyncAt(row))
+    }
+
+    @Test
+    fun `a sync with no end yet counts from its start, and none reads nothing`() {
+        val running = com.stash.core.data.db.entity.SyncHistoryEntity(
+            id = 3, startedAt = threeAm, status = com.stash.core.model.SyncState.DOWNLOADING,
+        )
+        assertEquals(threeAm.toEpochMilli(), lastSyncAt(running))
+        every { syncHistoryDao.getRecentSyncs(any()) } returns kotlinx.coroutines.flow.flowOf(emptyList())
+        assertNull(newVm().uiState.value.lastSyncFinishedAt)
     }
 
     @Test fun `requesting Spotify refresh from accumulate opens the dialog without changing mode`() = runTest {
@@ -169,34 +247,6 @@ class SyncViewModelTest {
 
         vm.onRequestSpotifyRefresh()
         assertNull(vm.uiState.value.pendingRefreshSource)
-    }
-
-    // -- "Shown on Home" pins the mix (2026-09-07) ---------------------------------
-
-    @Test
-    fun `showing a mix on Home pins it`() {
-        newVm().onToggleHideFromHome(7L, hidden = false)
-        coVerify { playlistDao.setHomeVisibility(7L, false, match { it != null }) }
-    }
-
-    @Test
-    fun `hiding a mix from Home unpins it`() {
-        newVm().onToggleHideFromHome(7L, hidden = true)
-        coVerify { playlistDao.setHomeVisibility(7L, true, null) }
-    }
-
-    // -- The Sync tab's switch decides Home (2026-09-07): sync on pins, sync off unpins --
-
-    @Test
-    fun `syncing a playlist pins it to Home`() {
-        newVm().onTogglePlaylistSync(7L, enabled = true)
-        coVerify { playlistDao.setSyncEnabledAndPin(7L, true, match { it > 0L }) }
-    }
-
-    @Test
-    fun `turning sync off unpins it`() {
-        newVm().onTogglePlaylistSync(7L, enabled = false)
-        coVerify { playlistDao.setSyncEnabledAndPin(7L, false, any()) }
     }
 
     // -- Auto-sync schedule (2026-09-28): Stop keeps it, Auto-sync off ends it ---------
@@ -471,6 +521,22 @@ class SyncViewModelTest {
         coVerify(exactly = 0) { playlistDao.setSyncEnabledAndPin(any(), any(), any()) }
     }
 
+    @Test
+    fun `Save all saves every playlist as one download queue`() = runTest {
+        for (streamOnly in listOf(true, false)) {
+            coEvery { streamingPreference.current() } returns streamOnly
+            val vm = newVm()
+
+            vm.onSaveAll(listOf(1L, 2L, 3L))
+            advanceUntilIdle()
+        }
+
+        coVerify(exactly = 2) { musicRepository.keepPlaylistsOffline(listOf(1L, 2L, 3L)) }
+        coVerify(exactly = 0) { musicRepository.setPlaylistDownload(any(), any()) }
+        // Download mode only, as Save does.
+        for (id in listOf(1L, 2L, 3L)) coVerify(exactly = 1) { playlistDao.setSyncEnabledAndPin(id, true, any()) }
+    }
+
     /** Save in Download mode also switches the playlist on for sync, as the old switch did. */
     @Test
     fun `Save in Download mode also switches the playlist on for sync`() = runTest {
@@ -482,5 +548,26 @@ class SyncViewModelTest {
 
         coVerify { playlistDao.setSyncEnabledAndPin(42L, true, any()) }
         coVerify { musicRepository.setPlaylistDownload(42L, true) }
+    }
+
+    /**
+     * Save never writes a Home pin of its own, on or off, in either mode: on a mix the pin
+     * is its Favorite (2026-11-02). The one write that may pin, setSyncEnabledAndPin, leaves
+     * mixes alone (PlaylistDaoHomeVisibilityTest).
+     */
+    @Test
+    fun `Save on and off writes no Home pin of its own`() = runTest {
+        for (streamOnly in listOf(true, false)) {
+            coEvery { streamingPreference.current() } returns streamOnly
+            val vm = newVm()
+            vm.onSavePlaylist(42L, true)
+            vm.onSavePlaylist(42L, false)
+            advanceUntilIdle()
+        }
+
+        coVerify(exactly = 0) { playlistDao.setHomeVisibility(any(), any(), any()) }
+        coVerify(exactly = 0) { playlistDao.setPinnedToHome(any(), any()) }
+        coVerify(exactly = 0) { musicRepository.setPlaylistPinnedToHome(any(), any()) }
+        coVerify(exactly = 0) { playlistDao.setSyncEnabledAndPin(any(), false, any()) }
     }
 }

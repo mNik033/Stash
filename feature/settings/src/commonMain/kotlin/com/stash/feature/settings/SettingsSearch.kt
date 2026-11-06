@@ -1,7 +1,7 @@
 package com.stash.feature.settings
 
 /** Where a search result lives; the hub opens that page. */
-enum class SettingsPage { PLAYBACK, AUDIO, LOSSLESS_SOURCES, EQUALIZER, ACCOUNTS, LIBRARY, APPEARANCE, HOME_LAYOUT, ABOUT }
+enum class SettingsPage { PLAYBACK, AUDIO, LOSSLESS_SOURCES, EQUALIZER, ACCOUNTS, LIBRARY, YOUR_STASH, APPEARANCE, HOME_LAYOUT, ABOUT }
 
 /**
  * One searchable setting: its name as the screen shows it, the page it is on,
@@ -41,6 +41,13 @@ fun searchSettings(
         .sortedWith(compareBy({ it.first }, { it.second }))
         .map { it.third }
 }
+
+/**
+ * The index the hub searches: Your Stash's entries only when the app can open it ([yourStash]: the link is switched on in
+ * this build), so a result never leads nowhere.
+ */
+internal fun searchableIndex(index: List<SettingsSearchEntry>, yourStash: Boolean): List<SettingsSearchEntry> =
+    if (yourStash) index else index.filter { it.page != SettingsPage.YOUR_STASH }
 
 private fun normalize(s: String): String =
     s.lowercase().replace(Regex("[^a-z0-9]+"), " ").trim()

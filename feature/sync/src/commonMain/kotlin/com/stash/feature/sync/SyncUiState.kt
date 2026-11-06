@@ -36,7 +36,14 @@ data class SyncHistoryInfo(
      * interruption (process kill), and genuine failure.
      */
     val displayStatus: SyncDisplayStatus = SyncDisplayStatus.Idle,
-)
+) {
+    /**
+     * The playlists this run listed but couldn't read, by name. Decoded once per
+     * record from [diagnostics], not on every recomposition of the History row
+     * (its screen recomposes with each progress tick of a running sync).
+     */
+    val unreadPlaylists: com.stash.core.data.sync.UnreadPlaylists = com.stash.core.data.sync.unreadPlaylistsIn(diagnostics)
+}
 
 /**
  * Lightweight model for a Spotify playlist's sync preference toggle.
@@ -59,6 +66,8 @@ data class SpotifySyncPlaylist(
     /** A mix that can stack ([com.stash.core.data.sync.MixStacking]), and whether it does. */
     val stackable: Boolean = false,
     val stackSongs: Boolean = false,
+    /** A saved album ([com.stash.core.data.album.SavedAlbums]): its account page lists it under Albums, never Playlists. */
+    val album: Boolean = false,
 )
 
 /**
@@ -85,6 +94,8 @@ data class YouTubeSyncPlaylist(
     /** A mix that can stack ([com.stash.core.data.sync.MixStacking]), and whether it does. */
     val stackable: Boolean = false,
     val stackSongs: Boolean = false,
+    /** A saved album ([com.stash.core.data.album.SavedAlbums]): its account page lists it under Albums, never Playlists. */
+    val album: Boolean = false,
 )
 
 /**
@@ -128,6 +139,8 @@ data class SyncUiState(
      * (opt-out) — see SyncPreferencesManager.discoverAutoMixes.
      */
     val discoverAutoMixes: Boolean = true,
+    /** Whether sync reads Spotify's saved albums. Default true: SyncPreferencesManager.syncSpotifySavedAlbums. */
+    val syncSpotifySavedAlbums: Boolean = true,
     /**
      * Days-of-week bitmask for the auto-sync schedule. Bit 0 = Mon … bit 6 = Sun.
      * Default 127 = every day.
@@ -145,6 +158,7 @@ data class SyncUiState(
     // -- Hero card: last-sync metadata ----------------------------------------
     /** Relative time string for the most recent sync, e.g. "2 hours ago". Empty if never synced. */
     val lastSyncRelativeTime: String = "",
+    val lastSyncFinishedAt: Long? = null,
     /** New tracks the most recent sync added, or null if never synced. */
     val lastSyncTrackCount: Int? = null,
     /** Short health label: "✓ healthy", "! partial", "× failed", or "". */

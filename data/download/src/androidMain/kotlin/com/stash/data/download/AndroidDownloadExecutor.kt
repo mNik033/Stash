@@ -205,7 +205,7 @@ class AndroidDownloadExecutor @Inject constructor(
 
     override suspend fun downloadSoundCloud(
         permalink: String, token: String?, outputDir: File, filename: String,
-        onProgress: (Float) -> Unit = {},
+        onProgress: (Float) -> Unit,
     ): DownloadResult = withContext(Dispatchers.IO) {
         val link = com.stash.data.soundcloud.SoundCloudLinks.parse(permalink)
         val template = outputTemplateFor(outputDir, filename)

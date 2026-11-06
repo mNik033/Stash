@@ -69,9 +69,11 @@ import com.stash.core.ui.components.streaming.StreamingModeChip
 import com.stash.core.ui.components.streaming.StreamingModeSheet
 import com.stash.core.ui.theme.SpaceGrotesk
 import com.stash.core.ui.theme.StashTheme
+import com.stash.core.ui.components.sheetBarsFollow
 import com.stash.feature.sync.components.AccountCard
 import com.stash.feature.sync.components.ArrivalSheet
 import com.stash.feature.sync.components.AttentionRow
+import com.stash.feature.sync.components.SyncDownloadsRow
 import com.stash.feature.sync.components.AuthExpiredBanner
 import com.stash.feature.sync.components.BrandDotLabel
 import com.stash.feature.sync.components.ConnectButton
@@ -108,11 +110,13 @@ fun SyncScreen(
     onNavigateToAccounts: () -> Unit = {},
     onManageSource: (SyncSource) -> Unit = {},
     onOpenHistory: () -> Unit = {},
+    onOpenDownloads: () -> Unit = {},
     onOpenPlaylist: (Long) -> Unit = {},
     viewModel: SyncViewModel = syncViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val failedDownloadsCount by viewModel.failedDownloadsCount.collectAsStateWithLifecycle()
+    val downloads by viewModel.downloadsSummary.collectAsStateWithLifecycle()
     val authState by viewModel.authExpiry.collectAsStateWithLifecycle()
     val streamingMode by viewModel.streamingEnabled.collectAsStateWithLifecycle()
     var showModeSheet by remember { mutableStateOf(false) }
@@ -141,7 +145,9 @@ fun SyncScreen(
     // The user's own playlists lead the art; mixes fill in when there are few.
     val arts = remember(rows, streamingMode) {
         val pool = if (!streamingMode && savedRows.isNotEmpty()) savedRows else rows
-        (pool.filter { it.type == PlaylistType.CUSTOM } + pool.filter { it.type != PlaylistType.CUSTOM })
+        // Saved albums fill in after the playlists, as mixes do.
+        val lead: (SyncPlaylistRow) -> Boolean = { it.type == PlaylistType.CUSTOM && !it.album }
+        (pool.filter(lead) + pool.filterNot(lead))
             .mapNotNull { it.artUrl }
             .distinct()
     }
@@ -163,7 +169,7 @@ fun SyncScreen(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(
-                        text = stringResource(R.string.sync_title),
+                        text = stringResource(SyncR.string.sync_title),
                         fontFamily = SpaceGrotesk,
                         fontWeight = FontWeight.SemiBold,
                         fontSize = 30.sp,
@@ -174,9 +180,9 @@ fun SyncScreen(
                         TextButton(onClick = viewModel::onStopSync) {
                             Text(
                                 if (uiState.syncPhase is SyncPhase.WaitingForNetwork) {
-                                    stringResource(R.string.sync_cancel)
+                                    stringResource(SyncR.string.sync_cancel)
                                 } else {
-                                    stringResource(R.string.sync_stop)
+                                    stringResource(SyncR.string.sync_stop)
                                 },
                             )
                         }
@@ -215,7 +221,7 @@ fun SyncScreen(
                         // Each cover opens its mix; the fallback art (no mixes yet) is pictures only.
                         onCoverTap = if (fan.isEmpty()) null else { i -> onOpenPlaylist(fan[i].id) },
                         summary = librarySummary(uiState, rows),
-                        syncedAgo = uiState.lastSyncRelativeTime,
+                        syncedAgo = rememberSyncedAgo(uiState.lastSyncFinishedAt),
                         newest = newest,
                         onPlay = { row -> viewModel.onPlayPlaylist(row.id, row.name) },
                         onSync = viewModel::onSyncNow,
@@ -225,7 +231,7 @@ fun SyncScreen(
                     OnThisPhoneHero(
                         saved = savedRows,
                         songsOnPhone = uiState.syncStatus.totalTracks,
-                        syncedAgo = uiState.lastSyncRelativeTime,
+                        syncedAgo = rememberSyncedAgo(uiState.lastSyncFinishedAt),
                         onChoose = { firstSource?.let(onManageSource) },
                         onSync = viewModel::onSyncNow,
                         onOpenPlaylist = onOpenPlaylist,
@@ -268,9 +274,9 @@ fun SyncScreen(
                 if (failedDownloadsCount > 0) {
                     item(key = "failed_downloads") {
                         AttentionRow(
-                            title = stringResource(R.string.sync_failed_downloads_title),
+                            title = stringResource(SyncR.string.sync_failed_downloads_title),
                             subtitle = pluralStringResource(
-                                R.plurals.sync_failed_downloads_count,
+                                SyncR.plurals.sync_failed_downloads_count,
                                 failedDownloadsCount,
                                 failedDownloadsCount,
                             ),
@@ -280,15 +286,20 @@ fun SyncScreen(
                     }
                 }
 
-                item(key = "links") {
+                // Downloads get their own row above Auto-sync (the owner: they were hidden behind History).
+                item(key = "downloads") {
                     Spacer(Modifier.height(10.dp))
+                    SyncDownloadsRow(summary = downloads, onClick = onOpenDownloads)
+                }
+
+                item(key = "links") {
                     SyncLinkRow(
-                        title = stringResource(R.string.sync_auto_sync),
+                        title = stringResource(SyncR.string.sync_auto_sync),
                         trailing = autoSyncSummary(uiState.syncPreferences),
                         onClick = { showSchedule = true },
                     )
                     SyncLinkRow(
-                        title = stringResource(R.string.sync_history_row),
+                        title = stringResource(SyncR.string.sync_history_row),
                         trailing = null,
                         onClick = onOpenHistory,
                     )
@@ -324,6 +335,7 @@ fun SyncScreen(
             onDismissRequest = { showSchedule = false },
             sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
             containerColor = StashTheme.extendedColors.elevatedSurface,
+            properties = sheetBarsFollow(StashTheme.extendedColors.elevatedSurface),
         ) {
             Column(Modifier.padding(start = 16.dp, end = 16.dp, bottom = 32.dp)) {
                 com.stash.feature.sync.components.ScheduleCard(
@@ -359,6 +371,8 @@ internal data class SyncPlaylistRow(
     /** A mix that can stack, and whether it does. */
     val stackable: Boolean = false,
     val stackSongs: Boolean = false,
+    /** A saved album: the account page lists it under Albums, and it never counts as a playlist. */
+    val album: Boolean = false,
 ) {
     /**
      * Kept on this phone: its Save switch, or, in Download mode, switched on for
@@ -370,11 +384,11 @@ internal data class SyncPlaylistRow(
 
 internal fun SyncUiState.playlistRows(): List<SyncPlaylistRow> =
     spotifyPlaylists.map {
-        SyncPlaylistRow(it.id, it.name, it.trackCount, it.type, it.syncEnabled, it.keepOffline, it.artUrl, SyncSource.SPOTIFY, it.userHidden, it.dateAdded, it.stackable, it.stackSongs)
+        SyncPlaylistRow(it.id, it.name, it.trackCount, it.type, it.syncEnabled, it.keepOffline, it.artUrl, SyncSource.SPOTIFY, it.userHidden, it.dateAdded, it.stackable, it.stackSongs, it.album)
     } + soundCloudPlaylists.map {
         SyncPlaylistRow(it.id, it.name, it.trackCount, it.type, it.syncEnabled, it.keepOffline, it.artUrl, SyncSource.SOUNDCLOUD, it.userHidden, it.dateAdded)
     } + youTubePlaylists.map {
-        SyncPlaylistRow(it.id, it.name, it.trackCount, it.type, it.syncEnabled, it.keepOffline, it.artUrl, SyncSource.YOUTUBE, it.userHidden, it.dateAdded, it.stackable, it.stackSongs)
+        SyncPlaylistRow(it.id, it.name, it.trackCount, it.type, it.syncEnabled, it.keepOffline, it.artUrl, SyncSource.YOUTUBE, it.userHidden, it.dateAdded, it.stackable, it.stackSongs, it.album)
     }
 
 /**
@@ -384,9 +398,9 @@ internal fun SyncUiState.playlistRows(): List<SyncPlaylistRow> =
  */
 internal fun List<SyncPlaylistRow>.newestFirst(): List<SyncPlaylistRow> = sortedByDescending { it.addedAt }
 
-/** "Mixes" is a service's own algorithmic playlists; everything else but Liked is the user's. */
+/** "Mixes" is a service's own algorithmic playlists; everything else but Liked and saved albums is the user's. */
 private fun SyncPlaylistRow.isMix() = type == PlaylistType.DAILY_MIX
-private fun SyncPlaylistRow.isOwnPlaylist() = type != PlaylistType.DAILY_MIX && type != PlaylistType.LIKED_SONGS
+internal fun SyncPlaylistRow.isOwnPlaylist() = !album && type != PlaylistType.DAILY_MIX && type != PlaylistType.LIKED_SONGS
 
 @Composable
 private fun librarySummary(uiState: SyncUiState, rows: List<SyncPlaylistRow>): String {
@@ -394,22 +408,22 @@ private fun librarySummary(uiState: SyncUiState, rows: List<SyncPlaylistRow>): S
     val playlists = rows.count { it.isOwnPlaylist() }
     val mixes = rows.count { it.isMix() }
     return stringResource(
-        R.string.sync_home_summary,
-        pluralStringResource(R.plurals.sync_songs_count, songs, songs),
-        pluralStringResource(R.plurals.sync_playlists_count, playlists, playlists),
-        pluralStringResource(R.plurals.sync_mixes_count, mixes, mixes),
+        SyncR.string.sync_home_summary,
+        pluralStringResource(SyncR.plurals.sync_songs_count, songs, songs),
+        pluralStringResource(SyncR.plurals.sync_playlists_count, playlists, playlists),
+        pluralStringResource(SyncR.plurals.sync_mixes_count, mixes, mixes),
     )
 }
 
 @Composable
 private fun autoSyncSummary(prefs: com.stash.core.data.sync.SyncPreferences): String {
-    if (!prefs.autoSyncEnabled) return stringResource(R.string.sync_auto_sync_off)
+    if (!prefs.autoSyncEnabled) return stringResource(SyncR.string.sync_auto_sync_off)
     val time = java.time.LocalTime.of(prefs.syncHour, prefs.syncMinute)
         .format(java.time.format.DateTimeFormatter.ofLocalizedTime(java.time.format.FormatStyle.SHORT))
     return if (prefs.wifiOnly) {
-        stringResource(R.string.sync_auto_sync_at_wifi, time)
+        stringResource(SyncR.string.sync_auto_sync_at_wifi, time)
     } else {
-        stringResource(R.string.sync_auto_sync_at, time)
+        stringResource(SyncR.string.sync_auto_sync_at, time)
     }
 }
 
@@ -417,19 +431,19 @@ private fun autoSyncSummary(prefs: com.stash.core.data.sync.SyncPreferences): St
 @Composable
 private fun reviewHeadline(count: Int, unmatchedCount: Int, flaggedCount: Int): String = when {
     unmatchedCount > 0 && flaggedCount > 0 ->
-        pluralStringResource(R.plurals.sync_review_need_review, count, count)
+        pluralStringResource(SyncR.plurals.sync_review_need_review, count, count)
     flaggedCount > 0 ->
-        pluralStringResource(R.plurals.sync_review_flagged_wrong, flaggedCount, flaggedCount)
+        pluralStringResource(SyncR.plurals.sync_review_flagged_wrong, flaggedCount, flaggedCount)
     else ->
-        pluralStringResource(R.plurals.sync_review_unmatched, unmatchedCount, unmatchedCount)
+        pluralStringResource(SyncR.plurals.sync_review_unmatched, unmatchedCount, unmatchedCount)
 }
 
 @Composable
 private fun reviewSubtitle(unmatchedCount: Int, flaggedCount: Int): String = when {
     unmatchedCount > 0 && flaggedCount > 0 ->
-        stringResource(R.string.sync_review_sub_both, unmatchedCount, flaggedCount)
-    flaggedCount > 0 -> stringResource(R.string.sync_review_sub_flagged)
-    else -> stringResource(R.string.sync_review_sub_unmatched)
+        stringResource(SyncR.string.sync_review_sub_both, unmatchedCount, flaggedCount)
+    flaggedCount > 0 -> stringResource(SyncR.string.sync_review_sub_flagged)
+    else -> stringResource(SyncR.string.sync_review_sub_unmatched)
 }
 
 // -- The four faces ──────────────────────────────────────────────────────────
@@ -501,7 +515,7 @@ private fun SyncCircleButton(onClick: () -> Unit) {
             modifier = Modifier.size(20.dp),
         )
         Text(
-            text = stringResource(R.string.sync_button),
+            text = stringResource(SyncR.string.sync_button),
             style = MaterialTheme.typography.labelLarge,
             fontWeight = FontWeight.SemiBold,
             color = MaterialTheme.colorScheme.onBackground,
@@ -512,35 +526,35 @@ private fun SyncCircleButton(onClick: () -> Unit) {
 @Composable
 private fun FirstRunContent(onConnect: () -> Unit) {
     Column(Modifier.fillMaxWidth().padding(top = 56.dp)) {
-        HeroTitle(stringResource(R.string.sync_firstrun_title), size = 38)
+        HeroTitle(stringResource(SyncR.string.sync_firstrun_title), size = 38)
         Spacer(Modifier.height(12.dp))
         Text(
-            text = stringResource(R.string.sync_firstrun_body),
+            text = stringResource(SyncR.string.sync_firstrun_body),
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Spacer(Modifier.height(36.dp))
         ConnectButton(
-            label = stringResource(R.string.sync_connect_spotify),
+            label = stringResource(SyncR.string.sync_connect_spotify),
             mark = { SpotifyMark(34.dp) },
             onClick = onConnect,
         )
         Spacer(Modifier.height(12.dp))
         ConnectButton(
-            label = stringResource(R.string.sync_connect_youtube),
+            label = stringResource(SyncR.string.sync_connect_youtube),
             mark = { YouTubeMusicMark(34.dp) },
             onClick = onConnect,
         )
         Spacer(Modifier.height(12.dp))
         ConnectButton(
-            label = stringResource(R.string.sync_connect_soundcloud),
+            label = stringResource(SyncR.string.sync_connect_soundcloud),
             // Full-bleed at 34 dp, like SpotifyMark's disc beside it.
             mark = { SoundCloudMark() },
             onClick = onConnect,
         )
         Spacer(Modifier.height(28.dp))
         TextButton(onClick = onConnect) {
-            Text(stringResource(R.string.sync_connect_lastfm))
+            Text(stringResource(SyncR.string.sync_connect_lastfm))
         }
     }
 }
@@ -548,12 +562,12 @@ private fun FirstRunContent(onConnect: () -> Unit) {
 @Composable
 private fun ReadyContent(onSync: () -> Unit) {
     Column(Modifier.fillMaxWidth().padding(top = 40.dp)) {
-        HeroTitle(stringResource(R.string.sync_firstrun_title), size = 34)
+        HeroTitle(stringResource(SyncR.string.sync_firstrun_title), size = 34)
         Spacer(Modifier.height(10.dp))
-        HeroBody(stringResource(R.string.sync_ready_body))
+        HeroBody(stringResource(SyncR.string.sync_ready_body))
         Spacer(Modifier.height(22.dp))
         PrimaryPill(
-            text = stringResource(R.string.sync_arrival_sync_now),
+            text = stringResource(SyncR.string.sync_arrival_sync_now),
             onClick = onSync,
             modifier = Modifier.fillMaxWidth(),
         )
@@ -575,15 +589,15 @@ private fun SyncedHero(
     Column(Modifier.fillMaxWidth().padding(top = 22.dp)) {
         CoverFan(arts = arts, onTap = onCoverTap)
         Spacer(Modifier.height(18.dp))
-        HeroTitle(stringResource(R.string.sync_home_title))
+        HeroTitle(stringResource(SyncR.string.sync_home_title))
         Spacer(Modifier.height(6.dp))
         HeroBody(
             if (syncedAgo.isBlank()) summary
-            else summary + " · " + stringResource(R.string.sync_home_synced_ago, syncedAgo.lowercase()),
+            else summary + " · " + stringResource(SyncR.string.sync_home_synced_ago, syncedAgo.lowercase()),
         )
         Spacer(Modifier.height(18.dp))
         PrimaryPill(
-            text = stringResource(R.string.sync_arrival_sync_now),
+            text = stringResource(SyncR.string.sync_arrival_sync_now),
             onClick = onSync,
             icon = Icons.Filled.Sync,
             modifier = Modifier.fillMaxWidth(),
@@ -616,7 +630,7 @@ private fun PlaySomethingNew(name: String, onClick: () -> Unit) {
             modifier = Modifier.size(22.dp),
         )
         Text(
-            text = stringResource(R.string.sync_play_new),
+            text = stringResource(SyncR.string.sync_play_new),
             style = MaterialTheme.typography.titleSmall,
             fontWeight = FontWeight.SemiBold,
             color = MaterialTheme.colorScheme.onBackground,
@@ -642,16 +656,16 @@ private fun OnThisPhoneHero(
     onOpenPlaylist: (Long) -> Unit,
 ) {
     Column(Modifier.fillMaxWidth().padding(top = 30.dp)) {
-        HeroTitle(stringResource(R.string.sync_download_title))
+        HeroTitle(stringResource(SyncR.string.sync_download_title))
         Spacer(Modifier.height(6.dp))
-        val songs = pluralStringResource(R.plurals.sync_songs_count, songsOnPhone, songsOnPhone)
+        val songs = pluralStringResource(SyncR.plurals.sync_songs_count, songsOnPhone, songsOnPhone)
         HeroBody(
             if (syncedAgo.isBlank()) songs
-            else songs + " · " + stringResource(R.string.sync_home_synced_ago, syncedAgo.lowercase()),
+            else songs + " · " + stringResource(SyncR.string.sync_home_synced_ago, syncedAgo.lowercase()),
         )
         Spacer(Modifier.height(16.dp))
         if (saved.isEmpty()) {
-            HeroBody(stringResource(R.string.sync_download_none))
+            HeroBody(stringResource(SyncR.string.sync_download_none))
         } else {
             saved.take(5).forEach { row ->
                 Row(
@@ -674,19 +688,19 @@ private fun OnThisPhoneHero(
                             overflow = TextOverflow.Ellipsis,
                         )
                         Text(
-                            text = pluralStringResource(R.plurals.sync_songs_count, row.trackCount, row.trackCount),
+                            text = pluralStringResource(SyncR.plurals.sync_songs_count, row.trackCount, row.trackCount),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
-                    SavedCheck(contentDescription = stringResource(R.string.sync_saved_cd))
+                    SavedCheck(contentDescription = stringResource(SyncR.string.sync_saved_cd))
                 }
             }
         }
         Spacer(Modifier.height(14.dp))
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             PrimaryPill(
-                text = stringResource(R.string.sync_download_choose),
+                text = stringResource(SyncR.string.sync_download_choose),
                 onClick = onChoose,
                 modifier = Modifier.weight(1f),
             )
@@ -694,7 +708,7 @@ private fun OnThisPhoneHero(
         }
         Spacer(Modifier.height(12.dp))
         Text(
-            text = stringResource(R.string.sync_download_note),
+            text = stringResource(SyncR.string.sync_download_note),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -715,9 +729,9 @@ private fun SyncingContent(
     onOpenPlaylist: (Long) -> Unit,
 ) {
     Column(Modifier.fillMaxWidth().padding(top = 30.dp)) {
-        HeroTitle(stringResource(R.string.sync_syncing_title))
+        HeroTitle(stringResource(SyncR.string.sync_syncing_title))
         Spacer(Modifier.height(6.dp))
-        HeroBody(stringResource(R.string.sync_syncing_body))
+        HeroBody(stringResource(SyncR.string.sync_syncing_body))
         Spacer(Modifier.height(20.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
@@ -785,7 +799,9 @@ private fun AccountCards(
             val mine = rows.filter { it.source == source }
             val playlists = mine.count { it.isOwnPlaylist() }
             val mixes = mine.count { it.isMix() }
-            val arts = mine.newestFirst()
+            // Its playlists' and mixes' covers: saved albums have their own tab, and hundreds of
+            // them would push every playlist out of the card.
+            val arts = mine.filterNot { it.album }.newestFirst()
                 .mapNotNull { it.artUrl }
                 .distinct()
                 .take(4)
@@ -793,10 +809,10 @@ private fun AccountCards(
                 name = name,
                 brandColor = color,
                 arts = arts,
-                subtitle = if (source == SyncSource.SOUNDCLOUD) pluralStringResource(R.plurals.sync_tracks_count, mine.sumOf { it.trackCount }, mine.sumOf { it.trackCount }) else stringResource(
-                    R.string.sync_account_summary,
-                    pluralStringResource(R.plurals.sync_playlists_count, playlists, playlists),
-                    pluralStringResource(R.plurals.sync_mixes_count, mixes, mixes),
+                subtitle = if (source == SyncSource.SOUNDCLOUD) pluralStringResource(SyncR.plurals.sync_tracks_count, mine.sumOf { it.trackCount }, mine.sumOf { it.trackCount }) else stringResource(
+                    SyncR.string.sync_account_summary,
+                    pluralStringResource(SyncR.plurals.sync_playlists_count, playlists, playlists),
+                    pluralStringResource(SyncR.plurals.sync_mixes_count, mixes, mixes),
                 ),
                 onClick = { onManageSource(source) },
                 modifier = Modifier.weight(1f),
@@ -818,7 +834,7 @@ private fun AccountCards(
                     if (missingSpotify) SpotifyMark(40.dp) else YouTubeMusicMark(40.dp)
                 }
                 Text(
-                    text = stringResource(if (missingSpotify) R.string.sync_connect_spotify else R.string.sync_connect_youtube),
+                    text = stringResource(if (missingSpotify) SyncR.string.sync_connect_spotify else SyncR.string.sync_connect_youtube),
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onSurface,
@@ -853,20 +869,20 @@ internal fun DownloadManagementCard(onClick: () -> Unit) {
             Spacer(Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = stringResource(R.string.sync_downloads_title),
+                    text = stringResource(SyncR.string.sync_downloads_title),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onSurface,
                 )
                 Text(
-                    text = stringResource(R.string.sync_downloads_subtitle),
+                    text = stringResource(SyncR.string.sync_downloads_subtitle),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
             Icon(
                 imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                contentDescription = stringResource(R.string.sync_downloads_cd),
+                contentDescription = stringResource(SyncR.string.sync_downloads_cd),
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
@@ -969,15 +985,15 @@ internal fun LibraryMaintenanceCard(
             Spacer(modifier = Modifier.width(16.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = stringResource(R.string.sync_blocked_songs_title),
+                    text = stringResource(SyncR.string.sync_blocked_songs_title),
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.onSurface,
                 )
                 Text(
                     text = if (blockedCount > 0)
-                        pluralStringResource(R.plurals.sync_blocked_songs_count, blockedCount, blockedCount)
+                        pluralStringResource(SyncR.plurals.sync_blocked_songs_count, blockedCount, blockedCount)
                     else
-                        stringResource(R.string.sync_blocked_songs_none),
+                        stringResource(SyncR.string.sync_blocked_songs_none),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -1031,13 +1047,13 @@ internal fun SyncTerminalCard(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    text = stringResource(R.string.sync_log_title),
+                    text = stringResource(SyncR.string.sync_log_title),
                     style = MaterialTheme.typography.labelSmall,
                     fontFamily = FontFamily.Monospace,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.weight(1f),
                 )
-                TextButton(onClick = onCopy) { Text(stringResource(R.string.sync_log_copy)) }
+                TextButton(onClick = onCopy) { Text(stringResource(SyncR.string.sync_log_copy)) }
             }
             LazyColumn(
                 state = listState,
@@ -1086,7 +1102,7 @@ internal fun AutoSyncPausedNote(modifier: Modifier = Modifier) {
             modifier = Modifier.size(16.dp),
         )
         Text(
-            text = stringResource(R.string.sync_auto_sync_paused_note),
+            text = stringResource(SyncR.string.sync_auto_sync_paused_note),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -1111,17 +1127,15 @@ internal fun UndoSyncCard(
     modifier: Modifier = Modifier,
 ) {
     val extendedColors = StashTheme.extendedColors
-    val mins = remember(capturedAtEpochMs) {
-        val ageMs = (System.currentTimeMillis() - capturedAtEpochMs).coerceAtLeast(0)
-        ageMs / 60_000L
-    }
+    // Read again each minute while on screen, so the age doesn't stay as it was first drawn.
+    val mins = (rememberMinuteClock(capturedAtEpochMs) - capturedAtEpochMs).coerceAtLeast(0) / 60_000L
     val when_ = when {
-        mins < 1 -> stringResource(R.string.sync_time_just_now)
-        mins < 60 -> stringResource(R.string.sync_time_mins_ago, mins.toInt())
-        mins < 60 * 24 -> stringResource(R.string.sync_time_hours_ago, (mins / 60).toInt())
+        mins < 1 -> stringResource(SyncR.string.sync_time_just_now)
+        mins < 60 -> stringResource(SyncR.string.sync_time_mins_ago, mins.toInt())
+        mins < 60 * 24 -> stringResource(SyncR.string.sync_time_hours_ago, (mins / 60).toInt())
         else -> {
             val days = (mins / (60 * 24)).toInt()
-            pluralStringResource(R.plurals.sync_time_days_ago, days, days)
+            pluralStringResource(SyncR.plurals.sync_time_days_ago, days, days)
         }
     }
 
@@ -1144,14 +1158,14 @@ internal fun UndoSyncCard(
             )
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = stringResource(R.string.sync_undo_last_sync_title),
+                    text = stringResource(SyncR.string.sync_undo_last_sync_title),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurface,
                 )
                 Text(
                     text = stringResource(
-                        R.string.sync_undo_last_sync_subtitle,
-                        pluralStringResource(R.plurals.sync_playlists_count, playlistCount, playlistCount),
+                        SyncR.string.sync_undo_last_sync_subtitle,
+                        pluralStringResource(SyncR.plurals.sync_playlists_count, playlistCount, playlistCount),
                         when_,
                     ),
                     style = MaterialTheme.typography.bodySmall,
@@ -1159,7 +1173,7 @@ internal fun UndoSyncCard(
                 )
             }
             TextButton(onClick = onUndo, enabled = !inProgress) {
-                Text(if (inProgress) stringResource(R.string.sync_undoing) else stringResource(R.string.sync_undo))
+                Text(if (inProgress) stringResource(SyncR.string.sync_undoing) else stringResource(SyncR.string.sync_undo))
             }
         }
     }
@@ -1181,7 +1195,7 @@ internal fun SyncModeChipRow(
     accent: Color,
 ) {
     Text(
-        text = stringResource(R.string.sync_mix_mode_title),
+        text = stringResource(SyncR.string.sync_mix_mode_title),
         style = MaterialTheme.typography.labelMedium,
         color = accent,
         fontWeight = FontWeight.SemiBold,
@@ -1193,19 +1207,19 @@ internal fun SyncModeChipRow(
         FilterChip(
             selected = mode == SyncMode.REFRESH,
             onClick = { onRequestRefresh() },
-            label = { Text(stringResource(R.string.sync_mode_refresh)) },
+            label = { Text(stringResource(SyncR.string.sync_mode_refresh)) },
         )
         FilterChip(
             selected = mode == SyncMode.ACCUMULATE,
             onClick = { onChange(SyncMode.ACCUMULATE) },
-            label = { Text(stringResource(R.string.sync_mode_accumulate)) },
+            label = { Text(stringResource(SyncR.string.sync_mode_accumulate)) },
         )
     }
     Text(
         text = if (mode == SyncMode.REFRESH)
-            stringResource(R.string.sync_mode_refresh_desc)
+            stringResource(SyncR.string.sync_mode_refresh_desc)
         else
-            stringResource(R.string.sync_mode_accumulate_desc),
+            stringResource(SyncR.string.sync_mode_accumulate_desc),
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
@@ -1234,16 +1248,16 @@ internal fun LastFmRecommendationsToggleRow(
     ) {
         Column(modifier = Modifier.weight(1f)) {
             Text(
-                text = stringResource(R.string.sync_recommended_tracks_title),
+                text = stringResource(SyncR.string.sync_recommended_tracks_title),
                 style = MaterialTheme.typography.labelMedium,
                 color = StashTheme.extendedColors.lastfmRed,
                 fontWeight = FontWeight.SemiBold,
             )
             Text(
                 text = if (enabled)
-                    stringResource(R.string.sync_lastfm_recommended_enabled_desc)
+                    stringResource(SyncR.string.sync_lastfm_recommended_enabled_desc)
                 else
-                    stringResource(R.string.sync_lastfm_recommended_disabled_desc),
+                    stringResource(SyncR.string.sync_lastfm_recommended_disabled_desc),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -1269,12 +1283,12 @@ internal fun StudioOnlyToggleRow(
     ) {
         Column(modifier = Modifier.weight(1f)) {
             Text(
-                text = stringResource(R.string.sync_studio_only_title),
+                text = stringResource(SyncR.string.sync_studio_only_title),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurface,
             )
             Text(
-                text = stringResource(R.string.sync_studio_only_desc),
+                text = stringResource(SyncR.string.sync_studio_only_desc),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

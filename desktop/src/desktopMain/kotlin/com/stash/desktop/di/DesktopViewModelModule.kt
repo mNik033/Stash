@@ -198,6 +198,7 @@ object DesktopViewModelModule {
         streamingPreference: StreamingPreference,
         delegateProvider: javax.inject.Provider<TrackActionsDelegate>,
         losslessPrefetcher: LosslessUrlPrefetcher,
+        tokenManager: TokenManager,
     ): DesktopArtistProfileViewModelFactory = DesktopArtistProfileViewModelFactory(
         artistCache = artistCache,
         albumCache = albumCache,
@@ -207,6 +208,7 @@ object DesktopViewModelModule {
         streamingPreference = streamingPreference,
         delegateProvider = delegateProvider,
         losslessPrefetcher = losslessPrefetcher,
+        tokenManager = tokenManager,
     )
 
     @Provides
@@ -312,6 +314,7 @@ class DesktopArtistProfileViewModelFactory(
     private val streamingPreference: StreamingPreference,
     private val delegateProvider: javax.inject.Provider<TrackActionsDelegate>,
     private val losslessPrefetcher: LosslessUrlPrefetcher,
+    private val tokenManager: TokenManager,
 ) {
     fun create(
         artistId: String,
@@ -332,6 +335,7 @@ class DesktopArtistProfileViewModelFactory(
             streamingPreference = streamingPreference,
             delegate = delegateProvider.get(),
             losslessPrefetcher = losslessPrefetcher,
+            tokenManager = tokenManager,
         )
     }
 }

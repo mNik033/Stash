@@ -17,6 +17,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.LibraryAdd
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -32,6 +33,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -45,10 +47,12 @@ import com.stash.core.ui.components.bottomChromePadding
 import com.stash.core.ui.theme.StashTheme
 import com.stash.core.ui.util.formatDuration
 import com.stash.core.ui.util.formatTotalDuration
+import com.stash.feature.library.R
 
 /**
  * A pasted or shared Spotify / YouTube link: its cover full width as a shared mix shows it, what it is and how long, a
- * Download switch and Add to library, then its songs. Once added, Open goes to the playlist it became.
+ * Download switch and Add to library, then its songs. Once added, Open goes to the playlist it became. A playlist file picked
+ * from the Library's "+" shows here the same way, "From a file".
  */
 @Composable
 fun LinkImportScreen(
@@ -64,8 +68,12 @@ fun LinkImportScreen(
         }
         is LinkImportUiState.Failed -> {
             BareScreen(onBack) {
-                Text(st.message, style = MaterialTheme.typography.titleMedium, textAlign = TextAlign.Center)
-                if (st.retryable) { Spacer(Modifier.height(16.dp)); Button(onClick = viewModel::load) { Text("Retry") } }
+                Text(
+                    st.messageRes?.let { stringResource(it) } ?: st.message,
+                    style = MaterialTheme.typography.titleMedium,
+                    textAlign = TextAlign.Center,
+                )
+                if (st.retryable) { Spacer(Modifier.height(16.dp)); Button(onClick = viewModel::load) { Text(stringResource(R.string.link_import_retry)) } }
             }
             return
         }
@@ -77,7 +85,8 @@ fun LinkImportScreen(
             SharedHeroCover(listOfNotNull(p.coverUrl), onBack)
             Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp)) {
                 Text(
-                    "${p.service} ${kindWord(p.kind)}",
+                    // A file has no service: just what it is.
+                    if (p.fromFile) stringResource(R.string.playlist_file_kind) else "${p.service} ${kindWord(p.kind)}",
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.primary,
                 )
@@ -94,7 +103,7 @@ fun LinkImportScreen(
                 val total = p.songs.sumOf { it.durationMs ?: 0L }
                 Text(
                     listOfNotNull(
-                        p.byline,
+                        p.byline ?: if (p.fromFile) stringResource(R.string.playlist_file_from) else null,
                         pluralize(p.songs.size, "song").takeIf { p.kind != LinkKind.SONG },
                         total.takeIf { it > 0 }?.let { if (p.kind == LinkKind.SONG) formatDuration(it) else formatTotalDuration(it) },
                     ).joinToString(" · "),
@@ -165,6 +174,8 @@ private fun DownloadRow(on: Boolean, enabled: Boolean, kind: LinkKind, onChange:
 private fun Actions(s: LinkImportUiState.Ready, onOpenPlaylist: (Long) -> Unit, onAdd: () -> Unit) {
     val progress = s.progress
     val added = s.added
+    // An album saved already (any service, any way): nothing to add, only to download.
+    val savedAlbum = s.existingId != null && s.preview.kind == LinkKind.ALBUM
     when {
         progress != null -> Column {
             val (done, total) = progress
@@ -184,7 +195,12 @@ private fun Actions(s: LinkImportUiState.Ready, onOpenPlaylist: (Long) -> Unit, 
                 Icon(Icons.Default.Check, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(6.dp))
                 Text(
-                    if (added.songsAdded > 0) "Added ${pluralize(added.songsAdded, "song")} to your library" else "Already all in your library",
+                    when {
+                        added.songsAdded > 0 -> "Added ${pluralize(added.songsAdded, "song")} to your library"
+                        savedAlbum && s.download -> "In your library already. Downloading"
+                        savedAlbum -> "In your library already"
+                        else -> "Already all in your library"
+                    },
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurface,
                 )
@@ -198,16 +214,23 @@ private fun Actions(s: LinkImportUiState.Ready, onOpenPlaylist: (Long) -> Unit, 
             ) { Text("Open in your library") }
         }
         else -> Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
-            Button(
+            if (!savedAlbum || s.download) Button(
                 onClick = onAdd,
                 modifier = Modifier.weight(1f),
                 contentPadding = PaddingValues(vertical = 12.dp),
                 shape = RoundedCornerShape(12.dp),
             ) {
-                Icon(Icons.Default.LibraryAdd, contentDescription = null, modifier = Modifier.size(18.dp))
+                Icon(if (savedAlbum) Icons.Default.Download else Icons.Default.LibraryAdd, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(6.dp))
-                // In the library already (pasted before): adding again brings only what it lacks.
-                Text(if (s.existingId != null && s.preview.kind != LinkKind.SONG) "Add what's new" else "Add to library")
+                // In the library already (pasted before): adding again brings only what it lacks. A saved album is
+                // never saved twice (LinkImporter.add): Download keeps the copy already here on the phone.
+                Text(
+                    when {
+                        savedAlbum -> "Download"
+                        s.existingId != null && s.preview.kind != LinkKind.SONG -> "Add what's new"
+                        else -> "Add to library"
+                    },
+                )
             }
             if (s.existingId != null) {
                 OutlinedButton(

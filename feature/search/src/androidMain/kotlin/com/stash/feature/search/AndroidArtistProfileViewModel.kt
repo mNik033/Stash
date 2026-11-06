@@ -1,8 +1,10 @@
 package com.stash.feature.search
 
 import androidx.lifecycle.SavedStateHandle
+import com.stash.core.auth.TokenManager
 import com.stash.core.data.cache.AlbumCache
 import com.stash.core.data.cache.ArtistCache
+import com.stash.core.data.prefs.DataSaver
 import com.stash.core.data.prefs.StreamingPreference
 import com.stash.core.data.repository.MusicRepository
 import com.stash.core.media.PlayerRepository
@@ -22,6 +24,8 @@ class AndroidArtistProfileViewModel @Inject constructor(
     streamingPreference: StreamingPreference,
     delegate: TrackActionsDelegate,
     losslessPrefetcher: LosslessUrlPrefetcher,
+    tokenManager: TokenManager,
+    dataSaver: DataSaver,
 ) : ArtistProfileViewModel(
     savedStateHandle = savedStateHandle,
     artistCache = artistCache,
@@ -32,4 +36,6 @@ class AndroidArtistProfileViewModel @Inject constructor(
     streamingPreference = streamingPreference,
     delegate = delegate,
     losslessPrefetcher = losslessPrefetcher,
+    tokenManager = tokenManager,
+    dataSaver = dataSaver,
 )

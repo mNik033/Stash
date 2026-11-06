@@ -79,8 +79,10 @@ import com.stash.feature.nowplaying.MiniPlayer
 import com.stash.feature.nowplaying.PlayerQueueSheet
 import com.stash.app.ambient.AlbumColorsViewModel
 import com.stash.core.ui.ambient.LocalAlbumChrome
-import com.stash.core.ui.ambient.ProvideAlbumChrome
+import com.stash.core.ui.ambient.ProvideAlbumColours
 import com.stash.core.ui.components.LocalBottomChromeInset
+import com.stash.core.ui.components.LocalAppSnackbar
+import com.stash.core.ui.components.rememberAppSnackbar
 import com.stash.core.ui.components.LocalChromeHazeState
 import dev.chrisbanes.haze.hazeSource
 import dev.chrisbanes.haze.rememberHazeState
@@ -107,6 +109,8 @@ fun StashScaffold(
     onDeepLinkConsumed: () -> Unit = {},
     startTab: StartTab = StartTab.HOME,
     losslessNotices: Flow<LosslessQuotaNotice> = emptyFlow(),
+    tidyNotices: Flow<Int?> = emptyFlow(),
+    onTidyNoticeShown: suspend () -> Unit = {},
 ) {
     val navController = rememberNavController()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
@@ -115,6 +119,8 @@ fun StashScaffold(
     val immersive = navBackStackEntry?.destination?.let { it.hasRoute<RecapRoute>() || it.hasRoute<YourRecordRoute>() } == true
     // The artist page draws its header photo under the status bar; it keeps the bottom chrome.
     val bleedTop = immersive || navBackStackEntry?.destination?.hasRoute<SearchArtistRoute>() == true
+    // "Playing on Chrome" (link-sync spec §6.7, the phone as a remote for a linked browser) shows on Home and Library.
+    val remoteHere = navBackStackEntry?.destination?.let { it.hasRoute<HomeRoute>() || it.hasRoute<LibraryRoute>() } == true
 
     // The player: mini player <-> Now Playing as one finger-driven sheet.
     val playerSheet = rememberPlayerSheetState()
@@ -166,6 +172,7 @@ fun StashScaffold(
     // at the player level so it follows the song whether or not Now Playing is open.
     val albumColorsViewModel: AlbumColorsViewModel = hiltViewModel()
     val albumColors by albumColorsViewModel.colors.collectAsStateWithLifecycle()
+    val albumColoursFollowSong by albumColorsViewModel.followSong.collectAsStateWithLifecycle()
 
     // The backdrop the bottom chrome frosts: the nav host, drawn under the bars.
     val hazeState = rememberHazeState()
@@ -232,9 +239,8 @@ fun StashScaffold(
     // Process notification deep-link extras handed in from MainActivity.
     // Only one target right now (the captcha verifier); easy to extend
     // when more deep-link surfaces show up.
-    // The update sheet, over every screen (in-app updates).
+    // The update sheet, over every screen (in-app updates): shown inside the album colours below.
     val updateViewModel: com.stash.feature.settings.update.UpdateViewModel = androidx.hilt.navigation.compose.hiltViewModel()
-    com.stash.feature.settings.update.UpdateSheetHost(updateViewModel)
 
     LaunchedEffect(pendingDeepLink) {
         when (pendingDeepLink) {
@@ -306,7 +312,31 @@ fun StashScaffold(
             }
         }
     }
+    // The album colours wrap everything below, the posting and Drive hosts' sheets and dialogs included.
+    ProvideAlbumColours(albumColors, followSong = albumColoursFollowSong) {
 
+    // Inside the album colours, so Update now wears the song's colour as the Support card's Donate does.
+    com.stash.feature.settings.update.UpdateSheetHost(updateViewModel)
+
+    // The one-time duplicate cleanup merged songs that were in the library twice: say so once, on
+    // any screen. Marked shown after the snackbar goes, so a closed app shows it at the next open.
+    LaunchedEffect(lifecycleOwner, tidyNotices) {
+        lifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            tidyNotices.collect { n ->
+                if (n == null || n <= 0) return@collect
+                snackbarHostState.showSnackbar(
+                    message = context.resources.getQuantityString(com.stash.app.R.plurals.tidied_duplicates, n, n),
+                    withDismissAction = true,
+                    duration = SnackbarDuration.Long,
+                )
+                onTidyNoticeShown()
+            }
+        }
+    }
+
+    // Community (and any screen without its own host) shows its lines on this snackbar, above the bottom chrome.
+    val appSnackbar = rememberAppSnackbar(snackbarHostState)
+    CompositionLocalProvider(LocalAppSnackbar provides appSnackbar) {
     CommunityPostingHost(
         communityPosting,
         onSeeMyPosts = {
@@ -317,7 +347,6 @@ fun StashScaffold(
     ) {
     // "Save to Google Drive" in every song, album and playlist menu while Drive is connected.
     CloudSaveHost {
-    ProvideAlbumChrome(albumColors) {
     CompositionLocalProvider(
         LocalChromeHazeState provides hazeState,
         LocalPlayerSheet provides playerSheet,
@@ -376,7 +405,12 @@ fun StashScaffold(
                                     }
                                 },
                         ) {
-                            com.stash.feature.nowplaying.handoff.HandoffCard()
+                            Column {
+                                // A linked browser this phone can control: its remote card takes the place of the
+                                // "Continue from" card (one card per browser; it comes back when the browser stops).
+                                val remoteShown = if (remoteHere) com.stash.feature.nowplaying.remote.RemoteCardHost() else false
+                                if (!remoteShown) com.stash.feature.nowplaying.handoff.HandoffCard()
+                            }
                         }
                         // "Chrome on Windows sent you 3 playlists and 40 likes." (link-sync spec §2.3): a
                         // dialog, shown once per send, never over the open player.
@@ -494,6 +528,17 @@ fun StashScaffold(
                 ),
             )
         },
+        // "Find a better match": the song is flagged; the player collapses and Failed Matches
+        // opens on it, its finder searching. Back returns to where you were before the player.
+        // Flagged again with Failed Matches already open: that one is replaced, not stacked
+        // under a second (its view model clears, which stops a preview it was playing). Not
+        // launchSingleTop: the kept screen has already used its focus and would open nothing.
+        onFixMatch = { trackId ->
+            playerSheet.collapse()
+            navController.navigate(FailedMatchesRoute(focusTrackId = trackId)) {
+                popUpTo<FailedMatchesRoute> { inclusive = true }
+            }
+        },
     )
 
     // Above the player too: a heads-up shows over Now Playing, above the system bar there, and
@@ -524,12 +569,13 @@ fun StashScaffold(
     RecordImportHost(
         onOpenRecord = { navController.openRecord() },
         // Last.fm not connected: the app's own sign-in, on Accounts & Sync
-        onConnectLastfm = { navController.navigate(SettingsAccountsRoute) { launchSingleTop = true } },
+        onConnectLastfm = { navController.navigate(SettingsAccountsRoute()) { launchSingleTop = true } },
     )
 
     // Up next from the mini player: the same queue sheet Now Playing opens, over this screen.
     if (showQueue) {
         PlayerQueueSheet(onDismiss = { showQueue = false })
+    }
     }
     }
     }

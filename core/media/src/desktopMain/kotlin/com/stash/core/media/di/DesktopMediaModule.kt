@@ -26,4 +26,8 @@ abstract class DesktopMediaModule {
     @Binds
     @Singleton
     abstract fun bindConnectivityMonitor(impl: com.stash.core.media.streaming.DesktopConnectivityMonitor): com.stash.core.media.streaming.ConnectivityMonitor
+
+    @Binds
+    @Singleton
+    abstract fun bindRadioStarter(impl: com.stash.core.media.DesktopRadioStarter): com.stash.core.media.RadioStarter
 }

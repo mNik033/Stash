@@ -1,6 +1,9 @@
 package com.stash.core.data.link
 
 import com.stash.core.common.Log
+import com.stash.core.data.album.SavedAlbum
+import com.stash.core.data.album.SavedAlbums
+import com.stash.core.data.album.toSavedAlbum
 import com.stash.core.data.db.dao.PlaylistDao
 import com.stash.core.data.repository.MusicRepository
 import com.stash.core.data.weblibrary.ImportSelection
@@ -20,6 +23,9 @@ import com.stash.data.ytmusic.model.YTMusicTrack
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withContext
 
 /** What a link brings in. */
 enum class LinkKind { PLAYLIST, ALBUM, SONG }
@@ -31,7 +37,7 @@ data class LinkPreview(
     /** Who made the playlist, the album's artist, the song's artist. */
     val byline: String?,
     val coverUrl: String?,
-    /** "Spotify" or "YouTube Music". */
+    /** "Spotify", "YouTube Music" or "SoundCloud"; empty for a file ([fromFile]). */
     val service: String,
     val songs: List<WireSong>,
     /** The playlist it becomes (an album's is the one saving it from its album page makes, so the page shows it saved). */
@@ -41,6 +47,11 @@ data class LinkPreview(
     /** A song link opened from a playlist or album: that list, to offer instead. */
     val fromList: MusicLink? = null,
     val soundCloudSongs: List<SoundCloudLinkSong>? = null,
+    /**
+     * A playlist file the listener picked ("+" › Import a playlist file, [com.stash.core.data.playlistfile.PlaylistFileImport]),
+     * not a link: no service and no cover, and the screen says where it is from.
+     */
+    val fromFile: Boolean = false,
 )
 
 sealed interface LinkLoad {
@@ -60,6 +71,8 @@ data class LinkAdded(val playlistId: Long, val songsAdded: Int)
  * - A playlist becomes a playlist of the listener's own (`custom_link_spotify_<id>`, `custom_link_yt_<id>`).
  * - An album becomes the playlist its album page's Save makes (`album:youtube:<MPREb_…>`), or `album:spotify:<id>`.
  * - A song goes into one playlist of songs from links ([SONGS_SOURCE_ID]).
+ * - A playlist file ("+" › Import a playlist file) is read into a preview elsewhere
+ *   ([com.stash.core.data.playlistfile.PlaylistFileImport], `custom_link_file_<its name's hash>`) and added here like a link's.
  *
  * Nothing needs a login: Spotify's embed pages and YouTube Music's own pages are read anonymously. A Spotify playlist
  * longer than its embed page's 100 songs comes whole only through [SpotifyApiClient.getPlaylistTracks] (a Spotify login, or
@@ -113,8 +126,28 @@ class LinkImporter @Inject constructor(
         LinkLoad.Failed(CANT_OPEN)
     }
 
-    /** The playlist [preview] became already, or null. */
-    suspend fun existing(preview: LinkPreview): Long? = playlists.findBySourceId(preview.sourceId)?.takeIf { it.isActive }?.id
+    /**
+     * The playlist [preview] became already, or null. An album is also found saved any other way
+     * ([SavedAlbums.findSaved]): YouTube Music's synced copy (`MPREb_…`), its page's Save, or another
+     * service's link for the same title, artist and songs.
+     */
+    suspend fun existing(preview: LinkPreview): Long? =
+        playlists.findBySourceId(preview.sourceId)?.takeIf { it.isActive }?.id
+            ?: if (preview.kind == LinkKind.ALBUM) savedCopyOf(preview)?.playlistId else null
+
+    /** The album [preview] is, saved already under another key, or null. */
+    private suspend fun savedCopyOf(preview: LinkPreview): SavedAlbum? {
+        val saved = playlists.observeSavedAlbums().first()
+        return withContext(Dispatchers.Default) {
+            SavedAlbums.findSaved(
+                saved = saved.map { it.toSavedAlbum() },
+                sourceIds = listOf(preview.sourceId),
+                title = preview.name,
+                artist = preview.byline.orEmpty(),
+                songTitles = preview.songs.map { it.title },
+            )
+        }
+    }
 
     /**
      * Brings [preview] into the library, its playlist kept on the phone when [download]; [progress] is told the songs matched
@@ -122,6 +155,24 @@ class LinkImporter @Inject constructor(
      */
     suspend fun add(preview: LinkPreview, download: Boolean, progress: (done: Int, total: Int) -> Unit): LinkAdded {
         if (preview.soundCloudSongs != null) return requireNotNull(soundCloud).add(preview, download, progress)
+        // An album taken out under this key (Remove hides a pasted Spotify album, so the Spotify sync
+        // can't bring it back), or one the sync hid: saving it again brings that row back, as the
+        // listener's own save, which the sync never reads, rewrites or hides.
+        if (preview.kind == LinkKind.ALBUM) {
+            playlists.findBySourceId(preview.sourceId)?.takeIf { !it.isActive }?.let { removed ->
+                playlists.setUserHidden(removed.id, false)
+                playlists.takeIntoStash(removed.id)
+                // Its removal note (or an old sync stamp) goes: it's saved here again.
+                playlists.forgetMirrorStamp(removed.id)
+            }
+        }
+        // An album saved already another way is that album: never a second copy, or a second download.
+        if (preview.kind == LinkKind.ALBUM && playlists.findBySourceId(preview.sourceId)?.isActive != true) {
+            savedCopyOf(preview)?.let { saved ->
+                if (download) musicRepository.setPlaylistDownload(saved.playlistId, true)
+                return LinkAdded(saved.playlistId, 0)
+            }
+        }
         val now = System.currentTimeMillis()
         val content = WebLibraryContent(
             likes = emptyList(),
@@ -186,7 +237,7 @@ class LinkImporter @Inject constructor(
                 coverUrl = header?.thumbnailUrl,
                 service = YOUTUBE,
                 songs = tracks.tracks.map { it.wire() },
-                sourceId = "${PLAYLIST_PREFIX}yt_$id",
+                sourceId = youTubePlaylistSourceId(id),
                 partial = tracks.partial,
             ),
         )
@@ -224,6 +275,13 @@ class LinkImporter @Inject constructor(
 
         /** A playlist from a link: CUSTOM, shown by Library like every `custom_%` playlist. */
         const val PLAYLIST_PREFIX = "custom_link_"
+
+        /**
+         * The library playlist that keeps YouTube Music playlist [playlistId] (with or without its `VL` browse
+         * prefix): one key whether it came from a pasted link or the album page (Home's Moods & moments), so
+         * saving it twice files it once.
+         */
+        fun youTubePlaylistSourceId(playlistId: String): String = "${PLAYLIST_PREFIX}yt_${playlistId.removePrefix("VL")}"
 
         /** The playlist songs pasted one at a time go into. */
         const val SONGS_SOURCE_ID = "custom_link_songs"

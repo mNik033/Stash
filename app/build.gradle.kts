@@ -149,8 +149,8 @@ android {
         applicationId = "com.stash.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 158
-        versionName = "0.9.122"
+        versionCode = 159
+        versionName = "0.9.123"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         // Cloud storage sign-in. OneDrive redirects to `${applicationId}://oauth/onedrive` (the
         // data:cloud manifest declares it, so debug and release each get their own); Dropbox to
@@ -320,4 +320,10 @@ dependencies {
     // Google Cast: casting to Chromecast / Cast speakers (spec 2026-10-06).
     implementation(libs.play.services.cast.framework)
     implementation(libs.androidx.mediarouter)
+    // The home screen widget: Glance for the RemoteViews, its Material 3 bridge for the app's colour schemes.
+    implementation(libs.glance.appwidget)
+    implementation(libs.glance.material3)
+
+    // Plain JVM tests of the app's own pieces (navigation routes); no Android in them.
+    testImplementation("junit:junit:4.13.2")
 }

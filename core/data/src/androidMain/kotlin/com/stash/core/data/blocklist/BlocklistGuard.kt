@@ -79,7 +79,9 @@ class AndroidBlocklistGuard @Inject constructor(
             playlistDao.deleteAllCrossRefsForTrack(track.id)
             downloadQueueDao.deleteByTrackId(track.id)
             trackDao.deleteById(track.id)
-            playlistDao.forgetSpotifyMirrorStamps()
+            // Not the saved albums: one that held the song lost the row (its stamp
+            // stops matching), and the album lists hide a blocked twin by its key.
+            playlistDao.forgetSpotifyPlaylistStamps()
             heldBy
         }
         playlistIds.forEach { id ->
@@ -94,7 +96,9 @@ class AndroidBlocklistGuard @Inject constructor(
     override suspend fun unblock(canonicalKey: String) {
         database.withTransaction {
             blocklistDao.deleteByKey(canonicalKey)
-            playlistDao.forgetSpotifyMirrorStamps()
+            playlistDao.forgetSpotifyPlaylistStamps()
+            // The saved albums the song may be on, not every one (a big library has thousands).
+            playlistDao.forgetSpotifyAlbumStampsForUnblock(canonicalKey.substringBefore('|'))
         }
         canonicalRecompute.rearm()
     }

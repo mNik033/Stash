@@ -7,7 +7,15 @@ import com.stash.core.data.sync.SyncLog
 import com.stash.core.model.SyncMode
 import kotlinx.coroutines.flow.StateFlow
 
+data class DownloadsSummary(
+    val downloading: Int = 0,
+    val waiting: Int = 0,
+    val failed: Int = 0,
+    val progress: Float? = null,
+)
+
 expect open class SyncViewModel : ViewModel {
+    val downloadsSummary: StateFlow<DownloadsSummary>
     val uiState: StateFlow<SyncUiState>
     val blockedCount: StateFlow<Int>
     val failedDownloadsCount: StateFlow<Int>
@@ -25,8 +33,6 @@ expect open class SyncViewModel : ViewModel {
     fun setStreamingEnabled(enabled: Boolean)
     fun onSyncNow()
     fun onStopSync()
-    fun onTogglePlaylistSync(playlistId: Long, enabled: Boolean)
-    fun onToggleHideFromHome(playlistId: Long, hidden: Boolean)
     fun onSetSyncTime(hour: Int, minute: Int)
     fun onToggleAutoSync()
     fun onToggleWifiOnly()
@@ -38,6 +44,7 @@ expect open class SyncViewModel : ViewModel {
     fun cancelRefreshMode()
     fun onYoutubeLikedStudioOnlyChanged(enabled: Boolean)
     fun onDiscoverAutoMixesChanged(enabled: Boolean)
+    fun onSyncSpotifySavedAlbumsChanged(enabled: Boolean)
     fun onSyncDaysChanged(bitmask: Int)
     fun onLastFmRecommendationsToggled(enabled: Boolean)
     fun onManageOpened()

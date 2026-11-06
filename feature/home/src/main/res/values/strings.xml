@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Home's own shelves, built from your listening and YouTube Music (hidden in Offline mode) -->
+    <string name="home_new_from_artists">New from your artists</string>
+    <!-- "Because you like ‹song›" rows: the small line over the seed song's title -->
+    <string name="home_because_you_like">Because you like</string>
+    <!-- The same row as one phrase: Now Playing's "Playing from" and TalkBack. %1$s is the song's title. -->
+    <string name="home_because_you_like_song">Because you like %1$s</string>
+    <!-- TalkBack for a song card. %1$s is its title, %2$s its artist. -->
+    <string name="home_song_card">%1$s by %2$s</string>
+</resources>

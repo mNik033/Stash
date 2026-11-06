@@ -50,6 +50,7 @@ import com.stash.feature.nowplaying.sheet.LocalPlayerSheet
 import com.stash.feature.nowplaying.sheet.PlayerSheetAnchor
 import com.stash.feature.search.AlbumDiscoveryScreen
 import com.stash.feature.search.ArtistProfileScreen
+import com.stash.feature.search.MoodScreen
 import com.stash.feature.search.SearchScreen
 import com.stash.feature.settings.BlockedSongsScreen
 import com.stash.feature.settings.SettingsHubScreen
@@ -115,6 +116,15 @@ private fun AboveChrome(content: @Composable () -> Unit) {
     Box(Modifier.fillMaxSize().padding(bottom = inset)) {
         CompositionLocalProvider(LocalBottomChromeInset provides 0.dp, content = content)
     }
+}
+
+/**
+ * A Settings page opened from Your Stash. Settings pages share the hub's ViewModel (they look [SettingsRoute] up on the back
+ * stack), and a pairing link can open Your Stash with no hub below it: the hub goes first then, so the lookup can't fail.
+ */
+private fun NavHostController.openSettingsPage(route: Any) {
+    if (runCatching { getBackStackEntry(SettingsRoute) }.isFailure) navigate(SettingsRoute) { launchSingleTop = true }
+    navigate(route)
 }
 
 @Composable
@@ -234,6 +244,24 @@ private fun StashNavGraph(
                 },
             )
         }
+        composable<MoodRoute> {
+            MoodScreen(
+                onBack = { navController.popBackStack() },
+                // A YouTube Music playlist on the album page, which plays and downloads it like an album; an album as itself
+                onOpenAlbum = { album ->
+                    navController.navigate(
+                        SearchAlbumRoute(
+                            browseId = album.id,
+                            title = album.title,
+                            artist = album.artist,
+                            thumbnailUrl = album.thumbnailUrl,
+                            year = album.year,
+                            source = album.source,
+                        ),
+                    )
+                },
+            )
+        }
         composable<MixBrowseRoute> {
             MixBrowseScreen(
                 rail = MixRail.valueOf(it.toRoute<MixBrowseRoute>().rail),
@@ -254,9 +282,6 @@ private fun StashNavGraph(
                 onNavigateToArtist = { artistName ->
                     navController.navigate(ArtistDetailRoute(artistName))
                 },
-                onNavigateToAlbum = { _, name, _, artistName ->
-                    navController.navigate(AlbumDetailRoute(name, artistName))
-                },
                 onNavigateToRemoteAlbum = { albumId, name, artUrl, artistName ->
                     navController.navigate(
                         SearchAlbumRoute(
@@ -275,19 +300,24 @@ private fun StashNavGraph(
                 onNavigateToSync = { onNavigateToTab(TopLevelDestination.SYNC) },
                 onNavigateToSearch = { onNavigateToTab(TopLevelDestination.SEARCH) },
                 onOpenLink = { navController.navigate(LinkImportRoute(it)) },
+                onOpenPlaylistFile = { navController.navigate(PlaylistFileRoute(it)) },
                 onNavigateToAccounts = {
                     navController.navigate(SettingsRoute) {
                         launchSingleTop = true
                     }
-                    navController.navigate(SettingsAccountsRoute) {
+                    navController.navigate(SettingsAccountsRoute()) {
                         launchSingleTop = true
                     }
                 },
             )
         }
-        composable<SearchRoute> {
+        composable<SearchRoute> { searchEntry ->
             SearchScreen(
                 onOpenLink = { navController.navigate(LinkImportRoute(it)) },
+                // Only from Search itself: two quick taps on two tiles open one page
+                onOpenMood = { tile ->
+                    if (navController.currentBackStackEntry === searchEntry) navController.navigate(MoodRoute(tile.title, tile.params))
+                },
                 onNavigateToArtist = { id, name, avatar ->
                     navController.navigate(SearchArtistRoute(id, name, avatar))
                 },
@@ -308,7 +338,7 @@ private fun StashNavGraph(
         composable<SyncRoute> {
             SyncScreen(
                 onNavigateToFailedMatches = {
-                    navController.navigate(FailedMatchesRoute)
+                    navController.navigate(FailedMatchesRoute())
                 },
                 onNavigateToFailedDownloads = {
                     navController.navigate(FailedDownloadsRoute)
@@ -322,12 +352,13 @@ private fun StashNavGraph(
                     navController.navigate(SettingsRoute) {
                         launchSingleTop = true
                     }
-                    navController.navigate(SettingsAccountsRoute) {
+                    navController.navigate(SettingsAccountsRoute()) {
                         launchSingleTop = true
                     }
                 },
                 onManageSource = { source -> navController.navigate(ManagePlaylistsRoute(source.name)) },
                 onOpenHistory = { navController.navigate(SyncHistoryRoute) },
+                onOpenDownloads = { navController.navigate(DownloadManagementRoute) },
                 onOpenPlaylist = { id -> navController.navigate(PlaylistDetailRoute(id)) },
             )
         }
@@ -356,8 +387,8 @@ private fun StashNavGraph(
             SettingsHubScreen(
                 onOpenPlayback = { navController.navigate(SettingsPlaybackRoute) },
                 onOpenAudioQuality = { navController.navigate(SettingsAudioQualityRoute) },
-                onOpenAccounts = { navController.navigate(SettingsAccountsRoute) },
-                onOpenLibraryStorage = { navController.navigate(SettingsLibraryStorageRoute) },
+                onOpenAccounts = { navController.navigate(SettingsAccountsRoute()) },
+                onOpenLibraryStorage = { navController.navigate(SettingsLibraryStorageRoute()) },
                 onOpenAppearance = { navController.navigate(SettingsAppearanceRoute) },
                 onOpenAbout = { navController.navigate(SettingsAboutRoute) },
                 onOpenUrl = { url -> runCatching { uriHandler.openUri(url) } },
@@ -374,7 +405,15 @@ private fun StashNavGraph(
                     navController.navigate(SettingsAudioQualityRoute)
                     navController.navigate(EqualizerRoute)
                 },
-                onStar = { runCatching { uriHandler.openUri("https://github.com/rawnaldclark/Stash") } },
+                // Through Library & Storage, where its row is, so Back from a search hit lands there.
+                onOpenYourStash = if (com.stash.app.BuildConfig.WEB_LINK_ENABLED) {
+                    {
+                        navController.navigate(SettingsLibraryStorageRoute())
+                        navController.navigate(WebLinkRoute())
+                    }
+                } else {
+                    null
+                },
             )
         }
 
@@ -416,6 +455,7 @@ private fun StashNavGraph(
                     androidx.hilt.navigation.compose.hiltViewModel(settingsEntry)
                 com.stash.feature.settings.SettingsAccountsScreen(
                     onBack = { navController.popBackStack() },
+                    focusCloud = backStackEntry.toRoute<SettingsAccountsRoute>().cloud,
                     viewModel = viewModel,
                 )
             }
@@ -428,15 +468,18 @@ private fun StashNavGraph(
                 onBack = { navController.popBackStack() },
                 onNavigateToLibraryHealth = { navController.navigate(LibraryHealthRoute) },
                 viewModel = viewModel,
-                onNavigateToWebLink = if (com.stash.app.BuildConfig.WEB_LINK_ENABLED) {
+                onNavigateToYourStash = if (com.stash.app.BuildConfig.WEB_LINK_ENABLED) {
                     { navController.navigate(WebLinkRoute()) }
                 } else {
                     null
                 },
+                backupShortcut = backStackEntry.toRoute<SettingsLibraryStorageRoute>().backup?.let { name ->
+                    com.stash.feature.settings.weblink.BackupShortcut.entries.firstOrNull { it.name == name }
+                },
                 onOpenRecord = { navController.openRecord() },
                 // Not connected: the app's own Last.fm sign-in, on Accounts & Sync
                 yourRecordLastfm = {
-                    com.stash.feature.record.lastfm.recordLastfmSettingsRows(onConnect = { navController.navigate(SettingsAccountsRoute) { launchSingleTop = true } })
+                    com.stash.feature.record.lastfm.recordLastfmSettingsRows(onConnect = { navController.navigate(SettingsAccountsRoute()) { launchSingleTop = true } })
                 },
                 // "Use your record in mixes" and "Kept out of your mixes" (owner decisions D2, D1)
                 yourRecordInMixes = { com.stash.feature.record.taste.recordInMixesSettingsRows() },
@@ -445,7 +488,11 @@ private fun StashNavGraph(
         composable<WebLinkRoute> {
             // Its QR scanner pins a button to the bottom edge: kept above the chrome.
             AboveChrome {
-                com.stash.feature.settings.weblink.SettingsWebLinkScreen(onBack = { navController.popBackStack() })
+                com.stash.feature.settings.weblink.YourStashScreen(
+                    onBack = { navController.popBackStack() },
+                    onOpenCloud = { navController.openSettingsPage(SettingsAccountsRoute(cloud = true)) },
+                    onBackupShortcut = { navController.openSettingsPage(SettingsLibraryStorageRoute(backup = it.name)) },
+                )
             }
         }
         composable<SettingsAppearanceRoute> { backStackEntry ->
@@ -509,6 +556,15 @@ private fun StashNavGraph(
             AboveChrome {
                 LibraryHealthScreen(
                     onNavigateBack = { navController.popBackStack() },
+                    onOpenPossibleDuplicates = { navController.navigate(PossibleDuplicatesRoute) },
+                )
+            }
+        }
+
+        composable<PossibleDuplicatesRoute> {
+            AboveChrome {
+                com.stash.feature.settings.libraryhealth.PossibleDuplicatesScreen(
+                    onNavigateBack = { navController.popBackStack() },
                 )
             }
         }
@@ -561,6 +617,16 @@ private fun StashNavGraph(
                     onBack = { navController.popBackStack() },
                     // Back from the playlist skips the link's screen.
                     onOpenPlaylist = { id -> navController.navigate(PlaylistDetailRoute(id)) { popUpTo<LinkImportRoute> { inclusive = true } } },
+                )
+            }
+        }
+
+        // A playlist file from Library's "+": the link's screen, reading the file instead.
+        composable<PlaylistFileRoute> {
+            AboveChrome {
+                com.stash.feature.library.share.LinkImportScreen(
+                    onBack = { navController.popBackStack() },
+                    onOpenPlaylist = { id -> navController.navigate(PlaylistDetailRoute(id)) { popUpTo<PlaylistFileRoute> { inclusive = true } } },
                 )
             }
         }
@@ -651,7 +717,7 @@ private fun StashNavGraph(
                 onOpenLastFmSettings = {
                     if (navController.currentBackStackEntry === entry) {
                         navController.popBackStack()
-                        navController.navigate(SettingsAccountsRoute)
+                        navController.navigate(SettingsAccountsRoute())
                     }
                 },
             )
@@ -704,6 +770,7 @@ private fun StashNavGraph(
             AboveChrome {
                 FailedMatchesScreen(
                     onBack = { navController.popBackStack() },
+                    focusTrackId = it.toRoute<FailedMatchesRoute>().focusTrackId,
                 )
             }
         }

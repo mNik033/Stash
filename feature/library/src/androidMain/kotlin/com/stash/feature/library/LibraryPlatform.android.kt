@@ -68,6 +68,34 @@ actual fun rememberMultipleAudioPicker(onAudioPicked: (List<String>) -> Unit): (
     }
 }
 
+private val PLAYLIST_FILE_TYPES = arrayOf(
+    "audio/x-mpegurl",
+    "audio/mpegurl",
+    "application/x-mpegurl",
+    "application/vnd.apple.mpegurl",
+    "audio/x-scpls",
+    "application/xspf+xml",
+    "text/csv",
+    "text/comma-separated-values",
+    "text/tab-separated-values",
+    "text/plain",
+    "*/*",
+)
+
+@Composable
+actual fun rememberPlaylistFilePicker(onFilePicked: (String) -> Unit): () -> Unit {
+    val launcher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument(),
+    ) { uri: Uri? ->
+        if (uri != null) {
+            onFilePicked(uri.toString())
+        }
+    }
+    return remember(launcher) {
+        { launcher.launch(PLAYLIST_FILE_TYPES) }
+    }
+}
+
 @Composable
 actual fun rememberImagePicker(onImagePicked: (String) -> Unit): () -> Unit {
     val launcher = rememberLauncherForActivityResult(

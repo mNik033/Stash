@@ -41,9 +41,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.stash.core.ui.components.sheetBarsFollow
 import com.stash.core.ui.theme.SpaceGrotesk
 import com.stash.core.ui.theme.StashTheme
-import com.stash.feature.sync.R
+import com.stash.feature.sync.SyncR
 import com.stash.feature.sync.stringResource
 
 /**
@@ -68,6 +69,7 @@ internal fun ArrivalSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
         containerColor = StashTheme.extendedColors.elevatedSurface,
+        properties = sheetBarsFollow(StashTheme.extendedColors.elevatedSurface),
     ) {
         Column(
             modifier = Modifier
@@ -83,7 +85,7 @@ internal fun ArrivalSheet(
                     if (soundCloudConnected) BrandDotLabel(androidx.compose.ui.graphics.Color(0xFFFF5500), "SoundCloud")
                 }
                 Text(
-                    text = stringResource(R.string.sync_arrival_title),
+                    text = stringResource(SyncR.string.sync_arrival_title),
                     fontFamily = SpaceGrotesk,
                     fontWeight = FontWeight.SemiBold,
                     style = MaterialTheme.typography.headlineSmall,
@@ -93,17 +95,17 @@ internal fun ArrivalSheet(
 
             ArrivalOption(
                 selected = streamEverything,
-                title = stringResource(R.string.sync_arrival_stream_title),
-                badge = stringResource(R.string.sync_arrival_recommended),
-                body = stringResource(R.string.sync_arrival_stream_body),
+                title = stringResource(SyncR.string.sync_arrival_stream_title),
+                badge = stringResource(SyncR.string.sync_arrival_recommended),
+                body = stringResource(SyncR.string.sync_arrival_stream_body),
                 art = { SleeveFanArt() },
                 onClick = { streamEverything = true },
             )
             ArrivalOption(
                 selected = !streamEverything,
-                title = stringResource(R.string.sync_arrival_save_title),
+                title = stringResource(SyncR.string.sync_arrival_save_title),
                 badge = null,
-                body = stringResource(R.string.sync_arrival_save_body),
+                body = stringResource(SyncR.string.sync_arrival_save_body),
                 art = { PhoneArt() },
                 onClick = { streamEverything = false },
             )
@@ -117,10 +119,10 @@ internal fun ArrivalSheet(
                     contentColor = MaterialTheme.colorScheme.surface,
                 ),
             ) {
-                Text(stringResource(R.string.sync_arrival_sync_now), style = MaterialTheme.typography.titleMedium)
+                Text(stringResource(SyncR.string.sync_arrival_sync_now), style = MaterialTheme.typography.titleMedium)
             }
             Text(
-                text = stringResource(R.string.sync_arrival_change_later),
+                text = stringResource(SyncR.string.sync_arrival_change_later),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.align(Alignment.CenterHorizontally),

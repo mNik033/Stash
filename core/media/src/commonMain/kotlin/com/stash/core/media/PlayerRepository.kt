@@ -260,4 +260,13 @@ interface PlayerRepository {
      */
     suspend fun playFromStream(item: TrackItem): StreamRoutingResult
     fun updateCurrentTrack(track: Track) {}
+
+    /**
+     * A streaming quality setting just changed while a song plays (Now Playing's
+     * Streaming quality sheet, #716). The next song was usually resolved already, when
+     * this one started, so it would play at the old quality; this resolves it again
+     * under the new setting. The song playing keeps its stream: switching it would
+     * mean restarting it.
+     */
+    suspend fun reresolveNextStream() = Unit
 }

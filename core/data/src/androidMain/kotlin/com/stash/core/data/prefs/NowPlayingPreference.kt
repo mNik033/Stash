@@ -139,8 +139,8 @@ class AndroidNowPlayingPreference @Inject constructor(@ApplicationContext privat
         const val FULL_ART_ZOOM_MIN = 1f
         const val FULL_ART_ZOOM_MAX = 2f
 
-        /** Close to the whole cover, as the owner set Now Playing up (2026-10-26). */
-        const val FULL_ART_ZOOM_DEFAULT = 1.1f
+        /** The whole cover, no crop: the owner's pick after living with 1.1 (2026-10-31). */
+        const val FULL_ART_ZOOM_DEFAULT = 1f
     }
 
     private val ambientStyleKey = stringPreferencesKey("ambient_style")

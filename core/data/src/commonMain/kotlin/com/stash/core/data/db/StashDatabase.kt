@@ -118,8 +118,11 @@ import com.stash.core.data.db.entity.TrackTagEntity
         com.stash.core.data.db.entity.RecordTasteKeepEntity::class,
         com.stash.core.data.db.entity.PlaylistOrderEntity::class,
         com.stash.core.data.db.entity.PlaylistOrderEntryEntity::class,
+        com.stash.core.data.db.entity.TrackAliasEntity::class,
+        com.stash.core.data.db.entity.TrackMergeLogEntity::class,
+        com.stash.core.data.db.entity.DuplicateDismissalEntity::class,
     ],
-    version = 75,
+    version = 76,
     exportSchema = true,
 )
 @TypeConverters(Converters::class)
@@ -194,6 +197,8 @@ abstract class StashDatabase : RoomDatabase() {
     abstract fun recordTasteDao(): com.stash.core.data.db.dao.RecordTasteDao
 
     abstract fun libraryArtDao(): com.stash.core.data.db.dao.LibraryArtDao
+
+    abstract fun duplicateDao(): com.stash.core.data.db.dao.DuplicateDao
 
     companion object {
         const val DATABASE_NAME = "stash.db"

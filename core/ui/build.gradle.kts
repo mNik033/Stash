@@ -5,6 +5,13 @@ plugins {
 
 android {
     namespace = "com.stash.core.ui"
+
+    testOptions {
+        unitTests {
+            // Robolectric (ThemeAccentSwapTest composes the album scheme) boots on the merged resources.
+            isIncludeAndroidResources = true
+        }
+    }
 }
 
 kotlin {
@@ -39,4 +46,9 @@ dependencies {
     testImplementation(libs.mockk)
     testImplementation(libs.compose.runtime)
     testImplementation("androidx.compose.runtime:runtime-saveable")
+    // ThemeAccentSwapTest counts the album scheme's swaps through the real composable, on Robolectric.
+    testImplementation(libs.robolectric)
+    testImplementation(libs.androidx.test.core)
+    testImplementation("androidx.compose.ui:ui-test-junit4")
+    testImplementation("androidx.compose.ui:ui-test-manifest")
 }

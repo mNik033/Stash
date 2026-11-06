@@ -18,6 +18,9 @@ expect fun castViewModel(): CastViewModel
 expect fun signalPathViewModel(): SignalPathViewModel
 
 @Composable
+expect fun streamingQualityViewModel(): StreamingQualityViewModel
+
+@Composable
 expect fun rememberTouchExplorationEnabled(): Boolean
 
 @Composable

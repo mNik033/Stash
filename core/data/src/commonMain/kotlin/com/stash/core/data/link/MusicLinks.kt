@@ -98,6 +98,8 @@ object MusicLinks {
             if (i <= 0) null else p.substring(0, i) to runCatching { URLDecoder.decode(p.substring(i + 1), "UTF-8") }.getOrDefault("")
         }.toMap()
 
+    fun youTubePlaylistSourceId(playlistId: String): String = "custom_web_yt_${playlistId.removePrefix("VL")}"
+
     private const val MAX_TEXT = 4_000
     private val URL = Regex("""https?://[^\s<>"']+""", RegexOption.IGNORE_CASE)
     private val SPOTIFY_URI = Regex("""spotify:(playlist|album|track):([A-Za-z0-9]{22})""")

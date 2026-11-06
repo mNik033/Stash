@@ -350,16 +350,6 @@ fun DesktopScaffold(
                                 onNavigateToArtist = { artistName ->
                                     backStack.add(DesktopScreen.ArtistDetail(artistName))
                                 },
-                                onNavigateToAlbum = { albumId, name, artUrl, artistName ->
-                                    backStack.add(
-                                        DesktopScreen.AlbumDetail(
-                                            albumId = albumId,
-                                            albumName = name,
-                                            artUrl = artUrl,
-                                            artistName = artistName,
-                                        )
-                                    )
-                                },
                                 onNavigateToRemoteAlbum = { albumId, name, artUrl, artistName ->
                                     backStack.add(
                                         DesktopScreen.AlbumDiscovery(

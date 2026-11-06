@@ -31,7 +31,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Public
-import androidx.compose.material.icons.filled.Radio
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -51,6 +50,7 @@ import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import com.stash.core.common.ArtUrlUpgrader
 import com.stash.data.ytmusic.model.SocialLink
+import java.util.Locale
 
 /**
  * Where the gold "♥ Support" chip sends people: the artist's Bandcamp when
@@ -65,7 +65,7 @@ internal fun supportUrl(socials: List<SocialLink>): String? =
         ?: socials.firstOrNull { it.kind.equals("website", ignoreCase = true) }?.url
 
 /**
- * A link coin, as on the original header. The links' line under listeners + Support is this tall
+ * A link coin, as on the original header. The links' line under the Support chip is this tall
  * before they arrive too, so their landing a beat late never moves the name.
  */
 private val LinkCoinSize = 32.dp
@@ -87,8 +87,8 @@ internal val ArtistHeroPhotoHeight = 340.dp
  * Artist Profile hero, Spotify-style: the artist's header photo full width and
  * edge to edge (under the status bar), and everything else set on it. Over the
  * photo's bottom edge, where it fades into the page: the name large and full
- * width; under it the plum play coin and the radio ring on the left, the
- * listener count and the gold "♥ Support" chip (Bandcamp → website, see
+ * width, and the monthly listeners under it; then the plum play coin and the radio
+ * ring on the left, the gold "♥ Support" chip (Bandcamp → website, see
  * [supportUrl]) on the right; then one row of the artist's links, a glass coin each.
  *
  * YouTube's header photos are wide (about 16:9), so [ArtUrlUpgrader.banner]
@@ -125,8 +125,10 @@ fun ArtistHero(
     val ink = MaterialTheme.colorScheme.onBackground
     val uriHandler = LocalUriHandler.current
     val dark = background.luminance() < 0.5f
-    val plum = if (dark) Color(0xFF7E6A90) else Color(0xFF6E5A7E)
-    val cream = Color(0xFFF2ECE2)
+    // The play coin wears the theme's accent: the playing album's colour, neutral when idle (D9;
+    // it was a fixed plum under cream).
+    val coin = MaterialTheme.colorScheme.primary
+    val coinInk = MaterialTheme.colorScheme.onPrimary
     val gold = Color(0xFFFFC947)
     val goldInk = if (dark) gold else Color(0xFF7A5A00)
     val support = remember(socials) { supportUrl(socials) }
@@ -220,15 +222,27 @@ fun ArtistHero(
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
-            // Play and radio on the left; on the right, listeners and Support with the
-            // artist's links under them. The links arrive a beat after the page (MusicBrainz);
+            // "1.7M monthly listeners" under the name, full width, as on Spotify: beside Support
+            // it no longer fit once it said what it counts. The line is there from the first
+            // frame, empty until the number arrives (a beat after the page on a first visit), so
+            // its landing never moves the name; an artist with no number keeps the quiet gap.
+            Text(
+                text = monthlyListenersLabel(hero.monthlyListeners),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(bottom = 6.dp),
+            )
+            // Play and radio on the left; on the right, Support with the artist's links
+            // under it. The links arrive a beat after the page (MusicBrainz);
             // their line is held open from the start, so the row never grows and the name never
             // moves. Not a fixed row height: with a large font, that squashed the coins flat.
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Surface(
                     onClick = onPlayArtist,
                     shape = CircleShape,
-                    color = plum,
+                    color = coin,
                     shadowElevation = 6.dp,
                     modifier = Modifier.size(56.dp),
                 ) {
@@ -236,7 +250,7 @@ fun ArtistHero(
                         Icon(
                             imageVector = Icons.Default.PlayArrow,
                             contentDescription = "Play ${hero.name}",
-                            tint = cream,
+                            tint = coinInk,
                             modifier = Modifier.size(30.dp),
                         )
                     }
@@ -250,11 +264,12 @@ fun ArtistHero(
                     modifier = Modifier.size(44.dp),
                 ) {
                     Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+                        // Stash's Signal glyph, still: this button starts this artist's station.
                         Icon(
-                            imageVector = Icons.Default.Radio,
+                            imageVector = com.stash.core.ui.icons.RadioSignal.Icon,
                             contentDescription = "Start ${hero.name} radio",
                             tint = ink,
-                            modifier = Modifier.size(20.dp),
+                            modifier = Modifier.size(22.dp),
                         )
                     }
                 }
@@ -265,15 +280,6 @@ fun ArtistHero(
                     modifier = Modifier.weight(1f),
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        if (hero.subscribersText != null) {
-                            Text(
-                                text = hero.subscribersText,
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                maxLines = 1,
-                            )
-                        }
-                        if (hero.subscribersText != null && support != null) Spacer(Modifier.width(10.dp))
                         if (support != null) {
                             Surface(
                                 onClick = { runCatching { uriHandler.openUri(support) } },

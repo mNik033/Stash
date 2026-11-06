@@ -1,6 +1,5 @@
 package com.stash.feature.sync
 
-import android.text.format.DateUtils
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.stash.core.auth.TokenManager
@@ -17,6 +16,7 @@ import com.stash.core.data.sync.DayOfWeekSet
 import com.stash.core.data.sync.SyncScheduler
 import com.stash.core.data.sync.SyncStateManager
 import com.stash.core.data.sync.toDisplayStatus
+import com.stash.core.data.sync.unreadPlaylistsIn
 import com.stash.core.model.SyncDisplayStatus
 import com.stash.data.download.files.LibrarySizeHolder
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -37,6 +37,7 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 /**
+
  * ViewModel backing the Sync screen.
  *
  * Combines live sync phase, user preferences, auth state for each service,
@@ -78,7 +79,42 @@ actual open class SyncViewModel @Inject constructor(
     private val lastFmRecommendationSource: com.stash.core.data.mix.LastFmRecommendationSource,
     /** "Play something new" on the synced hero. */
     private val playerRepository: com.stash.core.media.PlayerRepository,
+    /** Live progress of the songs downloading now, for the Sync tab's Downloads row. */
+    private val downloadManager: com.stash.data.download.DownloadManager,
 ) : ViewModel() {
+
+    private val progressByTrackId = MutableStateFlow<Map<Long, Float>>(emptyMap())
+
+    actual val downloadsSummary: StateFlow<DownloadsSummary> = combine(
+        downloadQueueDao.observeActiveDownloadRows(),
+        downloadQueueDao.getFailedDownloads(),
+        progressByTrackId,
+    ) { active, failed, progress ->
+        val running = active.filter { it.status == com.stash.core.model.DownloadStatus.IN_PROGRESS }
+        DownloadsSummary(
+            downloading = running.size,
+            waiting = active.size - running.size,
+            failed = failed.size,
+            progress = running.takeIf { it.isNotEmpty() }
+                ?.map { progress[it.trackId] ?: 0f }?.average()?.toFloat(),
+        )
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), DownloadsSummary())
+
+    init {
+        // A song's last progress tick, dropped once its download ends either way (as the Downloads screen keeps it).
+        viewModelScope.launch {
+            downloadManager.progress.collect { update ->
+                progressByTrackId.value = when (update.status) {
+                    com.stash.data.download.model.DownloadStatus.COMPLETED,
+                    com.stash.data.download.model.DownloadStatus.FAILED,
+                    com.stash.data.download.model.DownloadStatus.UNMATCHED,
+                    com.stash.data.download.model.DownloadStatus.DEFERRED,
+                    -> progressByTrackId.value - update.trackId
+                    else -> progressByTrackId.value + (update.trackId to update.progress)
+                }
+            }
+        }
+    }
 
     /**
      * Reactive count of blocked songs, displayed as a badge on the
@@ -396,8 +432,27 @@ actual open class SyncViewModel @Inject constructor(
      * Download switch does the same thing ([MusicRepository.setPlaylistDownload],
      * #474), so the two always agree. In Download mode a saved playlist is also
      * switched on for sync, as the old switch was, so later syncs download what
-     * it gains and it stays on Home; off there turns sync off too.
+     * it gains and it stays on Home; off there turns sync off too. A mix is
+     * never pinned by this: on a mix the pin is its Favorite (see
+     * [com.stash.core.data.db.dao.PlaylistDao.setSyncEnabledAndPin]).
      */
+    /**
+     * The account page's Save all: every one of [playlistIds] saved as its own Save would, but their
+     * songs queued together for one download run ([com.stash.core.data.repository.MusicRepository.keepPlaylistsOffline]),
+     * never a run started per playlist. The rows offered are in the library already (taken-out
+     * ones aren't offered).
+     */
+    fun onSaveAll(playlistIds: List<Long>) {
+        if (playlistIds.isEmpty()) return
+        viewModelScope.launch {
+            if (!streamingPreference.current()) {
+                val now = System.currentTimeMillis()
+                playlistIds.forEach { playlistDao.setSyncEnabledAndPin(it, true, now) }
+            }
+            musicRepository.keepPlaylistsOffline(playlistIds)
+        }
+    }
+
     fun onSavePlaylist(playlistId: Long, save: Boolean) {
         viewModelScope.launch {
             // Saving one that's out of the library brings it back: saved is in.
@@ -422,31 +477,6 @@ actual open class SyncViewModel @Inject constructor(
         viewModelScope.launch { syncScheduler.cancelSync() }
     }
 
-    /** Toggle sync_enabled for a specific Spotify playlist. */
-    actual fun onTogglePlaylistSync(playlistId: Long, enabled: Boolean) {
-        viewModelScope.launch {
-            // The switch decides Home too: sync on pins the playlist to the Your
-            // playlists rail, sync off unpins it (the user's rule, 2026-09-07).
-            playlistDao.setSyncEnabledAndPin(playlistId, enabled, System.currentTimeMillis())
-            // v0.9.21: when DISABLING, sweep pending download_queue rows
-            // whose tracks no longer belong to any sync-enabled playlist.
-            // Without this, deselecting a playlist leaves its in-flight
-            // downloads draining — confusing because the user expects
-            // "deselect" to actually stop downloads. The query is
-            // DELETE-with-NOT-IN so tracks shared with another enabled
-            // playlist (e.g. same track in Liked Songs on both services)
-            // stay queued.
-            if (!enabled) {
-                val cancelled = downloadQueueDao.cancelDownloadsWithNoEnabledPlaylist()
-                if (cancelled > 0) {
-                    android.util.Log.i(
-                        "SyncToggle",
-                        "cancelled $cancelled orphan PENDING download(s) after disable",
-                    )
-                }
-            }
-        }
-    }
 
     /**
      * A playlist's "In your library" check, on its account's page: the way to
@@ -483,20 +513,6 @@ actual open class SyncViewModel @Inject constructor(
                 musicRepository.setPlaylistDownload(playlistId, false)
             }
             playlistDao.setUserHidden(playlistId, !inLibrary)
-        }
-    }
-
-    /**
-     * Toggle hide_from_home for a specific playlist. Unlike [onTogglePlaylistSync]
-     * this does NOT sweep downloads — hiding a mix from Home has nothing to do
-     * with what's queued or synced.
-     */
-    actual fun onToggleHideFromHome(playlistId: Long, hidden: Boolean) {
-        // Showing pins the mix so it leads its Home rail; hiding unpins it. The
-        // rail shows only its 12 freshest mixes otherwise, and "Shown on Home"
-        // was a promise it kept for none of the others (Cup Noodle Radio, 2026-09-07).
-        viewModelScope.launch {
-            playlistDao.setHomeVisibility(playlistId, hidden, if (hidden) null else System.currentTimeMillis())
         }
     }
 
@@ -618,6 +634,16 @@ actual open class SyncViewModel @Inject constructor(
     }
 
     /**
+     * Turn the sync of Spotify's saved albums on or off (item 5, 2026-11-02). Off, sync reads no
+     * saved albums; the ones already here stay, as mixes do when discovery is switched off.
+     */
+    actual fun onSyncSpotifySavedAlbumsChanged(enabled: Boolean) {
+        viewModelScope.launch {
+            syncPreferencesManager.setSyncSpotifySavedAlbums(enabled)
+        }
+    }
+
+    /**
      * Persists the days-of-week selection and reschedules, so the first run
      * lands on the next chosen day and a schedule that had no days (so no
      * trigger) starts again. UI passes the new bitmask.
@@ -683,6 +709,11 @@ actual open class SyncViewModel @Inject constructor(
             }
         }
         viewModelScope.launch {
+            syncPreferencesManager.syncSpotifySavedAlbums.collect { enabled ->
+                _uiState.update { it.copy(syncSpotifySavedAlbums = enabled) }
+            }
+        }
+        viewModelScope.launch {
             syncPreferencesManager.syncDays.collect { bitmask ->
                 _uiState.update { it.copy(syncDays = bitmask) }
             }
@@ -727,13 +758,6 @@ actual open class SyncViewModel @Inject constructor(
         viewModelScope.launch {
             syncHistoryDao.getRecentSyncs(limit = 1).collect { entities ->
                 val latest = entities.firstOrNull()?.toInfo()
-                val relativeTime = latest?.let {
-                    DateUtils.getRelativeTimeSpanString(
-                        it.startedAt,
-                        System.currentTimeMillis(),
-                        DateUtils.MINUTE_IN_MILLIS,
-                    ).toString()
-                } ?: ""
                 val healthLabel = when (latest?.displayStatus) {
                     null -> ""
                     SyncDisplayStatus.Success -> "✓"
@@ -757,7 +781,7 @@ actual open class SyncViewModel @Inject constructor(
                 }
                 _uiState.update { state ->
                     state.copy(
-                        lastSyncRelativeTime = relativeTime,
+                        lastSyncFinishedAt = latest?.syncedAt(),
                         // What the sync FOUND, not what it downloaded. In Online
                         // mode nothing downloads, so tracksDownloaded is always 0
                         // and the headline read "0 tracks" after a run that added
@@ -793,6 +817,7 @@ actual open class SyncViewModel @Inject constructor(
                                 dateAdded = e.dateAdded.toEpochMilli(),
                                 stackable = com.stash.core.data.sync.MixStacking.showsSwitch(e.source, e.type, e.name, e.stackSongs),
                                 stackSongs = e.stackSongs,
+                                album = com.stash.core.data.album.SavedAlbums.isSavedAlbum(e.type, e.source, e.sourceId),
                             )
                         }
                     )
@@ -836,6 +861,7 @@ actual open class SyncViewModel @Inject constructor(
                                 dateAdded = e.dateAdded.toEpochMilli(),
                                 stackable = com.stash.core.data.sync.MixStacking.showsSwitch(e.source, e.type, e.name, e.stackSongs),
                                 stackSongs = e.stackSongs,
+                                album = com.stash.core.data.album.SavedAlbums.isSavedAlbum(e.type, e.source, e.sourceId),
                             )
                         }
                     )

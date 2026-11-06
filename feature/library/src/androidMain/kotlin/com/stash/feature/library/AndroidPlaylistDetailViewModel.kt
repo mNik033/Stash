@@ -24,6 +24,8 @@ class AndroidPlaylistDetailViewModel @Inject constructor(
     discoveryQueueDao: DiscoveryQueueDao,
     sharedMixRepository: SharedMixRepository,
     downloadQueueDao: DownloadQueueDao,
+    orderDao: com.stash.core.data.db.dao.PlaylistOrderDao,
+    radioStarter: com.stash.core.media.RadioStarter,
 ) : PlaylistDetailViewModel(
     savedStateHandle = savedStateHandle,
     musicRepository = musicRepository,
@@ -35,4 +37,6 @@ class AndroidPlaylistDetailViewModel @Inject constructor(
     discoveryQueueDao = discoveryQueueDao,
     sharedMixRepository = sharedMixRepository,
     downloadQueueDao = downloadQueueDao,
+    orderDao = orderDao,
+    radioStarter = radioStarter,
 )

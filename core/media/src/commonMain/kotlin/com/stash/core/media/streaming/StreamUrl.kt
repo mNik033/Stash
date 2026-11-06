@@ -49,4 +49,6 @@ data class StreamUrl(
      * LazyResolvingDataSource refuses it.
      */
     val isDash: Boolean = false,
+    val isHls: Boolean = false,
+    val isPreview: Boolean = false,
 )

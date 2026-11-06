@@ -43,6 +43,10 @@ class CommunityViewModel @Inject constructor(
         val message: String? = null,
         /** Play all / Shuffle is opening the first posts; cleared once music starts. */
         val startingChart: Boolean = false,
+        /** A pull-to-refresh is loading; cleared when the list it asked for answers, either way. */
+        val refreshing: Boolean = false,
+        /** Why a vote didn't go: a dimmed arrow was tapped, the Worker wants a listen, or the listen couldn't reach it yet. */
+        val voteNote: VoteNote? = null,
     )
 
     private val _state = MutableStateFlow(UiState(posts = repository.lastHome))
@@ -54,12 +58,22 @@ class CommunityViewModel @Inject constructor(
     /** Post id → the vote last asked for, while a request for that post is out (main thread only). */
     private val voting = mutableMapOf<String, Int>()
 
+    /** The posts heard on this phone ([CommunityRepository.heardIds]), laid over each list as it loads. */
+    private var heardHere: Set<String> = emptySet()
+
     /** Test seam for the reload clock. */
     internal var clock: () -> Long = { System.currentTimeMillis() }
 
     init {
         // A post or a take-down (the posting sheet, a post screen) reloads whatever is on screen.
         viewModelScope.launch { repository.revision.drop(1).collect { show(_state.value.tab) } }
+        // A post heard while its list is on screen (the 30 s ran out) wakes its pill there and then.
+        viewModelScope.launch {
+            repository.heardIds.collect { ids ->
+                heardHere = ids
+                patchAll { it.heardFrom(ids) }
+            }
+        }
     }
 
     /**
@@ -81,12 +95,14 @@ class CommunityViewModel @Inject constructor(
             // When it was asked, not answered: a vote made during a slow load then counts as newer.
             val asked = clock()
             val result = when (tab) {
-                Tab.HOME -> repository.feed(CommunityRepository.HOME_SIZE)
+                // Home reads the whole list too: its #1 is this week's top by votes (topChart), which the Worker's
+                // first five ("hot": votes plus age) needn't hold.
+                Tab.HOME -> repository.feed(CommunityRepository.ALL_SIZE)
                 Tab.ALL -> repository.feed(CommunityRepository.ALL_SIZE)
                 Tab.MINE -> repository.mine()
             }
             // A vote still on its way stays on its row, so its highlight doesn't flicker off and back on.
-            val posts = (result as? CommunityResult.Ok)?.value?.map { p -> voting[p.id]?.let { p.withVote(it) } ?: p }
+            val posts = (result as? CommunityResult.Ok)?.value?.map { p -> (voting[p.id]?.let { p.withVote(it) } ?: p).heardFrom(heardHere) }
             if (posts != null) {
                 loadedAt = asked
                 if (tab == Tab.HOME) repository.lastHome = posts
@@ -94,16 +110,31 @@ class CommunityViewModel @Inject constructor(
             _state.update { s ->
                 when {
                     s.tab != tab -> s
-                    posts != null -> s.copy(posts = posts, failed = false)
-                    else -> s.copy(failed = s.posts == null)
+                    posts != null -> s.copy(posts = posts, failed = false, refreshing = false)
+                    // A pulled refresh that failed over a list still on screen says so; a quiet reload (Home coming back) doesn't.
+                    s.refreshing && s.posts != null -> s.copy(refreshing = false, message = communityMessage(result))
+                    else -> s.copy(failed = s.posts == null, refreshing = false)
                 }
             }
         }
     }
 
-    /** Your own posts can't be voted on; one request per post is out at a time, and a tap meanwhile is sent after it. */
+    /** Pull-to-refresh: reloads the list on screen, keeping it there until the new one arrives. */
+    fun refresh() {
+        _state.update { it.copy(refreshing = true) }
+        show(_state.value.tab)
+    }
+
+    /**
+     * Your own posts can't be voted on; one request per post is out at a time, and a tap meanwhile is sent after it.
+     * A post not heard yet takes no vote, only the note saying why (taking a vote back is always allowed).
+     */
     fun vote(post: CommunityPost, tapped: Int) {
         if (post.mine) return
+        if (post.needsListen(tapped)) {
+            _state.update { it.copy(voteNote = VoteNote.LISTEN_FIRST) }
+            return
+        }
         val value = post.nextVote(tapped)
         patch(post.id) { it.withVote(value) }
         if (voting.put(post.id, value) != null) return // the request that's out sends this when it's back
@@ -114,8 +145,11 @@ class CommunityViewModel @Inject constructor(
                     val sent = voting.getValue(post.id)
                     val r = repository.vote(post.id, sent)
                     if (r !is CommunityResult.Ok) {
-                        patch(post.id) { it.withVote(confirmed) }
-                        _state.update { it.copy(message = communityMessage(r)) }
+                        // The Worker has no listen on record: the pill dims again, and the note says why. Or the listen
+                        // couldn't reach it yet: the vote wasn't sent, the pill stays awake, and the note says try again.
+                        val note = voteNoteFor(r)
+                        patch(post.id) { p -> p.withVote(confirmed).let { if (note == VoteNote.LISTEN_FIRST) it.copy(heard = false) else it } }
+                        _state.update { if (note != null) it.copy(voteNote = note) else it.copy(message = communityMessage(r)) }
                         if (r is CommunityResult.Rejected && r.code == "gone") show(_state.value.tab)
                         return@launch
                     }
@@ -131,9 +165,9 @@ class CommunityViewModel @Inject constructor(
         }
     }
 
-    /** Play all / Shuffle on the All list: a taste of the top posts (see [CommunityChartPlayer]). */
-    fun playChart(shuffle: Boolean) {
-        val posts = _state.value.posts?.takeIf { it.isNotEmpty() } ?: return
+    /** Play all / Shuffle on Top: a taste of [posts], the chart in the order shown (see [CommunityChartPlayer]). */
+    fun playChart(shuffle: Boolean, posts: List<CommunityPost>) {
+        if (posts.isEmpty()) return
         if (chart?.isActive == true) return
         _state.update { it.copy(startingChart = true) }
         chart = viewModelScope.launch {
@@ -152,8 +186,13 @@ class CommunityViewModel @Inject constructor(
 
     fun messageShown() = _state.update { it.copy(message = null) }
 
-    private fun patch(id: String, change: (CommunityPost) -> CommunityPost) {
-        val s = _state.updateAndGet { it.copy(posts = it.posts?.map { p -> if (p.id == id) change(p) else p }) }
+    fun voteNoteShown() = _state.update { it.copy(voteNote = null) }
+
+    private fun patch(id: String, change: (CommunityPost) -> CommunityPost) = patchAll { p -> if (p.id == id) change(p) else p }
+
+    private fun patchAll(change: (CommunityPost) -> CommunityPost) {
+        if (_state.value.posts == null) return
+        val s = _state.updateAndGet { it.copy(posts = it.posts?.map(change)) }
         if (s.tab == Tab.HOME) repository.lastHome = s.posts
     }
 }

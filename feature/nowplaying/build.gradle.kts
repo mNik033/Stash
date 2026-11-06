@@ -27,6 +27,9 @@ kotlin {
             implementation(project(":core:auth"))
             implementation(project(":data:lyrics"))
             implementation(project(":data:ytmusic"))
+            implementation(project(":data:download"))
+            implementation(libs.datastore.preferences)
+            implementation(libs.kotlinx.serialization.json)
 
             implementation(libs.lifecycle.runtime.compose)
             implementation(libs.lifecycle.viewmodel.compose)

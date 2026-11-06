@@ -23,20 +23,17 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
+import com.stash.feature.nowplaying.ui.LocalNpSpacing
 import com.stash.feature.nowplaying.ui.npInk
-
-/**
- * The line's height, taken whether or not it shows: the queue running out on its last song must
- * not grow the art under the listener's eyes. 40dp: a comfortable target for a full-width row
- * without costing the art a full 48.
- */
-private val UpNextLineHeight = 40.dp
 
 /**
  * "Up next · Title — Artist" under Now Playing's transport, one line, quiet ink. A tap opens the
  * queue sheet, or the Session sheet in a Listen Together room (its Up next lives there). Empty,
  * but still holding its height, when nothing is coming ([peek] null); see [upNextPeek] and
  * [roomUpNextPeek] for what counts as next under shuffle, repeat, radio and a room.
+ *
+ * Centred whatever the title's alignment, as the View lyrics bar is: it belongs to the controls
+ * above it, not to the title block.
  *
  * One TalkBack node: "Up next: Title by Artist. Opens the queue.", a button.
  */
@@ -47,19 +44,24 @@ internal fun UpNextLine(
     onOpen: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    // The line's height (NpSpacing.upNextHeight, 40 dp), taken whether or not it shows: the queue
+    // running out on its last song must not grow the art under the listener's eyes. 40 dp: a
+    // comfortable target for a full-width row without costing the art a full 48.
+    val spacing = LocalNpSpacing.current
+    val height = spacing.upNextHeight.dp
     if (peek == null) {
-        Box(modifier = modifier.fillMaxWidth().height(UpNextLineHeight))
+        Box(modifier = modifier.fillMaxWidth().height(height))
         return
     }
     val description = upNextDescription(peek, inRoom)
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .height(UpNextLineHeight)
+            .height(height)
             .clip(RoundedCornerShape(12.dp))
             .clickable(role = Role.Button, onClick = onOpen)
             .semantics { contentDescription = description }
-            .padding(horizontal = 12.dp),
+            .padding(horizontal = spacing.upNextSidePadding.dp),
         contentAlignment = Alignment.Center,
     ) {
         Text(

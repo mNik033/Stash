@@ -20,6 +20,9 @@ import com.stash.feature.settings.components.SettingsInfoRow
 import com.stash.feature.settings.components.SettingsNavRow
 import com.stash.feature.settings.components.SettingsGroupCard
 
+/** Stash's source, where the GitHub star is. */
+internal const val STASH_GITHUB_URL = "https://github.com/rawnaldclark/Stash"
+
 /**
  * The About & Help spoke of the hub-and-spoke Settings redesign.
  *
@@ -59,7 +62,7 @@ fun SettingsAboutScreen(
         // work and say what it concluded.
         var checking by remember { mutableStateOf(false) }
         // A check that finds an update opens the update sheet (over the app, held by the scaffold).
-        val updates: com.stash.feature.settings.update.UpdateViewModel = androidx.hilt.navigation.compose.hiltViewModel()
+        val updates: com.stash.feature.settings.update.UpdateAskViewModel = androidx.hilt.navigation.compose.hiltViewModel()
         LaunchedEffect(context) {
             WorkManager.getInstance(context)
                 .getWorkInfosForUniqueWorkFlow(UpdateCheckWorker.UNIQUE_ONE_SHOT_NAME)
@@ -72,10 +75,7 @@ fun SettingsAboutScreen(
                     checking = false
                     val outcome = info.outputData.getString(UpdateCheckWorker.KEY_OUTCOME)
                     val tag = info.outputData.getString(UpdateCheckWorker.KEY_LATEST_TAG)
-                    if (outcome == UpdateCheckWorker.OUTCOME_UPDATE_AVAILABLE && updates.available.value != null) {
-                        updates.ask()
-                        return@collect
-                    }
+                    if (outcome == UpdateCheckWorker.OUTCOME_UPDATE_AVAILABLE && updates.ask()) return@collect
                     val message = when (outcome) {
                         UpdateCheckWorker.OUTCOME_UP_TO_DATE ->
                             context.getString(R.string.settings_update_on_latest, installedVersion)
@@ -92,6 +92,17 @@ fun SettingsAboutScreen(
             rows = listOf(
                 { SettingsInfoRow(label = stringResource(R.string.settings_version_label), value = installedVersion) },
                 { SettingsInfoRow(label = stringResource(R.string.settings_license_label), value = "GPL-3.0") },
+                {
+                    // Moved here from the Support card (2026-11), which now has one action: Donate.
+                    SettingsNavRow(
+                        title = stringResource(R.string.settings_about_star),
+                        subtitle = stringResource(R.string.settings_about_star_detail),
+                        onClick = {
+                            val open = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(STASH_GITHUB_URL))
+                            runCatching { context.startActivity(open) }
+                        },
+                    )
+                },
                 {
                     // Discogs' API terms ask for this notice wherever its data is used.
                     SettingsNavRow(

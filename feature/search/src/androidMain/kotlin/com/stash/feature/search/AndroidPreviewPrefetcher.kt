@@ -2,6 +2,8 @@ package com.stash.feature.search
 
 import androidx.compose.foundation.lazy.LazyListState
 import com.stash.core.common.Log
+import com.stash.core.common.power.BatterySaver
+import com.stash.core.data.prefs.DataSaver
 import com.stash.data.download.preview.PreviewUrlCache
 import com.stash.data.download.preview.PreviewUrlExtractor
 import com.stash.data.ytmusic.model.TrackSummary
@@ -22,15 +24,22 @@ class AndroidPreviewPrefetcher(
     private val previewUrlCache: MutableMap<String, String>,
     private val scope: CoroutineScope =
         CoroutineScope(SupervisorJob() + Dispatchers.IO),
+    private val batterySaver: BatterySaver = BatterySaver.Off,
+    private val dataSaverApplies: () -> Boolean = { false },
 ) : PreviewPrefetcher {
 
     @Inject
-    constructor(extractor: PreviewUrlExtractor, cache: PreviewUrlCache) :
-        this(extractor, cache.asMutableMap)
+    constructor(
+        extractor: PreviewUrlExtractor,
+        cache: PreviewUrlCache,
+        batterySaver: BatterySaver,
+        dataSaver: DataSaver,
+    ) : this(extractor, cache.asMutableMap, batterySaver = batterySaver, dataSaverApplies = dataSaver::appliesNow)
 
     private val jobs = mutableListOf<Job>()
 
     override fun prefetch(videoIds: List<String>) {
+        if (batterySaver.isOn.value || dataSaverApplies()) return
         videoIds
             .filter { it !in previewUrlCache }
             .forEach { id ->
@@ -74,4 +83,4 @@ fun PreviewPrefetcher(
 fun PreviewPrefetcher(
     extractor: PreviewUrlExtractor,
     cache: PreviewUrlCache,
-): AndroidPreviewPrefetcher = AndroidPreviewPrefetcher(extractor, cache)
+): AndroidPreviewPrefetcher = AndroidPreviewPrefetcher(extractor, cache.asMutableMap)

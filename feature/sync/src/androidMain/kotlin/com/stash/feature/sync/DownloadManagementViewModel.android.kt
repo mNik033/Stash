@@ -112,8 +112,6 @@ actual open class DownloadManagementViewModel @Inject constructor(
             }
         }
     }
-        }
-    }
 
     actual fun dismissMessage() {
         message.value = null

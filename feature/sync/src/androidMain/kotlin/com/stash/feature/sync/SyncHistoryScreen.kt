@@ -38,7 +38,6 @@ import com.stash.core.ui.components.bottomChromePadding
 import com.stash.core.ui.theme.StashTheme
 import com.stash.feature.sync.components.RecentSyncsCard
 import com.stash.feature.sync.components.SourcePreferencesCard
-import com.stash.feature.sync.components.formatRelativeTime
 
 /**
  * Everything about syncing that isn't needed every day, one row away from the
@@ -69,10 +68,10 @@ fun SyncHistoryScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(stringResource(R.string.sync_history_title)) },
+                title = { Text(stringResource(SyncR.string.sync_history_title)) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.sync_back))
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(SyncR.string.sync_back))
                     }
                 },
             )
@@ -107,7 +106,7 @@ fun SyncHistoryScreen(
 
             item(key = "downloads") { DownloadManagementCard(onClick = onNavigateToDownloads) }
 
-            item(key = "library_label") { SyncSectionLabel(stringResource(R.string.sync_section_library)) }
+            item(key = "library_label") { SyncSectionLabel(stringResource(SyncR.string.sync_section_library)) }
             item(key = "blocked") {
                 LibraryMaintenanceCard(
                     blockedCount = blockedCount,
@@ -117,9 +116,14 @@ fun SyncHistoryScreen(
 
             // Each account's own playlists and Liked: Refresh mirrors a song removed there,
             // Accumulate keeps it. Mixes have their own Stack switch on the account's page.
-            if (uiState.spotifyConnected || uiState.youTubeConnected) {
-                item(key = "mixes_label") { SyncSectionLabel(stringResource(R.string.sync_history_mixes_section)) }
-                if (uiState.spotifyConnected) {
+            // A switch shows exactly while its mode counts for deleting downloads: signed in,
+            // or the account's playlists still here (SyncPreferencesManager.anyAccumulate).
+            // A mode that counted with no switch on screen kept Refresh from ever deleting (#273).
+            val spotifyCounts = uiState.spotifyConnected || uiState.spotifyPlaylists.isNotEmpty()
+            val youTubeCounts = uiState.youTubeConnected || uiState.youTubePlaylists.isNotEmpty()
+            if (spotifyCounts || youTubeCounts) {
+                item(key = "mixes_label") { SyncSectionLabel(stringResource(SyncR.string.sync_history_mixes_section)) }
+                if (spotifyCounts) {
                     item(key = "spotify_mode") {
                         MixModeCard(name = "Spotify") {
                             SyncModeChipRow(
@@ -131,7 +135,7 @@ fun SyncHistoryScreen(
                         }
                     }
                 }
-                if (uiState.youTubeConnected) {
+                if (youTubeCounts) {
                     item(key = "youtube_mode") {
                         MixModeCard(name = "YouTube Music") {
                             SyncModeChipRow(
@@ -157,10 +161,10 @@ fun SyncHistoryScreen(
                             if (hasTracks) {
                                 SourceStatCell(
                                     number = "${lastFmState.trackCount}",
-                                    label = stringResource(R.string.sync_source_stat_recommended),
+                                    label = stringResource(SyncR.string.sync_source_stat_recommended),
                                 )
                             } else {
-                                SourceEmptyHint(stringResource(R.string.sync_source_empty_lastfm))
+                                SourceEmptyHint(stringResource(SyncR.string.sync_source_empty_lastfm))
                             }
                         },
                         modeChips = {
@@ -175,9 +179,15 @@ fun SyncHistoryScreen(
             }
 
             if (uiState.recentSyncs.isNotEmpty()) {
-                item(key = "recent_label") { SyncSectionLabel(stringResource(R.string.sync_section_recent_syncs)) }
+                item(key = "recent_label") { SyncSectionLabel(stringResource(SyncR.string.sync_section_recent_syncs)) }
                 item(key = "recent") {
-                    RecentSyncsCard(uiState.recentSyncs.map { it.toRecentSyncRow(formatRelativeTime(it.startedAt)) })
+                    // One clock for the list, ticking on the newest run's minutes: the older
+                    // rows read in hours or days, where a minute's lag doesn't show.
+                    val now = rememberMinuteClock(uiState.recentSyncs.firstOrNull()?.syncedAt())
+                    val justNow = stringResource(SyncR.string.sync_time_just_now)
+                    RecentSyncsCard(
+                        uiState.recentSyncs.map { it.toRecentSyncRow(syncedAgoText(it.syncedAt(), now, justNow)) },
+                    )
                 }
             }
 
@@ -189,13 +199,13 @@ fun SyncHistoryScreen(
     if (uiState.pendingRefreshSource != null) {
         AlertDialog(
             onDismissRequest = viewModel::cancelRefreshMode,
-            title = { Text(stringResource(R.string.sync_switch_to_refresh_title)) },
-            text = { Text(stringResource(R.string.sync_switch_to_refresh_body)) },
+            title = { Text(stringResource(SyncR.string.sync_switch_to_refresh_title)) },
+            text = { Text(stringResource(SyncR.string.sync_switch_to_refresh_body)) },
             confirmButton = {
-                TextButton(onClick = viewModel::confirmRefreshMode) { Text(stringResource(R.string.sync_switch_to_refresh_confirm)) }
+                TextButton(onClick = viewModel::confirmRefreshMode) { Text(stringResource(SyncR.string.sync_switch_to_refresh_confirm)) }
             },
             dismissButton = {
-                TextButton(onClick = viewModel::cancelRefreshMode) { Text(stringResource(R.string.sync_cancel)) }
+                TextButton(onClick = viewModel::cancelRefreshMode) { Text(stringResource(SyncR.string.sync_cancel)) }
             },
         )
     }
@@ -204,22 +214,22 @@ fun SyncHistoryScreen(
     if (confirmUndo) {
         val card = undoCard
         val changedPlaylistsSuffix = card?.let {
-            " (" + pluralStringResource(R.plurals.sync_playlists_count, it.changedPlaylists, it.changedPlaylists) + ")"
+            " (" + pluralStringResource(SyncR.plurals.sync_playlists_count, it.changedPlaylists, it.changedPlaylists) + ")"
         }.orEmpty()
         AlertDialog(
             onDismissRequest = { confirmUndo = false },
-            title = { Text(stringResource(R.string.sync_undo_dialog_title)) },
-            text = { Text(stringResource(R.string.sync_undo_dialog_body, changedPlaylistsSuffix)) },
+            title = { Text(stringResource(SyncR.string.sync_undo_dialog_title)) },
+            text = { Text(stringResource(SyncR.string.sync_undo_dialog_body, changedPlaylistsSuffix)) },
             confirmButton = {
                 TextButton(
                     onClick = {
                         confirmUndo = false
                         viewModel.onUndoLastSync()
                     },
-                ) { Text(stringResource(R.string.sync_undo_sync_confirm)) }
+                ) { Text(stringResource(SyncR.string.sync_undo_sync_confirm)) }
             },
             dismissButton = {
-                TextButton(onClick = { confirmUndo = false }) { Text(stringResource(R.string.sync_cancel)) }
+                TextButton(onClick = { confirmUndo = false }) { Text(stringResource(SyncR.string.sync_cancel)) }
             },
         )
     }
@@ -228,10 +238,10 @@ fun SyncHistoryScreen(
     undoResult?.let { message ->
         AlertDialog(
             onDismissRequest = viewModel::onUndoResultShown,
-            title = { Text(stringResource(R.string.sync_undone_title)) },
+            title = { Text(stringResource(SyncR.string.sync_undone_title)) },
             text = { Text(message) },
             confirmButton = {
-                TextButton(onClick = viewModel::onUndoResultShown) { Text(stringResource(R.string.sync_ok)) }
+                TextButton(onClick = viewModel::onUndoResultShown) { Text(stringResource(SyncR.string.sync_ok)) }
             },
         )
     }

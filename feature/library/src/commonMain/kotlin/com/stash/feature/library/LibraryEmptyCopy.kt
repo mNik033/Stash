@@ -11,8 +11,18 @@ internal fun sourceFilterLabel(filter: SourceFilter): String? = when (filter) {
     SourceFilter.FLAC -> "FLAC"
     SourceFilter.NON_FLAC -> "Non-FLAC"
     SourceFilter.DOWNLOADED -> "Downloaded"
-    SourceFilter.ONLINE -> "Online"
+    // "Online" until 2026-11-01, when the mode itself took that name (Online / Offline).
+    SourceFilter.ONLINE -> "Not downloaded"
     SourceFilter.CLOUD -> "Cloud"
+}
+
+/**
+ * The chip above a Songs list narrowed by [filter] ("Showing FLAC only", tap to clear); null for
+ * [SourceFilter.ALL]. "Not downloaded" is a phrase, not a name, so it reads as one there.
+ */
+internal fun activeFilterChipLabel(filter: SourceFilter): String? = when (filter) {
+    SourceFilter.ONLINE -> "Showing songs that aren't downloaded"
+    else -> sourceFilterLabel(filter)?.let { "Showing $it only" }
 }
 
 /**
@@ -27,6 +37,11 @@ internal fun sourceFilterLabel(filter: SourceFilter): String? = when (filter) {
  */
 internal fun noMatchMessage(noun: String, query: String, filter: SourceFilter = SourceFilter.ALL): String? {
     val q = query.trim()
+    // "No Not downloaded songs…" doesn't read: this filter is said as a phrase.
+    if (filter == SourceFilter.ONLINE) {
+        return if (q.isNotEmpty()) "No $noun that aren't downloaded match “$q”"
+        else "No $noun in your library that aren't downloaded"
+    }
     val label = sourceFilterLabel(filter)
     return when {
         q.isNotEmpty() && label != null -> "No $label $noun match “$q”"
@@ -66,4 +81,16 @@ internal fun emptyLibraryPrompt(anyServiceConnected: Boolean): EmptyLibraryPromp
             primaryLabel = "Connect a music service",
             connectFirst = true,
         )
+    }
+
+/**
+ * What Library › Albums says with no album to list. Albums lists saved albums only (owner,
+ * 2026-11-02), so it says how one gets there. In Download mode (fully offline) an album is listed
+ * once all its songs are on the phone, which is the likelier reason it's empty there.
+ */
+internal fun albumsEmptyMessage(downloadMode: Boolean): String =
+    if (downloadMode) {
+        "Albums show here once every song is on your phone. Save an album and download it, or switch to Online to see them all."
+    } else {
+        "Albums you save show here, every song in order. Tap Save on any album, or sync your saved albums from YouTube Music."
     }

@@ -55,6 +55,7 @@ import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalHapticFeedback
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -79,6 +80,10 @@ import coil3.compose.AsyncImage
 import com.stash.core.common.primaryArtist
 import com.stash.core.model.PlaybackSource
 import com.stash.core.model.Track
+import com.stash.core.ui.components.DragAutoScrollEdge
+import com.stash.core.ui.components.DragAutoScrollMaxStep
+import com.stash.core.ui.components.DragPickUpHaptic
+import com.stash.core.ui.components.autoScrollStep
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.semantics
@@ -93,6 +98,15 @@ fun QueueBottomSheet(
     queue: List<Track>,
     currentIndex: Int,
     accentColor: Color,
+    /**
+     * A queue too big for the player: its songs before and after the [queue] window (see
+     * [com.stash.core.model.PlayerState.queueSongsBefore]). The header counts the whole queue, and
+     * the list ends with how many more follow. [orderPosition] is the playing song's place in it
+     * ([com.stash.core.model.PlayerState.queuePosition]), -1 for a queue held whole.
+     */
+    songsBefore: Int = 0,
+    songsAfter: Int = 0,
+    orderPosition: Int = -1,
     source: PlaybackSource = PlaybackSource.Unknown,
     /** #468: with shuffle on the rows are in play order and cannot be dragged (see below). */
     isShuffleEnabled: Boolean = false,
@@ -169,8 +183,9 @@ fun QueueBottomSheet(
                 .navigationBarsPadding(),
         ) {
             QueueHeader(
-                trackCount = queue.size,
-                currentIndex = currentIndex,
+                trackCount = songsBefore + queue.size + songsAfter,
+                // A big queue's own count: after a repeat-all wrap no song is "before" the window.
+                currentIndex = if (orderPosition >= 0) orderPosition else songsBefore + currentIndex,
                 sourceLabel = source.displayLabel,
                 showDragHint = !isShuffleEnabled,
                 onClose = onDismiss,
@@ -197,8 +212,10 @@ fun QueueBottomSheet(
             // can carry a track from deep in the queue to the top.
             val scope = rememberCoroutineScope()
             val density = LocalDensity.current
-            val edgePx = with(density) { 64.dp.toPx() }
-            val maxStepPx = with(density) { 6.dp.toPx() }
+            // The light tick as a row is picked up, as in every reorderable list (DragPickUpHaptic).
+            val haptics = LocalHapticFeedback.current
+            val edgePx = with(density) { DragAutoScrollEdge.toPx() }
+            val maxStepPx = with(density) { DragAutoScrollMaxStep.toPx() }
             var autoScrollJob by remember { mutableStateOf<Job?>(null) }
             var settleJob by remember { mutableStateOf<Job?>(null) }
 
@@ -449,6 +466,7 @@ fun QueueBottomSheet(
                                                 dragStartIdx = currentIdx
                                                 dragStartCurrent = liveCurrentIndex
                                                 dragOffsetY = 0f
+                                                haptics.performHapticFeedback(DragPickUpHaptic)
                                                 // Measure item height
                                                 val info = listState.layoutInfo.visibleItemsInfo
                                                     .firstOrNull { it.index == currentIdx }
@@ -508,6 +526,17 @@ fun QueueBottomSheet(
                         }
                     }
                 }
+                // A big queue: the player holds a window of it; the rest comes as it plays.
+                if (songsAfter > 0) {
+                    item(key = "more-after") {
+                        Text(
+                            text = moreSongsLabel(songsAfter),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(start = 20.dp, top = 12.dp, bottom = 12.dp),
+                        )
+                    }
+                }
             }
 
             if (localQueue.isEmpty()) {
@@ -518,7 +547,7 @@ fun QueueBottomSheet(
                     contentAlignment = Alignment.Center,
                 ) {
                     Text(
-                        text = "No upcoming tracks",
+                        text = if (songsAfter > 0) moreSongsLabel(songsAfter) else "No upcoming tracks",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -688,29 +717,6 @@ private fun QueueTrackArt(track: Track) {
     }
 }
 
-/**
- * Auto-scroll velocity for a drag near the viewport edges (issue #319):
- * zero while the dragged row rides mid-viewport, ramping linearly toward
- * ±[maxStepPx] per frame as the row's edge sinks into the top or bottom
- * [edgePx] zone. Negative scrolls toward the start of the list.
- */
-internal fun autoScrollStep(
-    visualTop: Float,
-    visualBottom: Float,
-    viewportPx: Float,
-    edgePx: Float,
-    maxStepPx: Float,
-): Float {
-    if (edgePx <= 0f || viewportPx <= 0f) return 0f
-    return when {
-        visualTop < edgePx -> {
-            val depth = ((edgePx - visualTop) / edgePx).coerceIn(0f, 1f)
-            -maxStepPx * depth
-        }
-        visualBottom > viewportPx - edgePx -> {
-            val depth = ((visualBottom - (viewportPx - edgePx)) / edgePx).coerceIn(0f, 1f)
-            maxStepPx * depth
-        }
-        else -> 0f
-    }
-}
+/** "And 72,000 more songs": the rest of a big queue, after the rows the sheet lists. */
+internal fun moreSongsLabel(count: Int): String =
+    "And ${java.text.NumberFormat.getIntegerInstance().format(count)} more ${if (count == 1) "song" else "songs"}"

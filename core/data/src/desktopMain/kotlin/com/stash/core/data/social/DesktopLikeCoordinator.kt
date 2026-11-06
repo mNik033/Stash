@@ -10,7 +10,7 @@ import javax.inject.Singleton
 class DesktopLikeCoordinator @Inject constructor(
     private val trackDao: TrackDao,
 ) : LikeCoordinator {
-    override val mirrorFailures: SharedFlow<String> = MutableSharedFlow()
+    override val mirrorFailures: SharedFlow<Destination> = MutableSharedFlow()
     override suspend fun setLiked(trackId: Long, liked: Boolean) {
         if (trackId <= 0L || trackDao.getById(trackId) == null) return
         if (liked) {
@@ -19,4 +19,5 @@ class DesktopLikeCoordinator @Inject constructor(
             trackDao.clearStashLiked(trackId)
         }
     }
+    override suspend fun mirrorOnly(trackId: Long, liked: Boolean) = Unit
 }
