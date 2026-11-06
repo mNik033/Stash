@@ -15,6 +15,9 @@ interface NowPlayingPreference {
     val ambientAnimationEnabled: Flow<Boolean>
     suspend fun setAmbientAnimationEnabled(enabled: Boolean)
 
+    val cycleAlbumArt: Flow<Boolean>
+    suspend fun setCycleAlbumArt(enabled: Boolean)
+
     val ambientStyle: Flow<AmbientStyle>
     suspend fun setAmbientStyle(style: AmbientStyle)
 

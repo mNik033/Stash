@@ -13,6 +13,13 @@ class DesktopNowPlayingPreference : NowPlayingPreference {
         _ambientAnimationEnabled.value = enabled
     }
 
+    private val _cycleAlbumArt = MutableStateFlow(true)
+    override val cycleAlbumArt: Flow<Boolean> = _cycleAlbumArt.asStateFlow()
+
+    override suspend fun setCycleAlbumArt(enabled: Boolean) {
+        _cycleAlbumArt.value = enabled
+    }
+
     private val _ambientStyle = MutableStateFlow(AmbientStyle.SOFT_GLOW)
     override val ambientStyle: Flow<AmbientStyle> = _ambientStyle.asStateFlow()
 

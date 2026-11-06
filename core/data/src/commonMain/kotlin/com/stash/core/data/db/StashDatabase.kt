@@ -109,8 +109,9 @@ import com.stash.core.data.db.entity.TrackTagEntity
         com.stash.core.data.db.entity.CloudFolderEntity::class,
         com.stash.core.data.db.entity.CloudItemEntity::class,
         com.stash.core.data.db.entity.CloudUploadEntity::class,
+        com.stash.core.data.db.entity.AlbumBackCoverEntity::class,
     ],
-    version = 62,
+    version = 65,
     exportSchema = true,
 )
 @TypeConverters(Converters::class)
@@ -135,6 +136,8 @@ abstract class StashDatabase : RoomDatabase() {
     abstract fun artistImageDao(): ArtistImageDao
 
     abstract fun artistGenreDao(): ArtistGenreDao
+
+    abstract fun albumBackCoverDao(): com.stash.core.data.db.dao.AlbumBackCoverDao
 
     abstract fun listeningEventDao(): ListeningEventDao
 

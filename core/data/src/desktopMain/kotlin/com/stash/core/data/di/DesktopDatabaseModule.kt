@@ -84,6 +84,9 @@ object DesktopDatabaseModule {
     fun provideArtistGenreDao(db: StashDatabase): ArtistGenreDao = db.artistGenreDao()
 
     @Provides
+    fun provideAlbumBackCoverDao(db: StashDatabase): com.stash.core.data.db.dao.AlbumBackCoverDao = db.albumBackCoverDao()
+
+    @Provides
     fun provideListeningEventDao(db: StashDatabase): ListeningEventDao = db.listeningEventDao()
 
     @Provides
