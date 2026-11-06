@@ -14,6 +14,7 @@ import com.stash.data.lyrics.source.IsrcTtmlLyricsSource
 import com.stash.data.lyrics.source.KugouLyricsSource
 import com.stash.data.lyrics.source.LrclibLyricsSource
 import com.stash.data.lyrics.source.LyricsSource
+import com.stash.data.lyrics.source.SpicyLyricsSource
 import com.stash.data.lyrics.source.YtMusicLyricsSource
 import dagger.Binds
 import dagger.Module
@@ -28,6 +29,24 @@ import okhttp3.OkHttpClient
 
 /**
  * Hilt wiring for the `:data:lyrics` module.
+ *
+ * Three responsibilities:
+ * 1. Binds the production [InnerTubeLyricsGateway] implementation.
+ * 2. Provides an ordered `List<LyricsSource>` (see `provideLyricsSources`)
+ *    consumed by [com.stash.data.lyrics.LyricsRepository]. Ordering is
+ *    semantic — word-synced first, InnerTube's plain text last among the
+ *    existing sources — so a multibinding `Set` is deliberately NOT used
+ *    (sets do not preserve insertion order).
+ * 3. Binds [Clock] -> [SystemClock] for the repository's epoch-millis stamps.
+ *    Lives here because `:core:common` is currently Hilt-free; if other
+ *    modules later need [Clock], lift this binding to a shared module.
+ *
+ * v0.9.36 / Task 7: [com.stash.data.lyrics.sidecar.LyricsSidecarWriter] is
+ * a `@Singleton`-annotated concrete class with an `@Inject` constructor,
+ * so Hilt provides it directly without an explicit @Binds. The T6
+ * placeholder `NoOpLyricsSidecarWriter` was deleted alongside the
+ * interface — the writer now exists in its real form and there is
+ * nothing to swap.
  */
 @Module
 @InstallIn(SingletonComponent::class)
@@ -49,14 +68,18 @@ abstract class LyricsModule {
 
         /**
          * Ordered source chain consumed by `LyricsRepository`. The order
-         * defines fallback priority: Apple TTML (word-synced), LRCLIB (synced
-         * LRC), KuGou, InnerTube (plain text), then lrc.red and Binimum.
+         * defines fallback priority: Apple TTML (word-synced), Spicy Lyrics
+         * (word- or line-synced), LRCLIB (synced LRC), KuGou, InnerTube (plain
+         * text), then lrc.red and Binimum.
          *
-         * lrc.red and Binimum come LAST on purpose: they are on-demand-only
-         * extras (see `LyricsSource.onDemandOnly`) and must never delay lyrics
-         * an existing source would return. When an earlier source answers
-         * without word timing, the repository gives them one background
-         * follow-up try instead.
+         * Spicy Lyrics, lrc.red and Binimum are on-demand-only (see
+         * `LyricsSource.onDemandOnly`): asked only for a track being played or
+         * just downloaded, and their failures count as misses. Spicy sits right
+         * after Apple (owner's decision on #837); lrc.red and Binimum come LAST
+         * on purpose (#671): they must never delay lyrics an existing source
+         * would return. When an earlier source answers without word timing,
+         * the repository gives the on-demand sources one background follow-up
+         * try instead.
          */
         @Provides
         @Singleton
@@ -65,6 +88,7 @@ abstract class LyricsModule {
             lrclib: LrclibLyricsSource,
             kugou: KugouLyricsSource,
             ytmusic: YtMusicLyricsSource,
+            spicy: SpicyLyricsSource,
             okHttpClient: OkHttpClient,
             @ApplicationContext context: Context,
             isrcResolver: IsrcResolver,
@@ -72,7 +96,8 @@ abstract class LyricsModule {
         ): List<@JvmSuppressWildcards LyricsSource> {
             val versionName = versionName(context)
             return listOf(
-                appleTtml,
+                appleTtml, // lyrics.paxsenix.org
+                spicy,
                 lrclib,
                 kugou,
                 ytmusic,
@@ -86,6 +111,21 @@ abstract class LyricsModule {
                 ),
             )
         }
+
+        /**
+         * Spicy Lyrics through its contributor's proxy, which adds the Spicy key and caches by
+         * track id (so no key is in the APK). Same DNS-over-HTTPS as the other lyrics hosts (`LyricsDns`).
+         */
+        @Provides
+        @Singleton
+        fun provideSpicyLyricsSource(
+            okHttpClient: OkHttpClient,
+            @ApplicationContext context: Context,
+        ): SpicyLyricsSource = SpicyLyricsSource(
+            client = okHttpClient,
+            appVersionName = versionName(context),
+            baseUrl = "https://proxy.paraliyzed.net/spicy",
+        )
 
         /** title/artist -> ISRC for the lrc.red/Binimum sources; same DNS, User-Agent and breaker as they use. */
         @Provides

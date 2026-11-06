@@ -28,7 +28,9 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.stateIn
@@ -37,7 +39,6 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 /**
-
  * ViewModel backing the Sync screen.
  *
  * Combines live sync phase, user preferences, auth state for each service,
@@ -58,8 +59,8 @@ actual open class SyncViewModel @Inject constructor(
     private val blocklistGuard: com.stash.core.data.blocklist.BlocklistGuard,
     /**
      * Disk-walked library size (storage-mode-aware: internal File walk
-     * OR SAF DocumentFile traversal). Drives the SyncStatusCard's
-     * Storage column. Mirrors HomeViewModel's injection — the Room
+     * OR SAF DocumentFile traversal). Drives the TrackCountCard's
+     * storage and FLAC numbers. Mirrors HomeViewModel's injection — the Room
      * `file_size_bytes` column is bypassed because legacy libraries
      * have it stuck at 0 for thousands of rows.
      */
@@ -899,21 +900,20 @@ actual open class SyncViewModel @Inject constructor(
     }
 
     /**
-     * Mirrors HomeViewModel's `syncStatusFlow` + `musicDataFlow` +
-     * `sourceCountsFlow` assembly that originally populated the
-     * SyncStatusCard at the top of the Home screen. The card now
-     * lives at the top of the Sync screen; this observer keeps it
-     * fed with the same flow shape so the relocation introduces no
-     * behavioural change.
+     * Feeds [SyncUiState.syncStatus]: the track count card under the account
+     * cards and the song count in both heroes.
      *
      * Inputs (all reactive):
      *  - `observeLatestSync()` for last-sync timestamp + display status
-     *  - `getTrackCount()` for the "Tracks" stat
-     *  - `getSpotifyDownloadedCount()` / `getYouTubeDownloadedCount()`
-     *    for the per-source stats
-     *  - `librarySizeHolder.size` for storage (disk truth — the Room
+     *  - `observeSongCountsBySource(inLibrary = Online)` for the song counts, per
+     *    source and in total. They follow the mode, as Library's Songs tab does:
+     *    Online counts the songs in your library, downloaded or not; Offline
+     *    counts downloaded songs. (Until 2026-11-04 both modes counted downloads
+     *    only, so the Online hero read "0 songs" for someone who streams.)
+     *  - `librarySizeHolder.size` for storage and FLAC (disk truth — the Room
      *    `file_size_bytes` SUM is unreliable for legacy libraries)
      */
+    @OptIn(ExperimentalCoroutinesApi::class)
     private fun observeSyncStatusCard() {
         val syncStatusFlow = musicRepository.observeLatestSync().map { latestSync ->
             if (latestSync != null) {
@@ -928,30 +928,59 @@ actual open class SyncViewModel @Inject constructor(
             }
         }
 
+        // Online re-reads the in-library count; a flip of the mode switches the query. The count re-runs
+        // on every write to the tracks table and takes real time on a big library, so it runs only when
+        // its numbers can be seen. Paused while a sync runs: a sync writes constantly, and the tab shows
+        // its syncing face then. Paused while nobody collects uiState: this ViewModel outlives a tab
+        // switch, and "Fetch lyrics" stamps a track about every 3 s, which was a full count of a 72k
+        // library every 3 s off-screen. The last numbers stay; opening the tab reads again.
+        val songCountsFlow = combine(
+            streamingPreference.enabled.distinctUntilChanged(),
+            syncStateManager.phase.map { it.isActive() }.distinctUntilChanged(),
+            _uiState.subscriptionCount.map { it > 0 }.distinctUntilChanged(),
+        ) { online, syncing, onScreen -> Triple(online, syncing, onScreen) }
+            .distinctUntilChanged()
+            .flatMapLatest { (online, syncing, onScreen) ->
+                if (syncing || !onScreen) {
+                    emptyFlow()
+                } else {
+                    musicRepository.observeSongCountsBySource(inLibrary = online).map { online to it }
+                }
+            }
+
         viewModelScope.launch {
             combine(
                 syncStatusFlow,
-                musicRepository.getTrackCount(),
-                musicRepository.getSpotifyDownloadedCount(),
-                musicRepository.getYouTubeDownloadedCount(),
+                songCountsFlow,
                 librarySizeHolder.size,
-            ) { base, trackCount, spotifyCount, youtubeCount, librarySize ->
+            ) { base, (online, counts), librarySize ->
+                val spotify = counts[MusicSource.SPOTIFY] ?: 0
+                val youTube = counts[MusicSource.YOUTUBE] ?: 0
+                val soundCloud = counts[MusicSource.SOUNDCLOUD] ?: 0
+                val total = counts.values.sum()
                 base.copy(
-                    totalTracks = trackCount,
-                    spotifyTracks = spotifyCount,
-                    youTubeTracks = youtubeCount,
+                    totalTracks = total,
+                    spotifyTracks = spotify,
+                    youTubeTracks = youTube,
+                    soundCloudTracks = soundCloud,
+                    otherTracks = total - spotify - youTube - soundCloud,
+                    countsInLibrary = online,
+                    songCountsKnown = true,
                     storageUsedBytes = librarySize.totalBytes,
                     flacTracks = librarySize.losslessFileCount,
                     flacStorageBytes = librarySize.losslessBytes,
                 )
             }.collect { status ->
-                _uiState.update {
-                    it.copy(
-                        syncStatus = status,
-                        hasEverSynced = status.lastSyncTime != null,
-                    )
-                }
+                _uiState.update { it.copy(syncStatus = status) }
             }
+        }
+
+        // Which face the tab shows doesn't wait for the count above.
+        viewModelScope.launch {
+            musicRepository.observeLatestSync()
+                .map { latestSync -> latestSync != null }
+                .distinctUntilChanged()
+                .collect { synced -> _uiState.update { it.copy(hasEverSynced = synced) } }
         }
     }
 

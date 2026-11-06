@@ -46,7 +46,7 @@ fun searchSettings(
  * The index the hub searches: Your Stash's entries only when the app can open it ([yourStash]: the link is switched on in
  * this build), so a result never leads nowhere.
  */
-internal fun searchableIndex(index: List<SettingsSearchEntry>, yourStash: Boolean): List<SettingsSearchEntry> =
+fun searchableIndex(index: List<SettingsSearchEntry>, yourStash: Boolean): List<SettingsSearchEntry> =
     if (yourStash) index else index.filter { it.page != SettingsPage.YOUR_STASH }
 
 private fun normalize(s: String): String =

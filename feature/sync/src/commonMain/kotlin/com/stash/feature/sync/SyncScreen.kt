@@ -74,6 +74,7 @@ import com.stash.feature.sync.components.AccountCard
 import com.stash.feature.sync.components.ArrivalSheet
 import com.stash.feature.sync.components.AttentionRow
 import com.stash.feature.sync.components.SyncDownloadsRow
+import com.stash.feature.sync.components.TrackCountCard
 import com.stash.feature.sync.components.AuthExpiredBanner
 import com.stash.feature.sync.components.BrandDotLabel
 import com.stash.feature.sync.components.ConnectButton
@@ -220,7 +221,7 @@ fun SyncScreen(
                         arts = fan.mapNotNull { it.artUrl }.ifEmpty { arts },
                         // Each cover opens its mix; the fallback art (no mixes yet) is pictures only.
                         onCoverTap = if (fan.isEmpty()) null else { i -> onOpenPlaylist(fan[i].id) },
-                        summary = librarySummary(uiState, rows),
+                        summary = librarySummary(uiState.syncStatus.songCountFor(streamingMode), rows),
                         syncedAgo = rememberSyncedAgo(uiState.lastSyncFinishedAt),
                         newest = newest,
                         onPlay = { row -> viewModel.onPlayPlaylist(row.id, row.name) },
@@ -230,7 +231,7 @@ fun SyncScreen(
                 else -> item(key = "on_phone") {
                     OnThisPhoneHero(
                         saved = savedRows,
-                        songsOnPhone = uiState.syncStatus.totalTracks,
+                        songsOnPhone = uiState.syncStatus.songCountFor(streamingMode),
                         syncedAgo = rememberSyncedAgo(uiState.lastSyncFinishedAt),
                         onChoose = { firstSource?.let(onManageSource) },
                         onSync = viewModel::onSyncNow,
@@ -256,6 +257,20 @@ fun SyncScreen(
                         onManageSource = onManageSource,
                         onAddAccount = onNavigateToAccounts,
                     )
+                }
+
+                // The track count + FLAC card, under the accounts it counts (back 2026-11-04). After a
+                // first sync only (before one, every number would be 0), once this mode's count is in.
+                if (uiState.hasEverSynced && uiState.syncStatus.songCountFor(streamingMode) != null) {
+                    item(key = "track_count") {
+                        Spacer(Modifier.height(12.dp))
+                        TrackCountCard(
+                            status = uiState.syncStatus,
+                            spotifyConnected = uiState.spotifyConnected,
+                            youTubeConnected = uiState.youTubeConnected,
+                            soundCloudConnected = uiState.soundCloudConnected,
+                        )
+                    }
                 }
 
                 // Covers "couldn't match during sync" and "flagged as wrong from Now Playing".
@@ -403,15 +418,17 @@ private fun SyncPlaylistRow.isMix() = type == PlaylistType.DAILY_MIX
 internal fun SyncPlaylistRow.isOwnPlaylist() = !album && type != PlaylistType.DAILY_MIX && type != PlaylistType.LIKED_SONGS
 
 @Composable
-private fun librarySummary(uiState: SyncUiState, rows: List<SyncPlaylistRow>): String {
-    val songs = uiState.syncStatus.totalTracks
-    val playlists = rows.count { it.isOwnPlaylist() }
-    val mixes = rows.count { it.isMix() }
+private fun librarySummary(songs: Int?, rows: List<SyncPlaylistRow>): String {
+    val playlistCount = rows.count { it.isOwnPlaylist() }
+    val mixCount = rows.count { it.isMix() }
+    val playlists = pluralStringResource(SyncR.plurals.sync_playlists_count, playlistCount, playlistCount)
+    val mixes = pluralStringResource(SyncR.plurals.sync_mixes_count, mixCount, mixCount)
+    if (songs == null) return "$playlists · $mixes"
     return stringResource(
         SyncR.string.sync_home_summary,
         pluralStringResource(SyncR.plurals.sync_songs_count, songs, songs),
-        pluralStringResource(SyncR.plurals.sync_playlists_count, playlists, playlists),
-        pluralStringResource(SyncR.plurals.sync_mixes_count, mixes, mixes),
+        playlists,
+        mixes,
     )
 }
 
@@ -649,7 +666,8 @@ private fun PlaySomethingNew(name: String, onClick: () -> Unit) {
 @Composable
 private fun OnThisPhoneHero(
     saved: List<SyncPlaylistRow>,
-    songsOnPhone: Int,
+    /** Null until the count has been read: the line then has only "synced 2h ago", or nothing. */
+    songsOnPhone: Int?,
     syncedAgo: String,
     onChoose: () -> Unit,
     onSync: () -> Unit,
@@ -658,11 +676,10 @@ private fun OnThisPhoneHero(
     Column(Modifier.fillMaxWidth().padding(top = 30.dp)) {
         HeroTitle(stringResource(SyncR.string.sync_download_title))
         Spacer(Modifier.height(6.dp))
-        val songs = pluralStringResource(SyncR.plurals.sync_songs_count, songsOnPhone, songsOnPhone)
-        HeroBody(
-            if (syncedAgo.isBlank()) songs
-            else songs + " · " + stringResource(SyncR.string.sync_home_synced_ago, syncedAgo.lowercase()),
-        )
+        val songs = songsOnPhone?.let { pluralStringResource(SyncR.plurals.sync_songs_count, it, it) }
+        val ago = syncedAgo.takeIf { it.isNotBlank() }
+            ?.let { stringResource(SyncR.string.sync_home_synced_ago, it.lowercase()) }
+        HeroBody(listOfNotNull(songs, ago).joinToString(" · "))
         Spacer(Modifier.height(16.dp))
         if (saved.isEmpty()) {
             HeroBody(stringResource(SyncR.string.sync_download_none))

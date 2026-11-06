@@ -75,7 +75,10 @@ interface CastRemote {
     fun removeListener(listener: () -> Unit)
 }
 
-/** What the receiver is told to play. [url] points at [CastMediaServer]. */
+/**
+ * What the receiver is told to play. For a speaker [url] points at [CastMediaServer]; a browser (Remote v2) gets [song] instead,
+ * the sync-v1 §2.1 Song it finds the music by, and [url] is empty.
+ */
 data class CastMedia(
     /** Identifies the song in [CastStatus.contentId] — the MediaItem's mediaId plus a load counter. */
     val contentId: String,
@@ -86,6 +89,10 @@ data class CastMedia(
     val album: String?,
     val artworkUrl: String?,
     val durationMs: Long,
+    /** The song a browser resolves (by YouTube id, ISRC, or its words), as the handoff sends it. Null for a speaker. */
+    val song: Any? = null,
+    /** "Playing from" (the queue's source label), shown by a browser. */
+    val from: String? = null,
 )
 
 data class CastStatus(
@@ -99,6 +106,8 @@ data class CastStatus(
     val durationMs: Long,
     val volume: Float,
     val muted: Boolean,
+    /** False when the receiver can't set its volume (Safari on iOS): the volume keys and the device volume are left alone. */
+    val canSetVolume: Boolean = true,
 ) {
     enum class PlayerState { IDLE, LOADING, BUFFERING, PLAYING, PAUSED }
     enum class IdleReason { NONE, FINISHED, CANCELLED, INTERRUPTED, ERROR }

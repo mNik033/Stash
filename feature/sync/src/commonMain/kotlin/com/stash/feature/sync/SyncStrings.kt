@@ -153,6 +153,11 @@ internal object SyncR {
         val sync_undo_dialog_body = StringRes("Your library goes back to how it was before the last sync: playlists it hid come back, playlists it added are hidden, and playlists it emptied are refilled in their original order%1\$s.\n\nTracks you added or removed yourself, and Download switches you changed, are kept. Downloaded files that were already deleted can't be brought back.\n\nAuto-sync then pauses until you tap Sync, so it doesn't redo it.")
         val sync_undo_sync_confirm = StringRes("Undo sync")
         val sync_undone_title = StringRes("Sync undone")
+        val sync_count_in_library = StringRes("Songs in your library")
+        val sync_count_downloaded = StringRes("Songs downloaded")
+        val sync_count_on_phone = StringRes("On this phone")
+        val sync_count_flac = StringRes("%1\$s FLAC")
+        val sync_count_other = StringRes("Other")
     }
 
     object plurals {

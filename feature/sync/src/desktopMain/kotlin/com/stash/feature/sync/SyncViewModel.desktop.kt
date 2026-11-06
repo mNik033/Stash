@@ -18,7 +18,9 @@ import com.stash.core.data.sync.DownloadQueueTrigger
 import com.stash.core.data.sync.SyncLog
 import com.stash.core.data.sync.SyncStateManager
 import com.stash.core.data.sync.toDisplayStatus
+import com.stash.core.model.MusicSource
 import com.stash.core.model.SyncDisplayStatus
+import kotlinx.coroutines.flow.distinctUntilChanged
 import com.stash.core.model.SyncMode
 import com.stash.data.download.files.LibrarySizeHolder
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -234,8 +236,9 @@ actual open class SyncViewModel(
     }
 
     private fun observeSyncStatusCard() {
-        if (musicRepository == null || librarySizeHolder == null) return
-        val syncStatusFlow = musicRepository.observeLatestSync().map { latestSync ->
+        val repo = musicRepository ?: return
+        val sizeHolder = librarySizeHolder ?: return
+        val syncStatusFlow = repo.observeLatestSync().map { latestSync ->
             if (latestSync != null) {
                 SyncStatusInfo(
                     lastSyncTime = latestSync.startedAt.toEpochMilli(),
@@ -249,29 +252,38 @@ actual open class SyncViewModel(
         }
 
         viewModelScope.launch {
+            val songCountsFlow = repo.observeSongCountsBySource(inLibrary = false)
             combine(
                 syncStatusFlow,
-                musicRepository.getTrackCount(),
-                musicRepository.getSpotifyDownloadedCount(),
-                musicRepository.getYouTubeDownloadedCount(),
-                librarySizeHolder.size,
-            ) { base, trackCount, spotifyCount, youtubeCount, librarySize ->
+                songCountsFlow,
+                sizeHolder.size,
+            ) { base, counts, librarySize ->
+                val spotify = counts[MusicSource.SPOTIFY] ?: 0
+                val youTube = counts[MusicSource.YOUTUBE] ?: 0
+                val soundCloud = counts[MusicSource.SOUNDCLOUD] ?: 0
+                val total = counts.values.sum()
                 base.copy(
-                    totalTracks = trackCount,
-                    spotifyTracks = spotifyCount,
-                    youTubeTracks = youtubeCount,
+                    totalTracks = total,
+                    spotifyTracks = spotify,
+                    youTubeTracks = youTube,
+                    soundCloudTracks = soundCloud,
+                    otherTracks = total - spotify - youTube - soundCloud,
+                    countsInLibrary = false,
+                    songCountsKnown = true,
                     storageUsedBytes = librarySize.totalBytes,
                     flacTracks = librarySize.losslessFileCount,
                     flacStorageBytes = librarySize.losslessBytes,
                 )
             }.collect { status ->
-                _uiState.update {
-                    it.copy(
-                        syncStatus = status,
-                        hasEverSynced = status.lastSyncTime != null,
-                    )
-                }
+                _uiState.update { it.copy(syncStatus = status) }
             }
+        }
+
+        viewModelScope.launch {
+            repo.observeLatestSync()
+                .map { latestSync -> latestSync != null }
+                .distinctUntilChanged()
+                .collect { synced -> _uiState.update { it.copy(hasEverSynced = synced) } }
         }
     }
 

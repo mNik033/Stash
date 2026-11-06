@@ -185,8 +185,10 @@ class DesktopMusicRepository @Inject constructor(
     override fun getTotalStorageBytes(): Flow<Long> = trackDao.getTotalStorageBytes()
     override fun getFlacTrackCount(): Flow<Int> = trackDao.getFlacCount()
     override fun getFlacStorageBytes(): Flow<Long> = trackDao.getFlacStorageBytes()
-    override fun getSpotifyDownloadedCount(): Flow<Int> = trackDao.getSpotifyDownloadedCount()
-    override fun getYouTubeDownloadedCount(): Flow<Int> = trackDao.getYouTubeDownloadedCount()
+    override fun observeSongCountsBySource(inLibrary: Boolean): Flow<Map<MusicSource, Int>> =
+        trackDao.observeSongCountsBySource(inLibrary)
+            .map { rows -> rows.associate { it.source to it.songs } }
+            .distinctUntilChanged()
 
     override fun getAllPlaylists(): Flow<List<Playlist>> =
         playlistDao.getAllVisible(includeStreamable = true)

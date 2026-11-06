@@ -122,7 +122,7 @@ import com.stash.core.data.db.entity.TrackTagEntity
         com.stash.core.data.db.entity.TrackMergeLogEntity::class,
         com.stash.core.data.db.entity.DuplicateDismissalEntity::class,
     ],
-    version = 76,
+    version = 78,
     exportSchema = true,
 )
 @TypeConverters(Converters::class)
