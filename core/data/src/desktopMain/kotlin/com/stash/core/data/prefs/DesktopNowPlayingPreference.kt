@@ -20,6 +20,59 @@ class DesktopNowPlayingPreference : NowPlayingPreference {
         _cycleAlbumArt.value = enabled
     }
 
+    private val _fullArt = MutableStateFlow(true)
+    override val fullArt: Flow<Boolean> = _fullArt.asStateFlow()
+
+    override suspend fun setFullArt(on: Boolean) {
+        _fullArt.value = on
+    }
+
+    private val _titleAlign = MutableStateFlow(NpTitleAlign.DEFAULT)
+    override val titleAlign: Flow<NpTitleAlign> = _titleAlign.asStateFlow()
+
+    override suspend fun setTitleAlign(align: NpTitleAlign) {
+        _titleAlign.value = align
+    }
+
+    private val _titleButton = MutableStateFlow(TitleButton.SLEEP_TIMER)
+    override val titleButton: Flow<TitleButton> = _titleButton.asStateFlow()
+
+    override suspend fun setTitleButton(button: TitleButton) {
+        _titleButton.value = button
+    }
+
+    private val _fullArtBlend = MutableStateFlow(FullArtBlend.DEFAULT)
+    override val fullArtBlend: Flow<FullArtBlend> = _fullArtBlend.asStateFlow()
+
+    override suspend fun setFullArtBlend(blend: FullArtBlend) {
+        _fullArtBlend.value = blend
+    }
+
+    private val _discogsArt = MutableStateFlow(true)
+    override val discogsArt: Flow<Boolean> = _discogsArt.asStateFlow()
+
+    private val _discogsArtOnSince = MutableStateFlow(0L)
+    override val discogsArtOnSince: Flow<Long> = _discogsArtOnSince.asStateFlow()
+
+    override suspend fun setDiscogsArt(on: Boolean) {
+        _discogsArt.value = on
+        if (on) _discogsArtOnSince.value = System.currentTimeMillis()
+    }
+
+    private val _fullArtZoom = MutableStateFlow(NowPlayingPreference.FULL_ART_ZOOM_DEFAULT)
+    override val fullArtZoom: Flow<Float> = _fullArtZoom.asStateFlow()
+
+    override suspend fun setFullArtZoom(zoom: Float) {
+        _fullArtZoom.value = zoom.coerceIn(NowPlayingPreference.FULL_ART_ZOOM_MIN, NowPlayingPreference.FULL_ART_ZOOM_MAX)
+    }
+
+    private val _fullArtPan = MutableStateFlow(FullArtPan.DEFAULT)
+    override val fullArtPan: Flow<FullArtPan> = _fullArtPan.asStateFlow()
+
+    override suspend fun setFullArtPan(pan: FullArtPan) {
+        _fullArtPan.value = pan
+    }
+
     private val _ambientStyle = MutableStateFlow(AmbientStyle.SOFT_GLOW)
     override val ambientStyle: Flow<AmbientStyle> = _ambientStyle.asStateFlow()
 

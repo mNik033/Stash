@@ -149,8 +149,8 @@ android {
         applicationId = "com.stash.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 156
-        versionName = "0.9.120"
+        versionCode = 157
+        versionName = "0.9.121"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         // Cloud storage sign-in. OneDrive redirects to `${applicationId}://oauth/onedrive` (the
         // data:cloud manifest declares it, so debug and release each get their own); Dropbox to
@@ -244,6 +244,7 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
     buildFeatures { compose = true; buildConfig = true }
+    androidResources { generateLocaleConfig = true }
     packaging {
         jniLibs {
             // Must extract native libs to disk so ffmpeg/ffprobe executables and
@@ -296,6 +297,7 @@ dependencies {
     debugImplementation(libs.room.runtime)
     debugImplementation(libs.room.ktx)
     implementation(libs.core.ktx)
+    implementation(libs.appcompat)
     implementation(libs.activity.compose)
     implementation(libs.lifecycle.runtime.compose)
     // ProcessLifecycleOwner — used by StashApplication to start/stop

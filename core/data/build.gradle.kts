@@ -19,6 +19,12 @@ android {
         unitTests {
             isReturnDefaultValues = true
             isIncludeAndroidResources = true
+            all {
+                // WebLinkInboxTest builds a 64 MiB gzip bomb on purpose (several copies of
+                // it at once), in the same JVM as the module's ~2,100 other tests: Gradle's
+                // 512 MiB default ran out on CI (2026-10-26, OutOfMemoryError in two PRs).
+                it.maxHeapSize = "1g"
+            }
         }
     }
 }
