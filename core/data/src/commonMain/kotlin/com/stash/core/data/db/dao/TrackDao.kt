@@ -96,6 +96,9 @@ data class LibraryTrackRow(
     val source: com.stash.core.model.MusicSource,
     @androidx.room.ColumnInfo(name = "spotify_uri") val spotifyUri: String?,
     @androidx.room.ColumnInfo(name = "youtube_id") val youtubeId: String?,
+    @androidx.room.ColumnInfo(name = "soundcloud_id") val soundCloudId: String? = null,
+    @androidx.room.ColumnInfo(name = "soundcloud_permalink") val soundCloudPermalink: String? = null,
+    @androidx.room.ColumnInfo(name = "soundcloud_preview") val soundCloudPreview: Boolean = false,
     @androidx.room.ColumnInfo(name = "album_art_url") val albumArtUrl: String?,
     @androidx.room.ColumnInfo(name = "album_art_path") val albumArtPath: String?,
     @androidx.room.ColumnInfo(name = "date_added") val dateAdded: java.time.Instant,
@@ -296,7 +299,7 @@ private const val RESTORABLE_DOWNLOAD = """
 private const val LIBRARY_ROW_COLUMNS = """
     t.id, t.title, t.artist, t.album, t.album_artist, t.duration_ms,
     t.file_path, t.file_format, t.quality_kbps, t.file_size_bytes,
-    t.source, t.spotify_uri, t.youtube_id, t.album_art_url,
+    t.source, t.spotify_uri, t.youtube_id, t.soundcloud_id, t.soundcloud_permalink, t.soundcloud_preview, t.album_art_url,
     t.album_art_path, t.date_added, t.last_played, t.play_count,
     (t.is_downloaded = 1 OR t.file_path IS NOT NULL) AS is_downloaded,
     t.match_confidence, t.match_dismissed, t.isrc,
@@ -309,9 +312,13 @@ private const val LIBRARY_ROW_COLUMNS = """
 /**
  * "In your library", over a `tracks` row aliased `t`: exactly the songs Library's Songs tab lists
  * in Stream only ([TrackDao.getLibraryWithOnlineByDateAdded]). Every downloaded song, plus a song
- * that isn't downloaded when its match wasn't dismissed and it sits in an active playlist you
- * keep (synced or kept offline) that is not a Stash or Daily mix and not a share link. Never a
- * blocked song.
+ * that isn't downloaded when its match wasn't dismissed and it sits in an active playlist that
+ * is not a Stash or Daily mix and not a share link. Never a blocked song.
+ *
+ * Any active playlist, switched on or not (2026-10-29): a new install's playlists are all
+ * switched off, so requiring the switch left Songs empty after a full sync while Playlists
+ * listed everything. A playlist the user takes out of the library is inactive
+ * ([com.stash.core.data.db.entity.PlaylistEntity.userHidden]), which is how one leaves.
  *
  * The Artists and Albums tabs' "In your library" filter, their artist and album pages and the
  * artist-photo backfill read this same text ([IN_LIBRARY_IDS] where `t` is taken), so they can't
@@ -336,7 +343,6 @@ internal const val IN_LIBRARY = """
                   AND p.is_active = 1
                   AND p.type NOT IN ('STASH_MIX', 'DAILY_MIX')
                   AND (p.source_id IS NULL OR p.source_id NOT LIKE 'share:%')
-                  AND (p.sync_enabled = 1 OR p.keep_offline = 1)
             )
         )
     )
@@ -447,7 +453,8 @@ interface TrackDao {
         AND LOWER(t.file_format) != 'flac'
         AND t.match_picked_at IS NULL
         -- A cloud song's audio is the user's own file: never looked up or replaced online.
-        AND t.source != 'CLOUD'
+        AND t.source NOT IN ('CLOUD', 'SOUNDCLOUD')
+        AND t.soundcloud_id IS NULL
         AND bl.canonical_key IS NULL
         AND (t.flac_no_match_at IS NULL OR t.flac_no_match_at < :retryBefore)
         ORDER BY t.flac_no_match_at IS NOT NULL, t.flac_no_match_at ASC, t.id ASC
@@ -669,7 +676,7 @@ interface TrackDao {
         """
         SELECT t.id, t.title, t.artist, t.album, t.album_artist, t.duration_ms,
                t.file_path, t.file_format, t.quality_kbps, t.file_size_bytes,
-               t.source, t.spotify_uri, t.youtube_id, t.album_art_url,
+               t.source, t.spotify_uri, t.youtube_id, t.soundcloud_id, t.soundcloud_permalink, t.soundcloud_preview, t.album_art_url,
                t.album_art_path, t.date_added, t.last_played, t.play_count,
                t.is_downloaded, t.match_confidence, t.match_dismissed, t.isrc,
                t.explicit, t.bits_per_sample, t.sample_rate_hz,
@@ -811,6 +818,10 @@ interface TrackDao {
      * the sync renumbers its own rows from 0 — and tied rows otherwise came
      * back in whatever order SQLite chose, so they could swap between
      * emissions.
+     *
+     * A playlist the listener put into their own order (Edit order, [PlaylistOrderDao]) follows its ranks first;
+     * a song with no rank yet (arrived after the last move) comes after them, in the service's order. Keep this
+     * ORDER BY in step with [PlaylistOrderDao.memberIdsInOrder].
      */
     @Transaction
     @Query(
@@ -818,6 +829,8 @@ interface TrackDao {
         SELECT t.* FROM tracks t
         INNER JOIN playlist_tracks pt ON t.id = pt.track_id
         INNER JOIN playlists p ON pt.playlist_id = p.id
+        LEFT JOIN playlist_order o ON o.playlist_id = pt.playlist_id
+        LEFT JOIN playlist_order_entries e ON e.playlist_id = pt.playlist_id AND e.track_id = pt.track_id
         LEFT JOIN track_blocklist bl
             ON bl.canonical_key = (t.canonical_artist || '|' || t.canonical_title)
             OR (bl.spotify_uri IS NOT NULL AND bl.spotify_uri = t.spotify_uri)
@@ -832,7 +845,9 @@ interface TrackDao {
               OR (p.type = 'STASH_MIX' AND t.is_streamable = 1)
           )
         ORDER BY
-            CASE WHEN p.type = 'DAILY_MIX' THEN pt.added_at END DESC,
+            CASE WHEN o.playlist_id IS NOT NULL THEN e.rank IS NULL END ASC,
+            CASE WHEN o.playlist_id IS NOT NULL THEN e.rank END ASC,
+            CASE WHEN p.type = 'DAILY_MIX' AND o.playlist_id IS NULL THEN pt.added_at END DESC,
             pt.position ASC,
             pt.added_at ASC,
             t.id ASC
@@ -904,6 +919,18 @@ interface TrackDao {
     @Query("SELECT * FROM tracks WHERE youtube_id = :youtubeId LIMIT 1")
     suspend fun findByYoutubeId(youtubeId: String): TrackEntity?
 
+    @Query("SELECT * FROM tracks WHERE soundcloud_id = :soundCloudId LIMIT 1")
+    suspend fun findBySoundCloudId(soundCloudId: String): TrackEntity?
+
+    @Query("SELECT * FROM tracks WHERE soundcloud_id IN (:ids)")
+    suspend fun findBySoundCloudIds(ids: List<String>): List<TrackEntity>
+
+    @Query("UPDATE tracks SET soundcloud_preview = :preview WHERE id = :id")
+    suspend fun updateSoundCloudPreview(id: Long, preview: Boolean)
+
+    @Query("SELECT * FROM tracks WHERE isrc IN (:ids) ORDER BY is_downloaded DESC, id ASC")
+    suspend fun findByIsrcs(ids: List<String>): List<TrackEntity>
+
     /** Find a track by exact ISRC, preferring a downloaded row (Listen Together's exact match, spec 2026-09-24 §4). */
     @Query("SELECT * FROM tracks WHERE isrc = :isrc ORDER BY is_downloaded DESC, id ASC LIMIT 1")
     suspend fun findByIsrc(isrc: String): TrackEntity?
@@ -924,6 +951,13 @@ interface TrackDao {
     /** Every row with these canonical words, oldest first (the mirror skips one that already stands for another song). */
     @Query("SELECT * FROM tracks WHERE canonical_title = :title AND canonical_artist = :artist ORDER BY id ASC")
     suspend fun findAllByCanonicalIdentity(title: String, artist: String): List<TrackEntity>
+
+    /**
+     * Every row with exactly these words as written, oldest first: how a song whose canonical words are blank (a title that is
+     * only brackets, "(Intro)") is found again, since every lookup by canonical words skips a blank pair. Rare, so no index.
+     */
+    @Query("SELECT * FROM tracks WHERE title = :title AND artist = :artist ORDER BY id ASC")
+    suspend fun findAllByExactWords(title: String, artist: String): List<TrackEntity>
 
     /**
      * The next [limit] rows after [afterId], in id order, with just the columns the canonical
@@ -1952,7 +1986,8 @@ interface TrackDao {
         """
         SELECT t.* FROM tracks t
         WHERE t.is_downloaded = 1
-          AND t.source NOT IN ('BOTH', 'LOCAL', 'CLOUD')
+          AND t.source NOT IN ('BOTH', 'LOCAL', 'CLOUD', 'SOUNDCLOUD')
+          AND t.soundcloud_id IS NULL
           AND t.id NOT IN (
               SELECT pt.track_id FROM playlist_tracks pt
               WHERE pt.removed_at IS NULL
@@ -2578,12 +2613,8 @@ interface TrackDao {
     suspend fun findStreamableMetadataBackfillCandidates(limit: Int): List<StreamableBackfillRow>
 
     /**
-     * Rows with no album that the user has played or kept, newest first: a Last.fm playlist's or a
-     * mix's songs arrive with only a title and an artist. `ArtBackfillWorker` fills them from
-     * Last.fm ([fillMissingAlbum]). Only songs played, downloaded, liked, or saved / loved on a
-     * service: a mix's songs never played wait until they are (playing one fills its album then,
-     * through Now Playing), so the pass doesn't send every mix's songs through the Last.fm proxy
-     * (2026-10-26: one 0.9.120 phone swept its library at a lookup a second).
+     * Rows with no album, newest first: a Last.fm playlist's or a mix's songs arrive with only a
+     * title and an artist. `ArtBackfillWorker` fills them from Last.fm ([fillMissingAlbum]).
      */
     @Query(
         """
@@ -2592,12 +2623,6 @@ interface TrackDao {
         WHERE (album IS NULL OR album = '')
           AND artist != ''
           AND title != ''
-          AND (
-            play_count > 0 OR last_played IS NOT NULL
-            OR is_downloaded = 1 OR file_path IS NOT NULL
-            OR stash_liked_at IS NOT NULL OR spotify_saved_at IS NOT NULL
-            OR ytmusic_saved_at IS NOT NULL OR lastfm_loved_at IS NOT NULL
-          )
         ORDER BY id DESC
         LIMIT :limit
         """
@@ -2618,6 +2643,10 @@ interface TrackDao {
         """
     )
     suspend fun fillMissingAlbum(trackId: Long, album: String, albumArtist: String)
+
+    /** The track's parental advisory, as its source's sync reports it ([DiffWorker]). */
+    @Query("UPDATE tracks SET explicit = :explicit WHERE id = :trackId")
+    suspend fun updateExplicit(trackId: Long, explicit: Boolean)
 
     /**
      * Atomically reverts a track to an undownloaded state so the download

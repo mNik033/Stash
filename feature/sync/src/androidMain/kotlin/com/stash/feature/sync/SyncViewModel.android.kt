@@ -28,6 +28,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.stateIn
@@ -35,11 +36,6 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
-/**
- * Presentation-layer model for a single sync history row.
- *
- * Decoupled from the Room entity so the UI has no transitive Room dependency.
- */
 /**
  * ViewModel backing the Sync screen.
  *
@@ -80,6 +76,8 @@ actual open class SyncViewModel @Inject constructor(
      * and forwards the user's toggle.
      */
     private val lastFmRecommendationSource: com.stash.core.data.mix.LastFmRecommendationSource,
+    /** "Play something new" on the synced hero. */
+    private val playerRepository: com.stash.core.media.PlayerRepository,
 ) : ViewModel() {
 
     /**
@@ -303,6 +301,7 @@ actual open class SyncViewModel @Inject constructor(
         observeLastSync()
         observeSpotifyPlaylists()
         observeYouTubePlaylists()
+        observeSoundCloud()
         observeUnmatchedCount()
         observeFlaggedCount()
         observeSyncStatusCard()
@@ -319,13 +318,94 @@ actual open class SyncViewModel @Inject constructor(
             android.util.Log.i("SyncViewModel", "onSyncNow ignored — sync already in progress")
             return
         }
+        viewModelScope.launch {
+            if (needsArrivalChoice()) {
+                _uiState.update { it.copy(showArrivalSheet = true) }
+                return@launch
+            }
+            startSync()
+        }
+    }
+
+    private suspend fun startSync() {
         // The Wi-Fi rule this screen shows: what a sync queued offline downloads under.
         val wifiOnly = _uiState.value.syncPreferences.wifiOnly
-        val pausedAfterUndo = _uiState.value.syncPreferences.autoSyncPausedAfterUndo
+        // A manual Sync ends the pause "Undo last sync" put on Auto-sync.
+        if (_uiState.value.syncPreferences.autoSyncPausedAfterUndo) {
+            syncPreferencesManager.setAutoSyncPausedAfterUndo(false)
+        }
+        syncScheduler.triggerManualSync(wifiOnly)
+    }
+
+    /**
+     * Whether this Sync is a new install's first, which asks how music should
+     * arrive before it runs. New installs start in Download mode with every
+     * playlist switched off, so a first sync used to finish with nothing on Home
+     * or in Library and users thought it had failed (2026-10-29). An install that
+     * has synced before keeps its mode and switches and is never asked; it's
+     * marked answered here so the history read happens once.
+     */
+    private suspend fun needsArrivalChoice(): Boolean {
+        if (syncPreferencesManager.arrivalChosen.first()) return false
+        if (syncHistoryDao.getLatest() != null) {
+            syncPreferencesManager.markArrivalChosen()
+            return false
+        }
+        return true
+    }
+
+    /**
+     * The first-sync sheet's answer. "Stream everything" ([streamEverything])
+     * is Stream only plus new playlists on Home: the whole account shows up
+     * after one sync and nothing downloads. "Save to this phone" is Download
+     * mode, and opens the first account's playlists so the user can pick what
+     * to save while the sync reads them. Either way the sync starts now.
+     */
+    actual fun onArrivalChosen(streamEverything: Boolean) {
+        _uiState.update { it.copy(showArrivalSheet = false) }
         viewModelScope.launch {
-            // A manual Sync ends the pause "Undo last sync" put on Auto-sync.
-            if (pausedAfterUndo) syncPreferencesManager.setAutoSyncPausedAfterUndo(false)
-            syncScheduler.triggerManualSync(wifiOnly)
+            // Written before the sync starts: DiffWorker reads both once per run.
+            streamingPreference.setEnabled(streamEverything)
+            syncPreferencesManager.setArrivalChosen(pinNewPlaylists = streamEverything)
+            startSync()
+            if (!streamEverything) {
+                val state = _uiState.value
+                val source = when {
+                    state.spotifyConnected -> SyncSource.SPOTIFY
+                    state.youTubeConnected -> SyncSource.YOUTUBE
+                    state.soundCloudConnected -> SyncSource.SOUNDCLOUD
+                    else -> null
+                }
+                _uiState.update { it.copy(openManageFor = source) }
+            }
+        }
+    }
+
+    /** The first-sync sheet was dismissed without an answer: nothing runs, it asks again next time. */
+    actual fun onArrivalDismissed() {
+        _uiState.update { it.copy(showArrivalSheet = false) }
+    }
+
+    /** The screen has navigated to [SyncUiState.openManageFor]. */
+    actual fun onManageOpened() {
+        _uiState.update { it.copy(openManageFor = null) }
+    }
+
+    /**
+     * A playlist's Save switch: keep it on this phone. The playlist page's
+     * Download switch does the same thing ([MusicRepository.setPlaylistDownload],
+     * #474), so the two always agree. In Download mode a saved playlist is also
+     * switched on for sync, as the old switch was, so later syncs download what
+     * it gains and it stays on Home; off there turns sync off too.
+     */
+    fun onSavePlaylist(playlistId: Long, save: Boolean) {
+        viewModelScope.launch {
+            // Saving one that's out of the library brings it back: saved is in.
+            if (save) playlistDao.setUserHidden(playlistId, false)
+            if (save && !streamingPreference.current()) {
+                playlistDao.setSyncEnabledAndPin(playlistId, true, System.currentTimeMillis())
+            }
+            musicRepository.setPlaylistDownload(playlistId, save)
         }
     }
 
@@ -365,6 +445,44 @@ actual open class SyncViewModel @Inject constructor(
                     )
                 }
             }
+        }
+    }
+
+    /**
+     * A playlist's "In your library" check, on its account's page: the way to
+     * turn off what a sync brought in and isn't wanted (2026-10-29). Out of the
+     * library it leaves Home, Library and Songs, and later syncs leave it alone;
+     * one being saved stops downloading too (songs already on the phone stay,
+     * as with the Download switch). Back in, it shows again.
+     */
+    /**
+     * "Play something new": the newest mix, from its first song. The hero that offers it only
+     * shows in Stream only, where every song plays without a download.
+     */
+    actual fun onPlayPlaylist(playlistId: Long, name: String) {
+        viewModelScope.launch {
+            val tracks = musicRepository.getTracksByPlaylist(playlistId).first()
+            if (tracks.isNotEmpty()) {
+                playerRepository.setQueue(
+                    tracks,
+                    startIndex = 0,
+                    source = com.stash.core.model.PlaybackSource.Playlist(playlistId, name),
+                )
+            }
+        }
+    }
+
+    /** A mix's Stack switch: keep every song it brings, from the next sync on. */
+    fun onSetStack(playlistId: Long, on: Boolean) {
+        viewModelScope.launch { playlistDao.setStackSongs(playlistId, on) }
+    }
+
+    fun onSetInLibrary(playlistId: Long, inLibrary: Boolean) {
+        viewModelScope.launch {
+            if (!inLibrary) {
+                musicRepository.setPlaylistDownload(playlistId, false)
+            }
+            playlistDao.setUserHidden(playlistId, !inLibrary)
         }
     }
 
@@ -469,6 +587,7 @@ actual open class SyncViewModel @Inject constructor(
             when (source) {
                 MusicSource.YOUTUBE -> syncPreferencesManager.setYoutubeSyncMode(SyncMode.REFRESH)
                 MusicSource.SPOTIFY -> syncPreferencesManager.setSpotifySyncMode(SyncMode.REFRESH)
+                MusicSource.SOUNDCLOUD -> syncPreferencesManager.setSoundCloudSyncMode(SyncMode.REFRESH)
                 MusicSource.LOCAL, MusicSource.BOTH, MusicSource.CLOUD -> Unit
             }
         }
@@ -669,10 +788,30 @@ actual open class SyncViewModel @Inject constructor(
                                 artUrl = e.artUrl,
                                 hideFromHome = e.hideFromHome,
                                 pinnedToHomeAt = e.pinnedToHomeAt,
+                                keepOffline = e.keepOffline,
+                                userHidden = e.userHidden,
+                                dateAdded = e.dateAdded.toEpochMilli(),
+                                stackable = com.stash.core.data.sync.MixStacking.showsSwitch(e.source, e.type, e.name, e.stackSongs),
+                                stackSongs = e.stackSongs,
                             )
                         }
                     )
                 }
+            }
+        }
+    }
+
+    private fun observeSoundCloud() {
+        viewModelScope.launch {
+            combine(tokenManager.soundCloudSession, playlistDao.getBySource(MusicSource.SOUNDCLOUD)) { session, entities ->
+                session to entities.filter { session != null && com.stash.core.data.sync.SoundCloudPlaylistIds.belongsTo(it.sourceId, session.userId) }
+            }.collect { (session, entities) ->
+                _uiState.update { state -> state.copy(soundCloudConnected = session != null,
+                    soundCloudPlaylists = entities.map { e ->
+                        YouTubeSyncPlaylist(id = e.id, name = e.name, trackCount = e.trackCount, type = e.type,
+                            syncEnabled = e.syncEnabled, artUrl = e.artUrl, keepOffline = e.keepOffline,
+                            userHidden = e.userHidden, dateAdded = e.dateAdded.toEpochMilli())
+                    }) }
             }
         }
     }
@@ -692,6 +831,11 @@ actual open class SyncViewModel @Inject constructor(
                                 artUrl = e.artUrl,
                                 hideFromHome = e.hideFromHome,
                                 pinnedToHomeAt = e.pinnedToHomeAt,
+                                keepOffline = e.keepOffline,
+                                userHidden = e.userHidden,
+                                dateAdded = e.dateAdded.toEpochMilli(),
+                                stackable = com.stash.core.data.sync.MixStacking.showsSwitch(e.source, e.type, e.name, e.stackSongs),
+                                stackSongs = e.stackSongs,
                             )
                         }
                     )

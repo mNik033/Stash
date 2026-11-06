@@ -15,3 +15,6 @@ expect fun failedDownloadsViewModel(): FailedDownloadsViewModel
 expect fun failedMatchesViewModel(): FailedMatchesViewModel
 
 expect fun formatRelativeTime(timestampMs: Long): String
+
+@Composable
+internal expect fun SoundCloudMark()

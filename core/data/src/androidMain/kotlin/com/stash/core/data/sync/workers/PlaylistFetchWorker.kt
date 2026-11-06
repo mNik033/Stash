@@ -1,4 +1,4 @@
-﻿package com.stash.core.data.sync.workers
+package com.stash.core.data.sync.workers
 
 import android.content.Context
 import android.content.pm.ServiceInfo
@@ -174,6 +174,8 @@ class PlaylistFetchWorker @AssistedInject constructor(
     private val youtubeAuthHealthProbe: YoutubeAuthHealthProbe,
     private val streamingPreference: com.stash.core.data.prefs.StreamingPreference,
     private val syncUndoDao: com.stash.core.data.db.dao.SyncUndoDao,
+    private val soundCloudLikes: com.stash.core.data.sync.SoundCloudLikesFetcher? = null,
+    private val soundCloudPlaylists: com.stash.core.data.sync.SoundCloudPlaylistsFetcher? = null,
 ) : CoroutineWorker(appContext, params) {
 
     companion object {
@@ -348,7 +350,16 @@ class PlaylistFetchWorker @AssistedInject constructor(
             val isSpotifyAuthenticated = tokenManager.isAuthenticated(AuthService.SPOTIFY)
             val isYouTubeAuthenticated = tokenManager.isAuthenticated(AuthService.YOUTUBE_MUSIC)
 
-            if (!isSpotifyAuthenticated && !isYouTubeAuthenticated) {
+            val soundCloudSession = if (soundCloudLikes != null) try {
+                if (tokenManager.soundCloudSession.first()?.oauthToken != null) tokenManager.getSoundCloudToken()
+                tokenManager.soundCloudSession.first()
+            } catch (e: CancellationException) { throw e }
+            catch (_: Exception) {
+                diagnostics.add(SyncStepResult("SOUNDCLOUD", "authenticate", StepStatus.ERROR,
+                    errorMessage = "SoundCloud session could not be renewed. Reconnect SoundCloud in Accounts."))
+                null
+            } else null
+            if (!isSpotifyAuthenticated && !isYouTubeAuthenticated && soundCloudSession == null) {
                 syncHistoryDao.updateStatus(
                     id = syncId,
                     status = SyncState.FAILED,
@@ -375,7 +386,7 @@ class PlaylistFetchWorker @AssistedInject constructor(
                 youtubeProbe = youtubeAuthHealthProbe,
             )
             syncStateManager.onAuthExpiryProbed(probeResult.state)
-            if (probeResult.shortCircuit) {
+            if (probeResult.shortCircuit && soundCloudSession == null) {
                 Log.i(
                     TAG,
                     "Auth expired (spotify=${probeResult.state.spotifyExpired}, " +
@@ -408,6 +419,46 @@ class PlaylistFetchWorker @AssistedInject constructor(
             var youtubeComplete = true
             if (probeResult.fetchYoutube) {
                 youtubeComplete = fetchYouTubePlaylists(syncId, diagnostics)
+            }
+
+            if (soundCloudSession != null && soundCloudLikes != null) {
+                try {
+                    val applied = soundCloudLikes.fetch(syncId, soundCloudSession)
+                    diagnostics.add(SyncStepResult("SOUNDCLOUD", "getLikedSongs",
+                        if (applied) StepStatus.SUCCESS else StepStatus.SKIPPED))
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (_: Exception) {
+                    diagnostics.add(SyncStepResult("SOUNDCLOUD", "getLikedSongs", StepStatus.ERROR,
+                        errorMessage = "SoundCloud likes could not be fetched; library kept unchanged"))
+                }
+            }
+            if (soundCloudSession != null && soundCloudPlaylists != null) {
+                val steps: List<Pair<String, suspend () -> com.stash.core.data.sync.SoundCloudPlaylistFetchResult>> = listOf(
+                    "getPlaylists" to { soundCloudPlaylists.fetchPlaylists(syncId, soundCloudSession) },
+                    "getPersonalMixes" to {
+                        if (syncPreferencesManager.discoverAutoMixes.first()) soundCloudPlaylists.fetchMixes(syncId, soundCloudSession)
+                        else com.stash.core.data.sync.SoundCloudPlaylistFetchResult(skipped = true)
+                    },
+                )
+                for ((name, fetch) in steps) {
+                    try {
+                        val fetched = fetch()
+                        if (fetched.published > 0 || fetched.failed == 0) {
+                            diagnostics.add(SyncStepResult("SOUNDCLOUD", name, when {
+                                fetched.skipped -> StepStatus.SKIPPED
+                                fetched.published == 0 -> StepStatus.EMPTY
+                                else -> StepStatus.SUCCESS
+                            }, itemCount = fetched.published))
+                        }
+                        if (fetched.failed > 0) diagnostics.add(SyncStepResult("SOUNDCLOUD", "${name}Details", StepStatus.ERROR,
+                            errorMessage = "${fetched.failed} SoundCloud lists could not be fetched; their existing contents were kept"))
+                    } catch (e: CancellationException) { throw e }
+                    catch (_: Exception) {
+                        diagnostics.add(SyncStepResult("SOUNDCLOUD", name, StepStatus.ERROR,
+                            errorMessage = "SoundCloud lists could not be fetched; existing lists kept unchanged"))
+                    }
+                }
             }
 
             // Persist diagnostics.
@@ -521,7 +572,7 @@ class PlaylistFetchWorker @AssistedInject constructor(
                     if (extraYearly.isNotEmpty()) {
                         Log.d(TAG, "fetchSpotifyPlaylists: +${extraYearly.size} yearly recap(s)")
                         syncLog.success(
-                            "Your recaps â€” " + extraYearly.joinToString(", ") { it.name },
+                            "More mixes — " + extraYearly.joinToString(", ") { it.name },
                         )
                     }
                     val dailyMixes = result.data + extraYearly
@@ -1206,6 +1257,8 @@ class PlaylistFetchWorker @AssistedInject constructor(
                             youtubeId = track.videoId,
                             albumArtUrl = com.stash.core.common.ArtUrlUpgrader.upgrade(track.thumbnailUrl),
                             position = position,
+                            // YouTube's explicit badge: true when the row has it, else unknown.
+                            explicit = track.explicit,
                         )
                     }
                     if (trackSnapshots.isNotEmpty()) {
@@ -1312,6 +1365,8 @@ class PlaylistFetchWorker @AssistedInject constructor(
                             youtubeId = track.videoId,
                             albumArtUrl = com.stash.core.common.ArtUrlUpgrader.upgrade(track.thumbnailUrl),
                             position = position,
+                            // YouTube's explicit badge: true when the row has it, else unknown.
+                            explicit = track.explicit,
                         )
                     }
                     if (trackSnapshots.isNotEmpty()) {
@@ -1450,6 +1505,8 @@ class PlaylistFetchWorker @AssistedInject constructor(
                         track.thumbnailUrl ?: detail.thumbnailUrl,
                     ),
                     position = position,
+                    // YouTube's explicit badge on the album's tracklist row, else unknown.
+                    explicit = track.explicit,
                 )
             }
             if (trackSnapshots.isNotEmpty()) {
@@ -1501,6 +1558,8 @@ class PlaylistFetchWorker @AssistedInject constructor(
                             youtubeId = track.videoId,
                             albumArtUrl = com.stash.core.common.ArtUrlUpgrader.upgrade(track.thumbnailUrl),
                             position = position,
+                            // YouTube's explicit badge: true when the row has it, else unknown.
+                            explicit = track.explicit,
                         )
                     }
                     if (trackSnapshots.isNotEmpty()) {

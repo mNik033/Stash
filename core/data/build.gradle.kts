@@ -34,7 +34,6 @@ ksp {
     arg("room.incremental", "true")
     arg("room.generateKotlin", "true")
 }
-
 kotlin {
     sourceSets {
         commonMain.dependencies {
@@ -43,6 +42,7 @@ kotlin {
             implementation(project(":core:auth"))
             implementation(project(":data:spotify"))
             implementation(project(":data:ytmusic"))
+            implementation(project(":data:soundcloud"))
 
             implementation(libs.room.runtime)
             implementation(libs.sqlite.bundled)

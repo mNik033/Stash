@@ -69,6 +69,8 @@ expect open class DownloadManagementViewModel : ViewModel {
     val uiState: StateFlow<DownloadManagementUiState>
     fun selectTab(tab: DownloadManagementTab)
     fun cancel(queueId: Long)
+    fun clearQueue()
+    fun clearHistory()
     fun retry(queueId: Long)
     fun dismissMessage()
 }

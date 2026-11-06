@@ -392,4 +392,24 @@ actual open class SyncViewModel(
             else -> "${diffSec / 604800}w ago"
         }
     }
+
+    actual fun onArrivalChosen(streamEverything: Boolean) {
+        _uiState.update { it.copy(showArrivalSheet = false) }
+        viewModelScope.launch {
+            streamingPreference?.setEnabled(streamEverything)
+            onSyncNow()
+        }
+    }
+
+    actual fun onArrivalDismissed() {
+        _uiState.update { it.copy(showArrivalSheet = false) }
+    }
+
+    actual fun onManageOpened() {
+        _uiState.update { it.copy(openManageFor = null) }
+    }
+
+    actual fun onPlayPlaylist(playlistId: Long, name: String) {
+        // Desktop handles playback through desktop player
+    }
 }

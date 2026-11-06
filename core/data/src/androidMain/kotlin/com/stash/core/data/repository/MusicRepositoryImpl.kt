@@ -25,6 +25,7 @@ import com.stash.core.data.sync.workers.DiscoveryDownloadWorker
 import com.stash.core.data.sync.workers.constraintsForManualTrigger
 import com.stash.core.model.Playlist
 import com.stash.core.model.Track
+import com.stash.core.model.MusicSource
 import com.stash.core.model.isScannedSong
 import com.stash.core.model.share.toTrack
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -354,11 +355,9 @@ class MusicRepositoryImpl @Inject constructor(
             .distinctUntilChanged()
             .flatMapLatest { (streamOnly, libraryOnly) -> query(streamOnly, libraryOnly) }
 
-    // A playlist shows ALL of its tracks, streamable and downloaded, in every
-    // mode — streaming is always allowed, and tapping a streamable track
-    // streams it. (Until 2026-09-17 this followed the Online/Offline switch
-    // and hid streamable rows offline.) Tap-time playability is governed by
-    // live connectivity, not a preference.
+    // ALL of a playlist's tracks, streamable and downloaded, in every mode: counts,
+    // saves and syncs need them. What a screen lists follows the mode instead
+    // (getShownTracksByPlaylist).
     @OptIn(ExperimentalCoroutinesApi::class)
     override fun getTracksByPlaylist(playlistId: Long): Flow<List<Track>> =
         trackDao.getByPlaylist(playlistId, includeStreamable = true)
@@ -477,17 +476,23 @@ class MusicRepositoryImpl @Inject constructor(
 
     // ── Playlist queries ────────────────────────────────────────────────
 
+    override fun getShownTracksByPlaylist(playlistId: Long): Flow<List<Track>> =
+        combine(getTracksByPlaylist(playlistId), streamingPreference.enabled) { tracks, streamOnly ->
+            if (streamOnly) tracks else tracks.filter { it.isDownloaded }
+        }
+
     @OptIn(ExperimentalCoroutinesApi::class)
     override fun getAllPlaylists(): Flow<List<Playlist>> =
         // The one accessor behind Home and Library. Visibility is gated by
         // PlaylistDao.getAllVisible: sync-enabled, pinned, or holding something
-        // playable — and since streaming is always allowed, a streamable track
-        // counts in every mode. (This was hard-coded false from v0.9.30, so once
-        // #368 stopped auto-enabling discovered mixes a fresh Online install had
-        // no arm left and Home rendered empty over a full library — #477, #478;
-        // then it followed the mode; now it is simply true.)
-        playlistDao.getAllVisible(includeStreamable = true)
-            .map { entities -> entities.map { it.toDomain() } }
+        // playable — and "playable" follows the mode: in Stream only a streamable
+        // track counts, in Download mode (which plays only what is on the phone,
+        // 2026-10-29) a downloaded one does. (Hard-coded false from v0.9.30 emptied
+        // Home for a fresh Stream only install, #477/#478; always true from
+        // 2026-09-17 to 2026-10-29.)
+        streamingPreference.enabled.flatMapLatest { streamOnly ->
+            playlistDao.getAllVisible(includeStreamable = streamOnly)
+        }.map { entities -> entities.map { it.toDomain() } }
 
     override fun getPlaylistsByType(type: com.stash.core.model.PlaylistType): Flow<List<Playlist>> =
         playlistDao.getByType(type).map { entities -> entities.map { it.toDomain() } }
@@ -530,6 +535,14 @@ class MusicRepositoryImpl @Inject constructor(
         // block or a playlist save would land on something else. Refused: callers already turn a
         // throw into their "Couldn't ..." message.
         check(!track.isScannedSong) { "An All Songs file is never saved to the library" }
+        track.soundCloudId?.let { id ->
+            check(id.matches(Regex("[0-9]+"))) { "Invalid SoundCloud identity" }
+            trackDao.findBySoundCloudId(id)?.let { return it.id }
+            val (ct, ca) = blocklistGuard.canonicalWordsForSave(track.title, track.artist)
+            return insertOrAdopt(track.toEntity().copy(id = 0, source = MusicSource.SOUNDCLOUD,
+                youtubeId = null, spotifyUri = null, canonicalTitle = ct, canonicalArtist = ca, isStreamable = true))
+        }
+        check(track.source != MusicSource.SOUNDCLOUD) { "A SoundCloud track needs its upload id" }
         // Quick exit: real DB row already. Not for a synthetic stream id
         // (`videoId.hashCode().toLong()`, e.g. RadioStationGenerator): it is
         // positive half the time, and one equal to an unrelated row's id would
@@ -607,7 +620,8 @@ class MusicRepositoryImpl @Inject constructor(
         try {
             trackDao.insert(entity)
         } catch (e: android.database.sqlite.SQLiteConstraintException) {
-            val winner = entity.youtubeId?.takeIf { it.isNotBlank() }?.let { trackDao.findByYoutubeId(it) }
+            val winner = entity.soundCloudId?.let { trackDao.findBySoundCloudId(it) }
+                ?: entity.youtubeId?.takeIf { it.isNotBlank() }?.let { trackDao.findByYoutubeId(it) }
                 ?: entity.spotifyUri?.takeIf { it.isNotBlank() }?.let { trackDao.findBySpotifyUri(it) }
             winner?.id ?: throw e
         }
@@ -687,6 +701,7 @@ class MusicRepositoryImpl @Inject constructor(
 
     override suspend fun queueDownload(trackId: Long): Boolean {
         val entity = trackDao.getById(trackId) ?: return false
+        if (entity.soundCloudPreview) return false
         if (entity.isDownloaded) return false
 
         // Reuse an existing queue row if there is one; otherwise insert a fresh
@@ -913,7 +928,7 @@ class MusicRepositoryImpl @Inject constructor(
         // already queued, failed or cancelled keeps that one row. That makes
         // this safe to call after every sync (#474) without re-trying the same
         // unmatchable songs, or piling duplicate rows into Failed downloads.
-        val candidates = tracks.filter { !it.isDownloaded && !it.matchDismissed }
+        val candidates = tracks.filter { !it.isDownloaded && !it.matchDismissed && !it.soundCloudPreview }
         if (candidates.isEmpty()) return moved
 
         val entries = candidates.mapNotNull { entity ->

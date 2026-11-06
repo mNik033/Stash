@@ -30,5 +30,13 @@ interface DownloadExecutor {
         qualityArgs: List<String>,
         onProgress: (Float) -> Unit = {},
     ): DownloadResult
+
+    suspend fun downloadSoundCloud(
+        permalink: String,
+        token: String?,
+        outputDir: File,
+        filename: String,
+        onProgress: (Float) -> Unit = {},
+    ): DownloadResult
 }
 

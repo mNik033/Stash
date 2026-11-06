@@ -23,6 +23,7 @@ kotlin {
             implementation(project(":core:common"))
             implementation(project(":core:data"))
             implementation(project(":core:auth"))
+            implementation(project(":data:soundcloud"))
             implementation(project(":data:download"))
             implementation(project(":data:ytmusic"))
 
@@ -37,6 +38,7 @@ kotlin {
             // Media3
             implementation(libs.media3.exoplayer)
             implementation(libs.media3.exoplayer.dash)
+            implementation(libs.media3.exoplayer.hls)
             implementation(libs.media3.session)
             implementation(libs.media3.datasource)
             implementation(libs.media3.datasource.okhttp)
@@ -89,4 +91,7 @@ dependencies {
     testImplementation(libs.robolectric)
     testImplementation(libs.androidx.test.core)
     testImplementation(libs.mockk)
+    // Media3's own fakes (a real ExoPlayer on a fake clock): ResolveFirstMediaSourcePlayerTest.
+    testImplementation("androidx.media3:media3-test-utils:${libs.versions.media3.get()}")
+    testImplementation("androidx.media3:media3-test-utils-robolectric:${libs.versions.media3.get()}")
 }

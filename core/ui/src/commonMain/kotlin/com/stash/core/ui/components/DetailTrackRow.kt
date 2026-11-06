@@ -73,6 +73,8 @@ fun DetailTrackRow(
     selectionActive: Boolean = false,
     selected: Boolean = false,
     onMoreClick: (() -> Unit)? = null,
+    /** In place of the ⋮ menu: Edit order's drag handle. */
+    trailing: (@Composable () -> Unit)? = null,
 ) {
     val extendedColors = StashTheme.extendedColors
     val primaryColor = MaterialTheme.colorScheme.primary
@@ -161,6 +163,7 @@ fun DetailTrackRow(
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f, fill = false),
                 )
+                if (track.soundCloudPreview && !track.isDownloaded) PreviewBadge()
                 FlacBadge(
                     fileFormat = track.fileFormat,
                     bitsPerSample = track.bitsPerSample,
@@ -197,7 +200,9 @@ fun DetailTrackRow(
         }
 
         // -- Overflow menu (only when not selecting) --
-        if (!selectionActive && onMoreClick != null) {
+        if (trailing != null) {
+            trailing()
+        } else if (!selectionActive && onMoreClick != null) {
             IconButton(onClick = onMoreClick, modifier = Modifier.size(32.dp)) {
                 Icon(
                     imageVector = Icons.Default.MoreVert,

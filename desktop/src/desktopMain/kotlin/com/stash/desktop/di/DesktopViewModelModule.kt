@@ -243,6 +243,7 @@ object DesktopViewModelModule {
         discoveryQueueDao: com.stash.core.data.db.dao.DiscoveryQueueDao,
         sharedMixRepository: SharedMixRepository,
         downloadQueueDao: com.stash.core.data.db.dao.DownloadQueueDao,
+        orderDao: com.stash.core.data.db.dao.PlaylistOrderDao,
     ): DesktopPlaylistDetailViewModelFactory = DesktopPlaylistDetailViewModelFactory(
         musicRepository = musicRepository,
         playerRepository = playerRepository,
@@ -253,6 +254,7 @@ object DesktopViewModelModule {
         discoveryQueueDao = discoveryQueueDao,
         sharedMixRepository = sharedMixRepository,
         downloadQueueDao = downloadQueueDao,
+        orderDao = orderDao,
     )
 
     @Provides
@@ -386,6 +388,7 @@ class DesktopPlaylistDetailViewModelFactory(
     private val discoveryQueueDao: com.stash.core.data.db.dao.DiscoveryQueueDao,
     private val sharedMixRepository: SharedMixRepository,
     private val downloadQueueDao: com.stash.core.data.db.dao.DownloadQueueDao,
+    private val orderDao: com.stash.core.data.db.dao.PlaylistOrderDao,
 ) {
     fun create(playlistId: Long): com.stash.feature.library.PlaylistDetailViewModel {
         val handle = SavedStateHandle(mapOf("playlistId" to playlistId))
@@ -400,6 +403,7 @@ class DesktopPlaylistDetailViewModelFactory(
             discoveryQueueDao = discoveryQueueDao,
             sharedMixRepository = sharedMixRepository,
             downloadQueueDao = downloadQueueDao,
+            orderDao = orderDao,
         )
     }
 }

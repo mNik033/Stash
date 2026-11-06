@@ -461,23 +461,23 @@ fun DesktopScaffold(
                         }
                         DesktopScreen.Sync -> {
                             SyncScreen(
-                                onNavigateToDownloads = {
-                                    backStack.add(DesktopScreen.Downloads)
-                                },
                                 onNavigateToFailedDownloads = {
                                     backStack.add(DesktopScreen.FailedDownloads)
                                 },
                                 onNavigateToFailedMatches = {
                                     backStack.add(DesktopScreen.FailedMatches)
                                 },
-                                onNavigateToBlockedSongs = {
-                                    backStack.add(DesktopScreen.Settings)
-                                },
                                 onNavigateToAccounts = {
                                     backStack.add(DesktopScreen.Settings)
                                 },
                                 onManageSource = {
                                     backStack.add(DesktopScreen.Settings)
+                                },
+                                onOpenHistory = {
+                                    backStack.add(DesktopScreen.Downloads)
+                                },
+                                onOpenPlaylist = { id ->
+                                    backStack.add(DesktopScreen.PlaylistDetail(id))
                                 },
                             )
                         }

@@ -105,12 +105,15 @@ class LibraryViewModelLikedOrderTest {
             on { getPlaylistsByType(eq(PlaylistType.STASH_LIKED)) } doReturn flowOf(listOf(stashLiked))
             on { getPlaylistsByType(eq(PlaylistType.LIKED_SONGS)) } doReturn flowOf(listOf(spotifyLiked))
             on { getTracksByPlaylist(eq(7L)) } doReturn flowOf(listOf(zebra))
+            on { getShownTracksByPlaylist(eq(7L)) } doReturn flowOf(listOf(zebra))
             on { getTracksByPlaylist(eq(42L)) } doReturn flowOf(listOf(apple, mango, plum))
+            on { getShownTracksByPlaylist(eq(42L)) } doReturn flowOf(listOf(apple, mango, plum))
         }
         return LibraryViewModel(
             musicRepository = musicRepository,
             playerRepository = mock { on { playerState } doReturn MutableStateFlow(PlayerState()) },
             tokenManager = mock {
+                on { soundCloudSession } doReturn flowOf(null)
                 on { spotifyAuthState } doReturn MutableStateFlow<AuthState>(AuthState.NotConnected)
                 on { youTubeAuthState } doReturn MutableStateFlow<AuthState>(AuthState.NotConnected)
             },

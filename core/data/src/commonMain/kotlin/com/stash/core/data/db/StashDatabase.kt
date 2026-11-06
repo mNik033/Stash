@@ -110,8 +110,16 @@ import com.stash.core.data.db.entity.TrackTagEntity
         com.stash.core.data.db.entity.CloudItemEntity::class,
         com.stash.core.data.db.entity.CloudUploadEntity::class,
         com.stash.core.data.db.entity.AlbumBackCoverEntity::class,
+        com.stash.core.data.db.entity.RecordPlayEntity::class,
+        com.stash.core.data.db.entity.RecordLengthEntity::class,
+        com.stash.core.data.db.entity.RecordHiddenEntity::class,
+        com.stash.core.data.db.entity.RecordTasteSongEntity::class,
+        com.stash.core.data.db.entity.RecordTasteEntity::class,
+        com.stash.core.data.db.entity.RecordTasteKeepEntity::class,
+        com.stash.core.data.db.entity.PlaylistOrderEntity::class,
+        com.stash.core.data.db.entity.PlaylistOrderEntryEntity::class,
     ],
-    version = 65,
+    version = 75,
     exportSchema = true,
 )
 @TypeConverters(Converters::class)
@@ -165,6 +173,8 @@ abstract class StashDatabase : RoomDatabase() {
 
     abstract fun syncUndoDao(): SyncUndoDao
 
+    abstract fun playlistOrderDao(): com.stash.core.data.db.dao.PlaylistOrderDao
+
     abstract fun sharedMixDao(): SharedMixDao
 
     abstract fun webLibraryExportDao(): WebLibraryExportDao
@@ -174,6 +184,16 @@ abstract class StashDatabase : RoomDatabase() {
     abstract fun scannedSongDao(): ScannedSongDao
 
     abstract fun listeningHistoryDao(): com.stash.core.data.db.dao.ListeningHistoryDao
+
+    abstract fun recordPlayDao(): com.stash.core.data.db.dao.RecordPlayDao
+
+    abstract fun recordLengthDao(): com.stash.core.data.db.dao.RecordLengthDao
+
+    abstract fun recordHiddenDao(): com.stash.core.data.db.dao.RecordHiddenDao
+
+    abstract fun recordTasteDao(): com.stash.core.data.db.dao.RecordTasteDao
+
+    abstract fun libraryArtDao(): com.stash.core.data.db.dao.LibraryArtDao
 
     companion object {
         const val DATABASE_NAME = "stash.db"

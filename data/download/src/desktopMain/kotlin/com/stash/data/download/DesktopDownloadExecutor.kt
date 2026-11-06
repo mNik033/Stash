@@ -81,6 +81,57 @@ class DesktopDownloadExecutor @Inject constructor(
         }
     }
 
+    override suspend fun downloadSoundCloud(
+        permalink: String,
+        token: String?,
+        outputDir: File,
+        filename: String,
+        onProgress: (Float) -> Unit,
+    ): DownloadResult = withContext(Dispatchers.IO) {
+        val link = com.stash.data.soundcloud.SoundCloudLinks.parse(permalink)
+        val template = outputTemplateFor(outputDir, filename)
+        if (link?.kind != com.stash.data.soundcloud.SoundCloudLink.Kind.TRACK || template == null) {
+            return@withContext DownloadResult.Error("Invalid SoundCloud download")
+        }
+        deleteStaleOutputs(outputDir, filename)
+        var success = false
+        try {
+            val args = buildList {
+                add("-o"); add(template)
+                add("--newline")
+                add("--no-playlist")
+                add("--extractor-args"); add("soundcloud:formats=hls_aac,http_aac,hls_opus,http_opus,hls_mp3,http_mp3")
+                if (token != null) {
+                    add("--username"); add("oauth")
+                    add("--password"); add(token)
+                }
+                add("-f"); add("bestaudio[acodec^=mp4a][format_id!*=preview]/bestaudio[format_id!*=preview]")
+                add("-x"); add("--audio-format"); add("m4a")
+                add(link.url)
+            }
+            val resp = runner.execute(args) { pct, _, _ ->
+                onProgress(pct / 100f)
+            }
+            if (resp.exitCode != 0) {
+                Log.w(TAG, "yt-dlp SoundCloud exited with ${resp.exitCode}: ${resp.err}")
+                return@withContext DownloadResult.YtDlpError("SoundCloud could not download this track")
+            }
+            val candidate = outputDir.listFiles { file ->
+                file.name.startsWith("$filename.") && file.extension !in IGNORED_EXTENSIONS
+            }?.firstOrNull()
+            if (candidate == null || !candidate.exists() || candidate.length() == 0L) {
+                return@withContext DownloadResult.NoOutput(null, null)
+            }
+            success = true
+            DownloadResult.Success(candidate)
+        } catch (e: Exception) {
+            Log.w(TAG, "SoundCloud download execution failed for $permalink: ${e.message}", e)
+            DownloadResult.Error("SoundCloud download failed", e)
+        } finally {
+            if (!success) deleteStaleOutputs(outputDir, filename)
+        }
+    }
+
     private fun outputTemplateFor(outputDir: File, filename: String): String? {
         if (!isSafeFilename(filename)) return null
         val template = File(outputDir, "$filename.%(ext)s")

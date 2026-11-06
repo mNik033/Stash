@@ -83,6 +83,8 @@ class DesktopTrackActionsDelegate @Inject constructor(
                         _userMessages.emit("Streaming on cellular is off in Settings.")
                     StreamRoutingResult.NoConnectivity ->
                         _userMessages.emit("You're offline — can't stream this track.")
+                    StreamRoutingResult.DownloadMode ->
+                        _userMessages.emit("You're in Download mode. Switch to Stream only to play this.")
                 }
             } finally {
                 _previewLoadingId.value = null

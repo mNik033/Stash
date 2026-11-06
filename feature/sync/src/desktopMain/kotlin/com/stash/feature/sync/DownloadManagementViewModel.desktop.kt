@@ -85,6 +85,22 @@ actual open class DownloadManagementViewModel(
         }
     }
 
+    actual fun clearQueue() {
+        viewModelScope.launch {
+            val dao = downloadQueueDao ?: return@launch
+            val now = System.currentTimeMillis()
+            val cancelled = dao.activeIds().count { dao.markCancelledIfActive(it, now) > 0 }
+            message.value = if (cancelled == 0) "Nothing to cancel" else "Cancelled $cancelled ${if (cancelled == 1) "download" else "downloads"}"
+        }
+    }
+
+    actual fun clearHistory() {
+        viewModelScope.launch {
+            downloadQueueDao?.deleteCompleted()
+            message.value = "History cleared"
+        }
+    }
+
     actual fun retry(queueId: Long) {
         viewModelScope.launch {
             if (downloadQueueDao?.atomicallyClaimForRetry(queueId) == 1) {

@@ -28,6 +28,7 @@ kotlin {
                 implementation(project(":data:ytmusic"))
                 implementation(project(":data:lyrics"))
                 implementation(project(":data:download"))
+                implementation(project(":data:soundcloud"))
 
                 implementation(project(":feature:nowplaying"))
                 implementation(project(":feature:library"))

@@ -168,6 +168,9 @@ fun ArtistProfileScreen(
                     hero = state.hero,
                     status = state.status,
                     socials = state.about?.socials.orEmpty(),
+                    fallbackCovers = remember(state.albums, state.singles) {
+                        (state.albums + state.singles).mapNotNull { it.thumbnailUrl }.distinct().take(4)
+                    },
                     onPlayArtist = vm::playArtist,
                     onStartRadio = vm::startRadio,
                     streamingEnabled = streamingEnabled,
@@ -382,7 +385,7 @@ private fun androidx.compose.foundation.lazy.LazyListScope.contentSections(
     val about = state.about
     if (about != null) {
         item { SectionHeader(title = "About") }
-        item { AboutSection(about = about, avatarUrl = state.hero.avatarUrl) }
+        item { AboutSection(about = about, avatarUrl = state.hero.avatarUrl, artistName = state.hero.name) }
     }
 }
 

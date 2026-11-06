@@ -31,7 +31,6 @@ import coil3.compose.AsyncImage
 import com.stash.core.common.ArtUrlUpgrader
 import com.stash.data.ytmusic.model.ArtistAbout
 
-
 /**
  * Spotify-style "About" section: artist photo, collapsible bio, and a row of
  * social-link buttons. Rendered under "Fans also like" on the artist page.
@@ -41,6 +40,7 @@ fun AboutSection(
     about: ArtistAbout,
     avatarUrl: String?,
     modifier: Modifier = Modifier,
+    artistName: String = "",
 ) {
     val uriHandler = LocalUriHandler.current
     var expanded by remember { mutableStateOf(false) }
@@ -48,13 +48,27 @@ fun AboutSection(
     // "See more" toggle is worth showing (a 1-2 line bio shouldn't get one).
     var bioOverflows by remember { mutableStateOf(false) }
     val photo = about.photoUrl ?: avatarUrl
+    // The gallery opened at this photo; null = closed.
+    var viewing by remember { mutableStateOf<Int?>(null) }
+
+    // Spotify's photos lead About as a row; the row pads itself so it scrolls edge to edge.
+    // One column around both: a lazy list item stacks separate children on top of each other.
+    Column(modifier = modifier.fillMaxWidth()) {
+    if (about.gallery.isNotEmpty()) {
+        ArtistPhotosRow(photos = about.gallery, artistName = artistName, onOpen = { viewing = it })
+        Spacer(Modifier.height(14.dp))
+    }
+    viewing?.let { start ->
+        GalleryViewer(photos = about.gallery, startIndex = start, onDismiss = { viewing = null })
+    }
 
     Column(
-        modifier = modifier
+        modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp),
     ) {
-        if (photo != null) {
+        // No gallery: the one photo, as before (usually the banner's).
+        if (about.gallery.isEmpty() && photo != null) {
             AsyncImage(
                 model = ArtUrlUpgrader.upgrade(photo),
                 contentDescription = null,
@@ -124,5 +138,6 @@ fun AboutSection(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
+    }
     }
 }

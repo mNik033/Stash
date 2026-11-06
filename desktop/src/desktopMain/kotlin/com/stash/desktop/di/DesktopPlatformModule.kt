@@ -67,6 +67,11 @@ abstract class DesktopPlatformModule {
 
         @Provides
         @Singleton
+        fun provideSoundCloudClient(): com.stash.data.soundcloud.SoundCloudClient =
+            com.stash.data.soundcloud.SoundCloudClient(okhttp3.OkHttpClient())
+
+        @Provides
+        @Singleton
         fun provideLastFmCredentials(appVersionProvider: AppVersionProvider): com.stash.core.data.lastfm.LastFmCredentials =
             com.stash.core.data.lastfm.LastFmCredentials(
                 apiKey = "",

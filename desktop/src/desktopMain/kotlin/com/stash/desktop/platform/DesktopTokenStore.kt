@@ -55,6 +55,7 @@ class DesktopTokenStore @Inject constructor(
         val SPOTIFY = stringPreferencesKey("spotify_token")
         val YOUTUBE = stringPreferencesKey("youtube_token")
         val DISCORD = stringPreferencesKey("discord_token")
+        val SOUNDCLOUD = stringPreferencesKey("soundcloud_session")
     }
 
     // ── Spotify ──────────────────────────────────────────────────────────
@@ -128,6 +129,28 @@ class DesktopTokenStore @Inject constructor(
 
     override suspend fun clearCloudToken(accountKey: String) {
         dataStore.edit { it.remove(cloudKey(accountKey)) }
+    }
+
+    // ── SoundCloud ───────────────────────────────────────────────────────
+
+    override val soundCloudSession: Flow<com.stash.core.auth.soundcloud.SoundCloudSession?> = dataStore.data.map { prefs ->
+        prefs[Keys.SOUNDCLOUD]?.let { encrypted ->
+            try {
+                val bytes = encryption.decrypt(Base64.getDecoder().decode(encrypted))
+                json.decodeFromString<com.stash.core.auth.soundcloud.SoundCloudSession>(String(bytes, Charsets.UTF_8))
+            } catch (_: Exception) {
+                null
+            }
+        }
+    }
+
+    override suspend fun saveSoundCloudSession(session: com.stash.core.auth.soundcloud.SoundCloudSession) {
+        val bytes = json.encodeToString(com.stash.core.auth.soundcloud.SoundCloudSession.serializer(), session).toByteArray(Charsets.UTF_8)
+        saveBlob(Keys.SOUNDCLOUD, Base64.getEncoder().encodeToString(encryption.encrypt(bytes)))
+    }
+
+    override suspend fun clearSoundCloud() {
+        dataStore.edit { it.remove(Keys.SOUNDCLOUD) }
     }
 
     private fun cloudKey(accountKey: String): Preferences.Key<String> {

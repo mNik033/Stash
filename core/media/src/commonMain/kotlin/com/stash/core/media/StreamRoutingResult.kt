@@ -42,4 +42,7 @@ expect sealed class StreamRoutingResult {
      * still in flight. Caller should NOT emit any user-visible feedback.
      */
     data object Deduped : StreamRoutingResult
+
+    /** Download mode: the song isn't on the phone, and Download mode never streams. */
+    data object DownloadMode : StreamRoutingResult
 }

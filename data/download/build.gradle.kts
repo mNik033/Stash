@@ -78,6 +78,7 @@ kotlin {
             implementation(project(":core:network"))
             implementation(project(":data:ytmusic"))
             implementation(project(":data:spotify"))
+            implementation(project(":data:soundcloud"))
 
             implementation(libs.kotlinx.coroutines.core)
             implementation(libs.kotlinx.serialization.json)

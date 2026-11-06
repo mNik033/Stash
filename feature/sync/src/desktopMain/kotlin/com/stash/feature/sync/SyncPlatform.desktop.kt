@@ -1,8 +1,12 @@
 package com.stash.feature.sync
 
+import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.ui.unit.dp
 
 val LocalSyncViewModel = staticCompositionLocalOf<SyncViewModel?> { null }
 val LocalDownloadManagementViewModel = staticCompositionLocalOf<DownloadManagementViewModel?> { null }
@@ -40,4 +44,14 @@ actual fun formatRelativeTime(timestampMs: Long): String {
         days < 7 -> "${days}d ago"
         else -> "${days / 7}w ago"
     }
+}
+
+@Composable
+internal actual fun SoundCloudMark() {
+    androidx.compose.material3.Icon(
+        Icons.Filled.PlayArrow,
+        contentDescription = null,
+        tint = androidx.compose.ui.graphics.Color(0xFFFF5500),
+        modifier = androidx.compose.ui.Modifier.size(34.dp),
+    )
 }

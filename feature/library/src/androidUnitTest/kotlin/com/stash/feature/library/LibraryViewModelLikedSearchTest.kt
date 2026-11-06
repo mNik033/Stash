@@ -89,11 +89,13 @@ class LibraryViewModelLikedSearchTest {
             on { getPlaylistsByType(eq(PlaylistType.STASH_LIKED)) } doReturn flowOf(emptyList())
             on { getPlaylistsByType(eq(PlaylistType.LIKED_SONGS)) } doReturn flowOf(listOf(likedPlaylist))
             on { getTracksByPlaylist(eq(42L)) } doReturn flowOf(likedSongs)
+            on { getShownTracksByPlaylist(eq(42L)) } doReturn flowOf(likedSongs)
         }
         return LibraryViewModel(
             musicRepository = musicRepository,
             playerRepository = mock { on { playerState } doReturn MutableStateFlow(PlayerState()) },
             tokenManager = mock {
+                on { soundCloudSession } doReturn flowOf(null)
                 on { spotifyAuthState } doReturn MutableStateFlow<AuthState>(AuthState.NotConnected)
                 on { youTubeAuthState } doReturn MutableStateFlow<AuthState>(AuthState.NotConnected)
             },

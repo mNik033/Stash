@@ -2,6 +2,10 @@ package com.stash.feature.library
 
 import kotlin.math.absoluteValue
 import com.stash.core.ui.components.BackHandler
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material.icons.filled.AudioFile
+import androidx.compose.material.icons.filled.Link
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
@@ -164,6 +168,8 @@ fun LibraryScreen(
     onNavigateToSync: () -> Unit = {},
     onNavigateToSearch: () -> Unit = {},
     onNavigateToAccounts: () -> Unit = {},
+    /** "+" › Add from a link: the pasted Spotify / YouTube link's preview. */
+    onOpenLink: (String) -> Unit = {},
     viewModel: LibraryViewModel = libraryViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -253,6 +259,7 @@ fun LibraryScreen(
     Box(modifier = modifier.fillMaxSize()) {
         LibraryContent(
             state = state,
+            onOpenLink = onOpenLink,
             searchQuery = searchQuery,
             importState = importState,
             onShuffleLibrary = {
@@ -562,6 +569,7 @@ fun LibraryScreen(
 @Composable
 private fun LibraryContent(
     state: LibraryUiState,
+    onOpenLink: (String) -> Unit = {},
     /** Field-facing query — updates this frame; see LibraryViewModel.searchQuery. */
     searchQuery: String,
     importState: com.stash.data.download.files.LocalImportState,
@@ -724,8 +732,31 @@ private fun LibraryContent(
                     tint = chrome.accent,
                 )
             }
-            IconButton(onClick = launchImportPicker) {
-                Icon(Icons.Filled.Add, contentDescription = "Import tracks")
+            // "+": audio files from the phone, or a Spotify / YouTube link.
+            Box {
+                var addMenu by remember { mutableStateOf(false) }
+                var pasteLink by remember { mutableStateOf(false) }
+                IconButton(onClick = { addMenu = true }) {
+                    Icon(Icons.Filled.Add, contentDescription = "Add music")
+                }
+                DropdownMenu(expanded = addMenu, onDismissRequest = { addMenu = false }) {
+                    DropdownMenuItem(
+                        text = { Text("Add from a link") },
+                        leadingIcon = { Icon(Icons.Filled.Link, contentDescription = null) },
+                        onClick = { addMenu = false; pasteLink = true },
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Import audio files") },
+                        leadingIcon = { Icon(Icons.Filled.AudioFile, contentDescription = null) },
+                        onClick = { addMenu = false; launchImportPicker() },
+                    )
+                }
+                if (pasteLink) {
+                    com.stash.feature.library.share.PasteLinkDialog(
+                        onDismiss = { pasteLink = false },
+                        onOpen = { pasteLink = false; onOpenLink(it) },
+                    )
+                }
             }
             // Closing the search clears it: it used to only hide the field, leaving every tab
             // silently filtered by a query the user could no longer see.
@@ -1056,6 +1087,7 @@ private fun LikedTab(
         if (LikedFilter.STASH in sources) add("Stash" to LikedFilter.STASH)
         if (LikedFilter.SPOTIFY in sources) add("Spotify" to LikedFilter.SPOTIFY)
         if (LikedFilter.YOUTUBE in sources) add("YouTube" to LikedFilter.YOUTUBE)
+        if (LikedFilter.SOUNDCLOUD in sources) add("SoundCloud" to LikedFilter.SOUNDCLOUD)
     }
 
     // Track selected for the context-menu bottom sheet (opened via the ⋮ now;
@@ -1074,6 +1106,8 @@ private fun LikedTab(
     // Track pending delete confirmation.
     var trackToDelete by remember { mutableStateOf<Track?>(null) }
 
+    // Downloaded likes carry the check when the list mixes downloaded and streaming songs (the Songs tab's rule).
+    val mixed = remember(tracks) { tracks.any { it.isDownloaded } && tracks.any { !it.isDownloaded } }
     val listState = rememberLazyListState()
     Box(Modifier.fillMaxSize()) {
         // The rows share one width reading and text measurer (TrackListItem's fit).
@@ -1113,6 +1147,7 @@ private fun LikedTab(
                         onLongPress = { if (!selection.isActive) selection.enter(track.id) },
                         selectionActive = selection.isActive,
                         selected = selection.isSelected(track.id),
+                        showAvailabilityTag = mixed,
                         onMoreClick = { selectedTrack = track },
                     )
                 }
@@ -1513,7 +1548,10 @@ private fun PlaylistsGrid(
                                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
-                                SourceIndicator(source = playlist.source)
+                                // Imported playlists are locally owned; BOTH is not their songs' source.
+                                if (!playlist.sourceId.startsWith("custom_link_")) {
+                                    SourceIndicator(source = playlist.source)
+                                }
                                 Text(
                                     text = pluralize(playlist.trackCount, "track"),
                                     style = MaterialTheme.typography.bodySmall,
@@ -1576,7 +1614,10 @@ private fun PlaylistsGrid(
                                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
-                                SourceIndicator(source = playlist.source)
+                                // Imported playlists are locally owned; BOTH is not their songs' source.
+                                if (!playlist.sourceId.startsWith("custom_link_")) {
+                                    SourceIndicator(source = playlist.source)
+                                }
                                 Text(
                                     text = pluralize(playlist.trackCount, "track"),
                                     style = MaterialTheme.typography.bodySmall,
@@ -2798,7 +2839,7 @@ private fun LibraryEmptyState(
         )
         Spacer(modifier = Modifier.height(16.dp))
         Text(
-            text = "Your library is empty",
+            text = "No songs yet",
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.SemiBold,
             color = MaterialTheme.colorScheme.onBackground,

@@ -550,7 +550,14 @@ open class LibraryViewModel @Inject constructor(
     fun setLikedFilter(filter: LikedFilter) { _likedFilter.update { filter } }
 
     private val stashLikedFlow = musicRepository.getPlaylistsByType(PlaylistType.STASH_LIKED)
-    private val externalLikedFlow = musicRepository.getPlaylistsByType(PlaylistType.LIKED_SONGS)
+    private val externalLikedFlow = combine(
+        musicRepository.getPlaylistsByType(PlaylistType.LIKED_SONGS), tokenManager.soundCloudSession,
+    ) { playlists, session ->
+        playlists.filter { playlist ->
+            playlist.source != MusicSource.SOUNDCLOUD || session == null ||
+                com.stash.core.data.sync.SoundCloudPlaylistIds.belongsTo(playlist.sourceId, session.userId)
+        }
+    }
 
     /** Which like-origins actually have songs — drives the sift chips' visibility. */
     val likedSources: StateFlow<Set<LikedFilter>> =
@@ -561,6 +568,7 @@ open class LibraryViewModel @Inject constructor(
                     add(LikedFilter.SPOTIFY)
                 }
                 if (external.any { it.source == MusicSource.YOUTUBE && it.trackCount > 0 }) add(LikedFilter.YOUTUBE)
+                if (external.any { it.source == MusicSource.SOUNDCLOUD && it.trackCount > 0 }) add(LikedFilter.SOUNDCLOUD)
             }
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptySet())
 
@@ -578,12 +586,13 @@ open class LibraryViewModel @Inject constructor(
                 LikedFilter.STASH -> stash
                 LikedFilter.SPOTIFY -> external.filter { it.source == MusicSource.SPOTIFY || it.source == MusicSource.BOTH }
                 LikedFilter.YOUTUBE -> external.filter { it.source == MusicSource.YOUTUBE }
+                LikedFilter.SOUNDCLOUD -> external.filter { it.source == MusicSource.SOUNDCLOUD }
             }
         }.flatMapLatest { playlists ->
             if (playlists.isEmpty()) {
                 flowOf(emptyList())
             } else {
-                combine(playlists.map { musicRepository.getTracksByPlaylist(it.id) }) { arrays ->
+                combine(playlists.map { musicRepository.getShownTracksByPlaylist(it.id) }) { arrays ->
                     arrays.flatMap { it.toList() }.distinctBy { it.id }
                 }
             }
@@ -693,8 +702,6 @@ open class LibraryViewModel @Inject constructor(
      */
     fun playTrack(track: Track, allTracks: List<Track>) {
         viewModelScope.launch {
-            // Streaming is always allowed: every track is playable, and a
-            // not-downloaded one streams when it is reached.
             // Download mode: a downloaded tap queues only downloaded rows, so offline playback
             // never walks into online neighbours. Stream-only: every row shown is playable, so
             // the queue is exactly the list shown, whatever row was tapped.

@@ -26,4 +26,8 @@ interface TokenStore {
     suspend fun getCloudToken(accountKey: String): ServiceToken?
     suspend fun saveCloudToken(accountKey: String, token: ServiceToken)
     suspend fun clearCloudToken(accountKey: String)
+
+    val soundCloudSession: Flow<com.stash.core.auth.soundcloud.SoundCloudSession?>
+    suspend fun saveSoundCloudSession(session: com.stash.core.auth.soundcloud.SoundCloudSession)
+    suspend fun clearSoundCloud()
 }

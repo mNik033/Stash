@@ -90,6 +90,7 @@ class StreamSourceRegistry internal constructor(
     private val qualityPolicy: StreamQualityPolicy? = null,
     /** "Play my cloud copies first" (#679); null in hand-built tests (no cloud copies). */
     private val cloudCopies: CloudCopyFinder? = null,
+    private val soundCloud: SoundCloudStreamResolver? = null,
 ) {
     @Inject
     constructor(
@@ -106,10 +107,11 @@ class StreamSourceRegistry internal constructor(
         losslessQuota: LosslessQuota,
         qualityPolicy: StreamQualityPolicy,
         cloudCopies: CloudCopyFinder,
+        soundCloud: SoundCloudStreamResolver,
     ) : this(
         kennyy, qobuz, qbdlx, jiosaavn, youtube, streamingPreference,
         losslessSourceHealth, losslessPrefs, Dispatchers.IO, diagnosticsLog, tidal, losslessQuota,
-        qualityPolicy, cloudCopies,
+        qualityPolicy, cloudCopies, soundCloud,
     )
     /**
      * The user's own lossless copy of [track] in their cloud storage, as a [StreamUrl] whose url is
@@ -162,6 +164,7 @@ class StreamSourceRegistry internal constructor(
     ): StreamUrl? {
         // Last line of defence: a cloud song (the user's own file) is never looked up on the
         // lossless relays, JioSaavn or YouTube. Its player item streams from stash-cloud://.
+        if (track.soundCloudId != null || track.source == com.stash.core.model.MusicSource.SOUNDCLOUD) return soundCloud?.resolve(track)
         if (track.source == com.stash.core.model.MusicSource.CLOUD) return null
         // "Play my cloud copies first": the user's own lossless file, before any relay is asked.
         // A local lookup (no network), so it runs ahead of the single-flight and for look-aheads too.
@@ -404,7 +407,11 @@ class StreamSourceRegistry internal constructor(
                     null
                 }
 
-                for ((name, fn) in resolvers) {
+                // The lossless rungs the banner signal reads (a deliberate Prefer Tidal AAC serve counts as neither).
+                // A walk stopped before Tidal (speculative) records nothing: Tidal wasn't asked.
+                val lastLossless = resolvers.indexOfLast { it.first in LOSSLESS_RUNGS || it.first == TIDAL_DEFERRED }
+                for ((index, rung) in resolvers.withIndex()) {
+                    val (name, fn) = rung
                     if (hedged && (name == "jiosaavn" || name == "youtube")) continue // consulted below
                     if (name == TIDAL_DEFERRED) {
                         Log.i(TAG, "speculative resolve of ${track.id} stops before Tidal; the real play asks it")
@@ -412,17 +419,15 @@ class StreamSourceRegistry internal constructor(
                         return@coroutineScope null
                     }
                     val result = quietly(name, track) { fn(track) }
-                    // Feed the Home lossless-offline banner signal: a qbdlx null here
-                    // is a miss (dead credential OR catalog gap; the streak threshold
-                    // tells them apart), a non-null is a serve that resets the streak.
-                    // Not while the day's lossless allowance is spent: qbdlx then skips the
-                    // relays on purpose (no request), and lossless is not "offline".
-                    if (name == "qbdlx") {
-                        if (result != null) {
-                            losslessSourceHealth.recordQbdlxServed()
-                        } else if (losslessQuota?.isSpent() != true) {
-                            losslessSourceHealth.recordQbdlxMiss()
-                        }
+                    // Feed the Home lossless-offline banner signal: a serve by any lossless rung
+                    // resets the streak; the walk getting past the last of them with nothing is
+                    // a miss (dead credential OR catalog gap; the streak threshold tells them
+                    // apart). Not while the day's lossless allowance is spent: the relays are then
+                    // skipped on purpose (no request), and lossless is not "offline".
+                    if (name in LOSSLESS_RUNGS && result != null) {
+                        losslessSourceHealth.recordLosslessServed()
+                    } else if (index == lastLossless && result == null && losslessQuota?.isSpent() != true) {
+                        losslessSourceHealth.recordLosslessMiss()
                     }
                     if (result != null) {
                         // Diagnostic: which source actually served the stream. Helps
@@ -487,6 +492,9 @@ class StreamSourceRegistry internal constructor(
         private const val TAG = "StreamSourceRegistry"
         private const val TIDAL_DEFERRED = "tidal-deferred"
         private const val TIDAL_AAC = "tidal-aac"
+
+        /** The rungs whose serve is lossless, for the Home banner's signal ([LosslessSourceHealth]). */
+        private val LOSSLESS_RUNGS = setOf("qbdlx", "tidal")
         /** A cloud copy's StreamUrl lifetime: its address is stable, so a long one. */
         private const val CLOUD_COPY_TTL_MS = 6 * 60 * 60 * 1000L
     }

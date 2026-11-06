@@ -64,4 +64,7 @@ actual sealed class StreamRoutingResult {
      * still in flight. Caller should NOT emit any user-visible feedback.
      */
     actual data object Deduped : StreamRoutingResult()
+
+    /** Download mode: the song isn't on the phone, and Download mode never streams. */
+    actual data object DownloadMode : StreamRoutingResult()
 }

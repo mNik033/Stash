@@ -1,7 +1,9 @@
 package com.stash.feature.sync
 
 import android.text.format.DateUtils
+import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 
 @Composable
@@ -23,4 +25,14 @@ actual fun formatRelativeTime(timestampMs: Long): String {
         DateUtils.MINUTE_IN_MILLIS,
         DateUtils.FORMAT_ABBREV_RELATIVE,
     ).toString()
+}
+
+@Composable
+internal actual fun SoundCloudMark() {
+    androidx.compose.material3.Icon(
+        androidx.compose.ui.res.painterResource(com.stash.core.ui.R.drawable.ic_brand_soundcloud),
+        contentDescription = null,
+        tint = androidx.compose.ui.graphics.Color(0xFFFF5500),
+        modifier = androidx.compose.ui.Modifier.size(34.dp),
+    )
 }

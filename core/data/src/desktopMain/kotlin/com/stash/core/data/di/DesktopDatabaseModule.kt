@@ -145,6 +145,24 @@ object DesktopDatabaseModule {
     fun provideWebLibraryExportDao(db: StashDatabase): WebLibraryExportDao = db.webLibraryExportDao()
 
     @Provides
+    fun providePlaylistOrderDao(db: StashDatabase): com.stash.core.data.db.dao.PlaylistOrderDao = db.playlistOrderDao()
+
+    @Provides
+    fun provideRecordPlayDao(db: StashDatabase): com.stash.core.data.db.dao.RecordPlayDao = db.recordPlayDao()
+
+    @Provides
+    fun provideRecordLengthDao(db: StashDatabase): com.stash.core.data.db.dao.RecordLengthDao = db.recordLengthDao()
+
+    @Provides
+    fun provideRecordHiddenDao(db: StashDatabase): com.stash.core.data.db.dao.RecordHiddenDao = db.recordHiddenDao()
+
+    @Provides
+    fun provideRecordTasteDao(db: StashDatabase): com.stash.core.data.db.dao.RecordTasteDao = db.recordTasteDao()
+
+    @Provides
+    fun provideLibraryArtDao(db: StashDatabase): com.stash.core.data.db.dao.LibraryArtDao = db.libraryArtDao()
+
+    @Provides
     @Singleton
     fun provideLikeCoordinator(impl: com.stash.core.data.social.DesktopLikeCoordinator): com.stash.core.data.social.LikeCoordinator = impl
 

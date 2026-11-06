@@ -40,4 +40,8 @@ expect open class SyncViewModel : ViewModel {
     fun onDiscoverAutoMixesChanged(enabled: Boolean)
     fun onSyncDaysChanged(bitmask: Int)
     fun onLastFmRecommendationsToggled(enabled: Boolean)
+    fun onManageOpened()
+    fun onPlayPlaylist(playlistId: Long, name: String)
+    fun onArrivalChosen(streamEverything: Boolean)
+    fun onArrivalDismissed()
 }

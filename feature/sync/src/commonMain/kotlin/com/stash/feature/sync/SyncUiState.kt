@@ -50,6 +50,15 @@ data class SpotifySyncPlaylist(
     val artUrl: String? = null,
     val hideFromHome: Boolean = false,
     val pinnedToHomeAt: Long? = null,
+    /** The playlist's Save switch (#474's keep_offline): kept on the phone in either mode. */
+    val keepOffline: Boolean = false,
+    /** Taken out of the library on its account's page: listed there only, so it can come back. */
+    val userHidden: Boolean = false,
+    /** When the playlist first arrived (epoch ms): the Sync tab's covers lead with the newest. */
+    val dateAdded: Long = 0L,
+    /** A mix that can stack ([com.stash.core.data.sync.MixStacking]), and whether it does. */
+    val stackable: Boolean = false,
+    val stackSongs: Boolean = false,
 )
 
 /**
@@ -67,6 +76,15 @@ data class YouTubeSyncPlaylist(
     val artUrl: String? = null,
     val hideFromHome: Boolean = false,
     val pinnedToHomeAt: Long? = null,
+    /** The playlist's Save switch (#474's keep_offline): kept on the phone in either mode. */
+    val keepOffline: Boolean = false,
+    /** Taken out of the library on its account's page: listed there only, so it can come back. */
+    val userHidden: Boolean = false,
+    /** When the playlist first arrived (epoch ms): the Sync tab's covers lead with the newest. */
+    val dateAdded: Long = 0L,
+    /** A mix that can stack ([com.stash.core.data.sync.MixStacking]), and whether it does. */
+    val stackable: Boolean = false,
+    val stackSongs: Boolean = false,
 )
 
 /**
@@ -78,12 +96,14 @@ data class SyncUiState(
     val syncPreferences: SyncPreferences = SyncPreferences(),
     val spotifyConnected: Boolean = false,
     val youTubeConnected: Boolean = false,
+    val soundCloudConnected: Boolean = false,
     val recentSyncs: List<SyncHistoryInfo> = emptyList(),
     val isSyncing: Boolean = false,
     /** Spotify playlists available for sync preference toggles. */
     val spotifyPlaylists: List<SpotifySyncPlaylist> = emptyList(),
     /** YouTube Music playlists available for sync preference toggles. */
     val youTubePlaylists: List<YouTubeSyncPlaylist> = emptyList(),
+    val soundCloudPlaylists: List<YouTubeSyncPlaylist> = emptyList(),
     /**
      * Per-source sync modes. Each service's Sync Preferences card
      * renders its own Refresh/Accumulate chip row bound to one of
@@ -144,6 +164,17 @@ data class SyncUiState(
      * "Tap Sync Now" prompt vs. the stats grid in [SyncStatusCard].
      */
     val hasEverSynced: Boolean = false,
+    /**
+     * The first-sync sheet ("How should your music arrive?") is up. A new
+     * install's first Sync asks this before it runs; see [SyncViewModel.onSyncNow].
+     */
+    val showArrivalSheet: Boolean = false,
+    /**
+     * "Save to this phone" was picked on the first-sync sheet: the screen opens
+     * this source's playlists so the user can choose what to download, then
+     * clears it with [SyncViewModel.onManageOpened].
+     */
+    val openManageFor: SyncSource? = null,
 )
 
 /**
