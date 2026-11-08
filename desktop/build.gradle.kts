@@ -30,6 +30,7 @@ kotlin {
                 implementation(project(":data:download"))
                 implementation(project(":data:soundcloud"))
 
+                implementation(project(":feature:home"))
                 implementation(project(":feature:nowplaying"))
                 implementation(project(":feature:library"))
                 implementation(project(":feature:search"))

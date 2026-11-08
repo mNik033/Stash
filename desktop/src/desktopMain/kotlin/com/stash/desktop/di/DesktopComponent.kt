@@ -18,6 +18,7 @@ import com.stash.data.spotify.di.DesktopSpotifyDataModule
 import com.stash.data.ytmusic.di.DesktopYTMusicDataModule
 import com.stash.desktop.platform.MacOsMediaControls
 import com.stash.desktop.platform.MpvPlaybackEngine
+import com.stash.feature.home.DesktopHomeModule
 import com.stash.feature.library.DesktopLibraryModule
 import com.stash.feature.library.LibraryViewModel
 import com.stash.feature.library.allsongs.AllSongsViewModel
@@ -41,6 +42,7 @@ import javax.inject.Singleton
         DesktopYTMusicDataModule::class,
         DesktopLibraryModule::class,
         DesktopSearchModule::class,
+        DesktopHomeModule::class,
         DesktopViewModelModule::class,
     ]
 )
@@ -57,7 +59,9 @@ interface DesktopComponent {
     fun tokenManager(): TokenManager
     fun okHttpClient(): OkHttpClient
 
-    fun homeViewModel(): com.stash.desktop.ui.home.DesktopHomeViewModel
+    fun homeViewModel(): com.stash.feature.home.HomeViewModel
+    fun homeShelvesViewModel(): com.stash.feature.home.shelves.HomeShelvesViewModel
+    fun desktopHomeViewModel(): com.stash.desktop.ui.home.DesktopHomeViewModel
     fun libraryViewModel(): LibraryViewModel
     fun allSongsViewModel(): AllSongsViewModel
     fun searchViewModel(): SearchViewModel
@@ -81,6 +85,22 @@ interface DesktopComponent {
     fun losslessSourcePreferences(): com.stash.data.download.lossless.LosslessSourcePreferences
     fun losslessConfigFetcher(): com.stash.data.download.lossless.relay.LosslessConfigFetcher
     fun losslessAvailability(): com.stash.data.download.lossless.LosslessAvailability
+    fun homeDiscoveryRepository(): com.stash.core.data.discovery.HomeDiscoveryRepository
+    fun mixWorkerScheduler(): com.stash.feature.library.mixbuilder.MixWorkerScheduler
+
+    fun playlistBrowseViewModel(genre: String): com.stash.feature.home.PlaylistBrowseViewModel =
+        com.stash.feature.home.PlaylistBrowseViewModel(
+            savedStateHandle = androidx.lifecycle.SavedStateHandle(mapOf("genre" to genre)),
+            repository = homeDiscoveryRepository(),
+        )
+
+    fun mixBuilderViewModel(recipeId: Long?): com.stash.feature.library.mixbuilder.MixBuilderViewModel =
+        com.stash.feature.library.mixbuilder.MixBuilderViewModel(
+            savedStateHandle = androidx.lifecycle.SavedStateHandle(if (recipeId != null) mapOf("recipeId" to recipeId) else emptyMap()),
+            recipeDao = database().stashMixRecipeDao(),
+            musicRepository = musicRepository(),
+            mixWorkerScheduler = mixWorkerScheduler(),
+        )
 
     @Component.Factory
     interface Factory {

@@ -1,6 +1,8 @@
 package com.stash.feature.home
 
+import com.stash.core.common.platform.AppPaths
 import com.stash.core.data.db.dao.StashMixRecipeDao
+import java.io.File
 import com.stash.core.data.db.entity.StashMixRecipeEntity
 import com.stash.core.data.discovery.HomeDiscoveryRepository
 import com.stash.core.data.prefs.StreamingPreference
@@ -514,7 +516,13 @@ class HomeViewModelTest {
                 on { this.anyUserOwned } doReturn flowOf(anyUserOwned)
             },
             shownSongs = shownSongs,
-            context = mock(),
+            appPaths = object : AppPaths {
+                override val filesDir: File = File(System.getProperty("java.io.tmpdir"))
+                override val cacheDir: File = File(System.getProperty("java.io.tmpdir"))
+                override val noBackupFilesDir: File = File(System.getProperty("java.io.tmpdir"))
+                override fun getDatabasePath(name: String): File = File(System.getProperty("java.io.tmpdir"), name)
+            },
+            mixWorkerScheduler = mock<HomeMixWorkerScheduler>(),
         )
     }
 

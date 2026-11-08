@@ -90,6 +90,10 @@ abstract class DesktopDownloadModule {
     @Singleton
     abstract fun bindQbdlxSigningResolver(impl: QbdlxCredentialStore): QbdlxSigningResolver
 
+    @Binds
+    @Singleton
+    abstract fun bindHomeDiscoveryRepository(impl: com.stash.data.download.lossless.qbdlx.HomeDiscoveryRepositoryImpl): com.stash.core.data.discovery.HomeDiscoveryRepository
+
     companion object {
         @Provides
         @Singleton

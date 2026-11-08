@@ -97,6 +97,9 @@ import com.stash.core.ui.theme.StashCyan
 import com.stash.core.ui.theme.StashPurple
 import com.stash.desktop.di.DesktopComponent
 import com.stash.desktop.ui.home.DesktopHomeScreen
+import com.stash.feature.home.HomeScreen
+import com.stash.feature.home.LocalHomeViewModel
+import com.stash.feature.home.LocalHomeShelvesViewModel
 import com.stash.feature.library.LibraryScreen
 import com.stash.feature.library.LocalAllSongsViewModel
 import com.stash.feature.library.LocalLibraryViewModel
@@ -177,6 +180,9 @@ sealed interface DesktopScreen {
         val source: AlbumSource = AlbumSource.YOUTUBE,
         val qobuzTrackCount: Int? = null,
     ) : DesktopScreen
+    data class MixBrowse(val rail: com.stash.feature.home.MixRail) : DesktopScreen
+    data class PlaylistBrowse(val genre: String) : DesktopScreen
+    data class MixBuilder(val recipeId: Long? = null) : DesktopScreen
 }
 
 @Composable
@@ -195,11 +201,14 @@ fun DesktopScaffold(
     val snackbarHostState = remember { SnackbarHostState() }
 
     val activeNavTab = when (currentScreen) {
-        DesktopScreen.Home -> DesktopNavTab.Home
+        DesktopScreen.Home,
+        is DesktopScreen.MixBrowse,
+        is DesktopScreen.PlaylistBrowse -> DesktopNavTab.Home
         DesktopScreen.Library,
         is DesktopScreen.PlaylistDetail,
         is DesktopScreen.AlbumDetail,
-        is DesktopScreen.ArtistDetail -> DesktopNavTab.Library
+        is DesktopScreen.ArtistDetail,
+        is DesktopScreen.MixBuilder -> DesktopNavTab.Library
         DesktopScreen.Search,
         is DesktopScreen.ArtistProfile,
         is DesktopScreen.AlbumDiscovery -> DesktopNavTab.Search
@@ -232,6 +241,7 @@ fun DesktopScaffold(
         LocalFailedDownloadsViewModel provides remember { component.failedDownloadsViewModel() },
         LocalFailedMatchesViewModel provides remember { component.failedMatchesViewModel() },
         LocalShareMixViewModel provides remember { { playlistId -> component.shareMixViewModelFactory().create(playlistId) } },
+        com.stash.feature.home.LocalPlaylistBrowseViewModelFactory provides remember { { genre -> component.playlistBrowseViewModel(genre) } },
     ) {
         Box(modifier = modifier.fillMaxSize()) {
             Column(
@@ -314,33 +324,48 @@ fun DesktopScaffold(
                         when (val screen = currentScreen) {
                             DesktopScreen.Home -> {
                                 val homeVm = remember { component.homeViewModel() }
-                                DesktopHomeScreen(
-                                    viewModel = homeVm,
-                                    onNavigateToPlaylist = { playlistId ->
-                                        backStack.add(DesktopScreen.PlaylistDetail(playlistId))
-                                    },
-                                    onNavigateToAlbumDiscovery = { album ->
-                                        backStack.add(
-                                            DesktopScreen.AlbumDiscovery(
-                                                browseId = album.id,
-                                                title = album.title,
-                                                artist = album.artist,
-                                                thumbnailUrl = album.thumbnailUrl,
-                                                year = album.year,
-                                                source = album.source,
-                                                qobuzTrackCount = null,
-                                            ),
-                                        )
-                                    },
-                                    onNavigateToSearch = {
-                                        backStack.clear()
-                                        backStack.add(DesktopScreen.Search)
-                                    },
-                                    onNavigateToSync = {
-                                        backStack.clear()
-                                        backStack.add(DesktopScreen.Sync)
-                                    },
-                                )
+                                val homeShelvesVm = remember { component.homeShelvesViewModel() }
+                                CompositionLocalProvider(
+                                    LocalHomeViewModel provides homeVm,
+                                    LocalHomeShelvesViewModel provides homeShelvesVm,
+                                ) {
+                                    HomeScreen(
+                                        viewModel = homeVm,
+                                        shelvesViewModel = homeShelvesVm,
+                                        onNavigateToPlaylist = { playlistId ->
+                                            backStack.add(DesktopScreen.PlaylistDetail(playlistId))
+                                        },
+                                        onNavigateToAlbum = { album ->
+                                            backStack.add(
+                                                DesktopScreen.AlbumDiscovery(
+                                                    browseId = album.id,
+                                                    title = album.title,
+                                                    artist = album.artist,
+                                                    thumbnailUrl = album.thumbnailUrl,
+                                                    year = album.year,
+                                                    source = album.source,
+                                                    qobuzTrackCount = null,
+                                                ),
+                                            )
+                                        },
+                                        onNavigateToLibrary = {
+                                            backStack.clear()
+                                            backStack.add(DesktopScreen.Library)
+                                        },
+                                        onNavigateToSettings = {
+                                            backStack.add(DesktopScreen.Settings)
+                                        },
+                                        onSeeAllMixes = { rail ->
+                                            backStack.add(DesktopScreen.MixBrowse(rail))
+                                        },
+                                        onSeeAllPlaylists = { genre ->
+                                            backStack.add(DesktopScreen.PlaylistBrowse(genre))
+                                        },
+                                        onNavigateToMixBuilder = { recipeId ->
+                                            backStack.add(DesktopScreen.MixBuilder(recipeId))
+                                        },
+                                    )
+                                }
                             }
                             DesktopScreen.Library -> {
                             LibraryScreen(
@@ -578,6 +603,55 @@ fun DesktopScaffold(
                                                 qobuzTrackCount = album.trackCount,
                                             ),
                                         )
+                                    },
+                                )
+                            }
+                        }
+                        is DesktopScreen.MixBrowse -> {
+                            val homeVm = remember { component.homeViewModel() }
+                            com.stash.feature.home.MixBrowseScreen(
+                                rail = screen.rail,
+                                onBack = {
+                                    if (backStack.size > 1) backStack.removeAt(backStack.lastIndex)
+                                },
+                                onOpenMix = { mixId ->
+                                    backStack.add(DesktopScreen.PlaylistDetail(mixId))
+                                },
+                                viewModel = homeVm,
+                            )
+                        }
+                        is DesktopScreen.PlaylistBrowse -> {
+                            val playlistBrowseVm = remember(screen.genre) {
+                                component.playlistBrowseViewModel(screen.genre)
+                            }
+                            com.stash.feature.home.PlaylistBrowseScreen(
+                                onBack = {
+                                    if (backStack.size > 1) backStack.removeAt(backStack.lastIndex)
+                                },
+                                onNavigateToAlbum = { album ->
+                                    backStack.add(
+                                        DesktopScreen.AlbumDiscovery(
+                                            browseId = album.id,
+                                            title = album.title,
+                                            artist = album.artist,
+                                            thumbnailUrl = album.thumbnailUrl,
+                                            year = album.year,
+                                            source = album.source,
+                                            qobuzTrackCount = null,
+                                        ),
+                                    )
+                                },
+                                viewModel = playlistBrowseVm,
+                            )
+                        }
+                        is DesktopScreen.MixBuilder -> {
+                            val mixBuilderVm = remember(screen.recipeId) {
+                                component.mixBuilderViewModel(screen.recipeId)
+                            }
+                            CompositionLocalProvider(com.stash.feature.library.LocalMixBuilderViewModel provides mixBuilderVm) {
+                                com.stash.feature.library.mixbuilder.MixBuilderScreen(
+                                    onBack = {
+                                        if (backStack.size > 1) backStack.removeAt(backStack.lastIndex)
                                     },
                                 )
                             }

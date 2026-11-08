@@ -67,6 +67,11 @@ abstract class DesktopPlatformModule {
 
         @Provides
         @Singleton
+        @com.stash.core.data.tipjar.SupportersJsonUrl
+        fun provideSupportersJsonUrl(): String = ""
+
+        @Provides
+        @Singleton
         fun provideSoundCloudClient(): com.stash.data.soundcloud.SoundCloudClient =
             com.stash.data.soundcloud.SoundCloudClient(okhttp3.OkHttpClient())
 
