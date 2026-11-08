@@ -1,7 +1,8 @@
 package com.stash.core.data.db
 
 import androidx.room.migration.Migration
-import androidx.sqlite.db.SupportSQLiteDatabase
+import androidx.sqlite.SQLiteConnection
+import androidx.sqlite.execSQL
 import com.stash.core.data.lastfm.LastFmLookupRules
 import com.stash.core.data.lastfm.LastFmTrackInfo
 import com.stash.core.data.lastfm.lastFmCacheKey
@@ -14,8 +15,8 @@ object StashMigrations {
     const val DATABASE_NAME = "stash.db"
 
         /** v3 → v4: add sync_enabled column to playlists table. */
-        val MIGRATION_3_4 = object : Migration(3, 4) {
-            override fun migrate(db: SupportSQLiteDatabase) {
+        val MIGRATION_3_4 = object : StashMigration(3, 4) {
+            override fun migrateDb(db: SQLiteConnection) {
                 db.execSQL(
                     "ALTER TABLE playlists ADD COLUMN sync_enabled INTEGER NOT NULL DEFAULT 1"
                 )
@@ -23,23 +24,23 @@ object StashMigrations {
         }
 
         /** v4 → v5: add failure_type to download_queue, match_dismissed to tracks. */
-        val MIGRATION_4_5 = object : Migration(4, 5) {
-            override fun migrate(db: SupportSQLiteDatabase) {
+        val MIGRATION_4_5 = object : StashMigration(4, 5) {
+            override fun migrateDb(db: SQLiteConnection) {
                 db.execSQL("ALTER TABLE download_queue ADD COLUMN failure_type TEXT NOT NULL DEFAULT 'NONE'")
                 db.execSQL("ALTER TABLE tracks ADD COLUMN match_dismissed INTEGER NOT NULL DEFAULT 0")
             }
         }
 
         /** v5 → v6: add rejected_video_id to download_queue for preview of closest rejected match. */
-        val MIGRATION_5_6 = object : Migration(5, 6) {
-            override fun migrate(db: SupportSQLiteDatabase) {
+        val MIGRATION_5_6 = object : StashMigration(5, 6) {
+            override fun migrateDb(db: SQLiteConnection) {
                 db.execSQL("ALTER TABLE download_queue ADD COLUMN rejected_video_id TEXT DEFAULT NULL")
             }
         }
 
         /** v6 → v7: add artist_profile_cache table for SWR artist pages. */
-        val MIGRATION_6_7 = object : Migration(6, 7) {
-            override fun migrate(db: SupportSQLiteDatabase) {
+        val MIGRATION_6_7 = object : StashMigration(6, 7) {
+            override fun migrateDb(db: SQLiteConnection) {
                 db.execSQL(
                     """
                     CREATE TABLE IF NOT EXISTS artist_profile_cache (
@@ -57,8 +58,8 @@ object StashMigrations {
          * optional Last.fm scrobbling. ForeignKey(tracks.id) cascades so
          * rows are cleaned up if a track is deleted.
          */
-        val MIGRATION_7_8 = object : Migration(7, 8) {
-            override fun migrate(db: SupportSQLiteDatabase) {
+        val MIGRATION_7_8 = object : StashMigration(7, 8) {
+            override fun migrateDb(db: SQLiteConnection) {
                 db.execSQL(
                     """
                     CREATE TABLE IF NOT EXISTS listening_events (
@@ -82,8 +83,8 @@ object StashMigrations {
          * Failed Matches screen for re-match. Defaults to 0 so no existing
          * row is retroactively flagged.
          */
-        val MIGRATION_8_9 = object : Migration(8, 9) {
-            override fun migrate(db: SupportSQLiteDatabase) {
+        val MIGRATION_8_9 = object : StashMigration(8, 9) {
+            override fun migrateDb(db: SQLiteConnection) {
                 db.execSQL(
                     "ALTER TABLE tracks ADD COLUMN match_flagged INTEGER NOT NULL DEFAULT 0"
                 )
@@ -96,8 +97,8 @@ object StashMigrations {
          * this during sync so blacklisted identities survive across sync
          * runs without the track ever being re-queued.
          */
-        val MIGRATION_9_10 = object : Migration(9, 10) {
-            override fun migrate(db: SupportSQLiteDatabase) {
+        val MIGRATION_9_10 = object : StashMigration(9, 10) {
+            override fun migrateDb(db: SQLiteConnection) {
                 db.execSQL(
                     "ALTER TABLE tracks ADD COLUMN is_blacklisted INTEGER NOT NULL DEFAULT 0"
                 )
@@ -114,8 +115,8 @@ object StashMigrations {
          * [StashMixRecipeEntity], and [DiscoveryQueueEntity] — if those
          * change, this migration + the schema JSON both need updating.
          */
-        val MIGRATION_10_11 = object : Migration(10, 11) {
-            override fun migrate(db: SupportSQLiteDatabase) {
+        val MIGRATION_10_11 = object : StashMigration(10, 11) {
+            override fun migrateDb(db: SQLiteConnection) {
                 // track_tags — composite PK (track_id, tag), FK cascade on track delete.
                 db.execSQL(
                     """
@@ -192,8 +193,8 @@ object StashMigrations {
          * flag. The matcher uses them to distinguish clean vs. explicit
          * masters and to pin a specific recording when an ISRC is known.
          */
-        val MIGRATION_11_12 = object : Migration(11, 12) {
-            override fun migrate(db: SupportSQLiteDatabase) {
+        val MIGRATION_11_12 = object : StashMigration(11, 12) {
+            override fun migrateDb(db: SQLiteConnection) {
                 db.execSQL("ALTER TABLE tracks ADD COLUMN isrc TEXT DEFAULT NULL")
                 db.execSQL("ALTER TABLE tracks ADD COLUMN explicit INTEGER DEFAULT NULL")
                 db.execSQL("ALTER TABLE remote_track_snapshots ADD COLUMN isrc TEXT DEFAULT NULL")
@@ -213,8 +214,8 @@ object StashMigrations {
          * for Spotify-imported mixes), otherwise from the migration's
          * wall clock.
          */
-        val MIGRATION_12_13 = object : Migration(12, 13) {
-            override fun migrate(db: SupportSQLiteDatabase) {
+        val MIGRATION_12_13 = object : StashMigration(12, 13) {
+            override fun migrateDb(db: SQLiteConnection) {
                 db.execSQL("ALTER TABLE playlists ADD COLUMN date_added INTEGER NOT NULL DEFAULT 0")
                 // last_synced is an Instant stored as epoch-millis INTEGER;
                 // NULL when never synced. Use it as the best backfill
@@ -238,8 +239,8 @@ object StashMigrations {
          * column is TEXT (the enum's .name), not an INTEGER code, so
          * migrations reading the DB don't need to know the enum ordering.
          */
-        val MIGRATION_13_14 = object : Migration(13, 14) {
-            override fun migrate(db: SupportSQLiteDatabase) {
+        val MIGRATION_13_14 = object : StashMigration(13, 14) {
+            override fun migrateDb(db: SQLiteConnection) {
                 db.execSQL("ALTER TABLE tracks ADD COLUMN music_video_type TEXT")
             }
         }
@@ -250,8 +251,8 @@ object StashMigrations {
          * was already sent to YouTube Music history. `yt_canonical_video_id`
          * on tracks holds the YouTube Music video ID for canonical matching.
          */
-        val MIGRATION_14_15 = object : Migration(14, 15) {
-            override fun migrate(db: SupportSQLiteDatabase) {
+        val MIGRATION_14_15 = object : StashMigration(14, 15) {
+            override fun migrateDb(db: SQLiteConnection) {
                 db.execSQL(
                     "ALTER TABLE listening_events ADD COLUMN yt_scrobbled INTEGER NOT NULL DEFAULT 0"
                 )
@@ -270,8 +271,8 @@ object StashMigrations {
          * remote_playlist_snapshots. Surfaces YouTube continuation-pagination
          * partial results from the new [YTMusicApiClient] paged-result types.
          */
-        val MIGRATION_15_16 = object : Migration(15, 16) {
-            override fun migrate(db: SupportSQLiteDatabase) {
+        val MIGRATION_15_16 = object : StashMigration(15, 16) {
+            override fun migrateDb(db: SQLiteConnection) {
                 db.execSQL(
                     "ALTER TABLE remote_playlist_snapshots ADD COLUMN partial INTEGER NOT NULL DEFAULT 0"
                 )
@@ -296,8 +297,8 @@ object StashMigrations {
          * (`QualityInfoBackfillWorker`) sweeps lossless rows whose
          * columns are still NULL.
          */
-        val MIGRATION_16_17 = object : Migration(16, 17) {
-            override fun migrate(db: SupportSQLiteDatabase) {
+        val MIGRATION_16_17 = object : StashMigration(16, 17) {
+            override fun migrateDb(db: SQLiteConnection) {
                 db.execSQL("ALTER TABLE tracks ADD COLUMN bits_per_sample INTEGER DEFAULT NULL")
                 db.execSQL("ALTER TABLE tracks ADD COLUMN sample_rate_hz INTEGER DEFAULT NULL")
             }
@@ -310,8 +311,8 @@ object StashMigrations {
          * MIGRATION_16_17 quality-info columns. v0.9.13 ships the
          * heart button + auto-save scrobbler that populate these.
          */
-        val MIGRATION_17_18 = object : Migration(17, 18) {
-            override fun migrate(db: SupportSQLiteDatabase) {
+        val MIGRATION_17_18 = object : StashMigration(17, 18) {
+            override fun migrateDb(db: SQLiteConnection) {
                 db.execSQL("ALTER TABLE tracks ADD COLUMN spotify_saved_at INTEGER DEFAULT NULL")
                 db.execSQL("ALTER TABLE tracks ADD COLUMN ytmusic_saved_at INTEGER DEFAULT NULL")
                 db.execSQL("ALTER TABLE tracks ADD COLUMN stash_liked_at INTEGER DEFAULT NULL")
@@ -339,8 +340,8 @@ object StashMigrations {
          * BlocklistKey.fromStoredCanonicals() which produces an identical
          * shape, ensuring the integrity worker can match these rows later.
          */
-        val MIGRATION_18_19 = object : Migration(18, 19) {
-            override fun migrate(db: SupportSQLiteDatabase) {
+        val MIGRATION_18_19 = object : StashMigration(18, 19) {
+            override fun migrateDb(db: SQLiteConnection) {
                 db.execSQL(
                     """
                     CREATE TABLE IF NOT EXISTS track_blocklist (
@@ -394,8 +395,8 @@ object StashMigrations {
          * hand-edit. Likewise the index list below mirrors 20.json's
          * indices array exactly.
          */
-        val MIGRATION_19_20 = object : Migration(19, 20) {
-            override fun migrate(db: SupportSQLiteDatabase) {
+        val MIGRATION_19_20 = object : StashMigration(19, 20) {
+            override fun migrateDb(db: SQLiteConnection) {
                 // Defensively disable FK enforcement during the dance
                 // (no FK targets `tracks.id` directly today, but the
                 // pragma is cheap insurance against a future FK addition
@@ -501,8 +502,8 @@ object StashMigrations {
          *    "every listening_event is a real listen" invariant
          *    that the auto-save scrobbler depends on.
          */
-        val MIGRATION_20_21 = object : Migration(20, 21) {
-            override fun migrate(db: SupportSQLiteDatabase) {
+        val MIGRATION_20_21 = object : StashMigration(20, 21) {
+            override fun migrateDb(db: SQLiteConnection) {
                 // 1. Track-level columns for Last.fm enrichment.
                 db.execSQL("ALTER TABLE tracks ADD COLUMN mbid TEXT DEFAULT NULL")
                 db.execSQL("ALTER TABLE tracks ADD COLUMN lastfm_user_playcount INTEGER DEFAULT NULL")
@@ -540,8 +541,8 @@ object StashMigrations {
          * no-op on disk; its only job is to advance the schema version
          * so Room is happy that the new enum vocabulary is "expected".
          */
-        val MIGRATION_21_22 = object : Migration(21, 22) {
-            override fun migrate(db: SupportSQLiteDatabase) {
+        val MIGRATION_21_22 = object : StashMigration(21, 22) {
+            override fun migrateDb(db: SQLiteConnection) {
                 // No-op DDL: TEXT columns accept new enum names natively.
             }
         }
@@ -558,8 +559,8 @@ object StashMigrations {
          * MusicRepositoryImpl.addTrackToPlaylist path which only targeted
          * CUSTOM playlists — those don't hit clearPlaylistTracks anyway.
          */
-        val MIGRATION_22_23 = object : Migration(22, 23) {
-            override fun migrate(db: SupportSQLiteDatabase) {
+        val MIGRATION_22_23 = object : StashMigration(22, 23) {
+            override fun migrateDb(db: SQLiteConnection) {
                 db.execSQL(
                     "ALTER TABLE playlist_tracks " +
                         "ADD COLUMN locally_added INTEGER NOT NULL DEFAULT 0",
@@ -577,8 +578,8 @@ object StashMigrations {
          * attempt; usable for stale-measurement detection if the algorithm
          * ever changes and for the weekly NaN-resurrection query).
          */
-        val MIGRATION_23_24 = object : Migration(23, 24) {
-            override fun migrate(db: SupportSQLiteDatabase) {
+        val MIGRATION_23_24 = object : StashMigration(23, 24) {
+            override fun migrateDb(db: SQLiteConnection) {
                 db.execSQL("ALTER TABLE tracks ADD COLUMN loudness_lufs REAL")
                 db.execSQL("ALTER TABLE tracks ADD COLUMN true_peak_dbfs REAL")
                 db.execSQL("ALTER TABLE tracks ADD COLUMN loudness_measured_at INTEGER")
@@ -599,8 +600,8 @@ object StashMigrations {
          * v0.9.26 startup backfill in [com.stash.app.StashApplication]
          * fills the column from the file's path-encoded artist folder.
          */
-        val MIGRATION_24_25 = object : Migration(24, 25) {
-            override fun migrate(db: SupportSQLiteDatabase) {
+        val MIGRATION_24_25 = object : StashMigration(24, 25) {
+            override fun migrateDb(db: SQLiteConnection) {
                 db.execSQL("ALTER TABLE tracks ADD COLUMN album_artist TEXT NOT NULL DEFAULT ''")
             }
         }
@@ -617,8 +618,8 @@ object StashMigrations {
          * default values, and the `AvailabilityCheckWorker` fills them in over
          * the next few minutes after first launch on v0.9.27.
          */
-        val MIGRATION_25_26 = object : Migration(25, 26) {
-            override fun migrate(db: SupportSQLiteDatabase) {
+        val MIGRATION_25_26 = object : StashMigration(25, 26) {
+            override fun migrateDb(db: SQLiteConnection) {
                 db.execSQL("ALTER TABLE tracks ADD COLUMN is_streamable INTEGER NOT NULL DEFAULT 0")
                 db.execSQL("ALTER TABLE tracks ADD COLUMN is_streamable_checked_at INTEGER")
             }
@@ -633,8 +634,8 @@ object StashMigrations {
          * MetadataBackfillWorker queries `metadata_embedded_at IS NULL`
          * so both success and failure stamps terminate the work item.
          */
-        val MIGRATION_26_27 = object : Migration(26, 27) {
-            override fun migrate(db: SupportSQLiteDatabase) {
+        val MIGRATION_26_27 = object : StashMigration(26, 27) {
+            override fun migrateDb(db: SQLiteConnection) {
                 db.execSQL("ALTER TABLE tracks ADD COLUMN metadata_embedded_at INTEGER")
             }
         }
@@ -652,8 +653,8 @@ object StashMigrations {
          * epoch-millis (a `lyrics` row exists for this track). NULL means
          * the on-open priority fetch (or a re-download) may still retry.
          */
-        val MIGRATION_27_28 = object : Migration(27, 28) {
-            override fun migrate(db: SupportSQLiteDatabase) {
+        val MIGRATION_27_28 = object : StashMigration(27, 28) {
+            override fun migrateDb(db: SQLiteConnection) {
                 db.execSQL("ALTER TABLE tracks ADD COLUMN lyrics_fetched_at INTEGER")
                 db.execSQL("""
                     CREATE TABLE IF NOT EXISTS lyrics (
@@ -692,24 +693,24 @@ object StashMigrations {
          * (storing the enum `.name`), so swapping one literal for another
          * needs no DDL.
          */
-        val MIGRATION_28_29 = object : Migration(28, 29) {
-            override fun migrate(db: SupportSQLiteDatabase) {
+        val MIGRATION_28_29 = object : StashMigration(28, 29) {
+            override fun migrateDb(db: SQLiteConnection) {
                 db.execSQL(
                     "UPDATE download_queue SET failure_type = 'UNKNOWN' WHERE failure_type = 'DOWNLOAD_ERROR'"
                 )
             }
         }
 
-        val MIGRATION_29_30 = object : Migration(29, 30) {
-            override fun migrate(db: SupportSQLiteDatabase) {
+        val MIGRATION_29_30 = object : StashMigration(29, 30) {
+            override fun migrateDb(db: SQLiteConnection) {
                 db.execSQL("ALTER TABLE stash_mix_recipes ADD COLUMN mood_keys_csv TEXT NOT NULL DEFAULT ''")
                 db.execSQL("ALTER TABLE stash_mix_recipes ADD COLUMN tag_sample_depth INTEGER NOT NULL DEFAULT 0")
             }
         }
 
         /** v30 → v31: add lastfm_response_cache for generic Last.fm lookups. */
-        val MIGRATION_30_31 = object : Migration(30, 31) {
-            override fun migrate(db: SupportSQLiteDatabase) {
+        val MIGRATION_30_31 = object : StashMigration(30, 31) {
+            override fun migrateDb(db: SQLiteConnection) {
                 db.execSQL(
                     """
                     CREATE TABLE IF NOT EXISTS lastfm_response_cache (
@@ -728,8 +729,8 @@ object StashMigrations {
          * negative / transient), so the antra Spotify-URI resolver doesn't
          * re-search Spotify on every play. Purely additive — keyed by trackId.
          */
-        val MIGRATION_31_32 = object : Migration(31, 32) {
-            override fun migrate(db: SupportSQLiteDatabase) {
+        val MIGRATION_31_32 = object : StashMigration(31, 32) {
+            override fun migrateDb(db: SQLiteConnection) {
                 db.execSQL(
                     """
                     CREATE TABLE IF NOT EXISTS spotify_resolution (
@@ -754,8 +755,8 @@ object StashMigrations {
          * (Offline). NULL on pre-migration rows — the UI suppresses the
          * label for those since their mode is unknown.
          */
-        val MIGRATION_32_33 = object : Migration(32, 33) {
-            override fun migrate(db: SupportSQLiteDatabase) {
+        val MIGRATION_32_33 = object : StashMigration(32, 33) {
+            override fun migrateDb(db: SQLiteConnection) {
                 db.execSQL("ALTER TABLE sync_history ADD COLUMN streaming_mode INTEGER DEFAULT NULL")
             }
         }
@@ -765,8 +766,8 @@ object StashMigrations {
          * mixes can be suppressed from the Home rails without disabling sync
          * or deleting them. NOT NULL DEFAULT 0 — existing rows stay visible.
          */
-        val MIGRATION_33_34 = object : Migration(33, 34) {
-            override fun migrate(db: SupportSQLiteDatabase) {
+        val MIGRATION_33_34 = object : StashMigration(33, 34) {
+            override fun migrateDb(db: SQLiteConnection) {
                 db.execSQL("ALTER TABLE playlists ADD COLUMN hide_from_home INTEGER NOT NULL DEFAULT 0")
             }
         }
@@ -775,8 +776,8 @@ object StashMigrations {
          * v34 → v35: add the flac_upgrade_queue worklist table for the batch
          * "Upgrade to FLAC" worker (spec 2026-07-22 §3). Purely additive.
          */
-        val MIGRATION_34_35 = object : Migration(34, 35) {
-            override fun migrate(db: SupportSQLiteDatabase) {
+        val MIGRATION_34_35 = object : StashMigration(34, 35) {
+            override fun migrateDb(db: SQLiteConnection) {
                 db.execSQL(
                     """
                     CREATE TABLE IF NOT EXISTS `flac_upgrade_queue` (
@@ -799,8 +800,8 @@ object StashMigrations {
          * playlists to the top of the Library Playlists grid. NOT NULL
          * DEFAULT 0 — existing rows stay unpinned.
          */
-        val MIGRATION_35_36 = object : Migration(35, 36) {
-            override fun migrate(db: SupportSQLiteDatabase) {
+        val MIGRATION_35_36 = object : StashMigration(35, 36) {
+            override fun migrateDb(db: SQLiteConnection) {
                 db.execSQL("ALTER TABLE playlists ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0")
             }
         }
@@ -828,8 +829,8 @@ object StashMigrations {
          * and un-hearting it here must not silently delete that. Only a love this
          * column records — one Stash created — is ever un-loved.
          */
-        val MIGRATION_37_38 = object : Migration(37, 38) {
-            override fun migrate(db: SupportSQLiteDatabase) {
+        val MIGRATION_37_38 = object : StashMigration(37, 38) {
+            override fun migrateDb(db: SQLiteConnection) {
                 db.execSQL("ALTER TABLE tracks ADD COLUMN lastfm_loved_at INTEGER DEFAULT NULL")
             }
         }
@@ -861,8 +862,8 @@ object StashMigrations {
          * loses nothing. Scoped to DAILY_MIX so a playlist the user genuinely
          * SAVED (which syncs as CUSTOM) is never in range.
          */
-        val MIGRATION_39_40 = object : Migration(39, 40) {
-            override fun migrate(db: SupportSQLiteDatabase) {
+        val MIGRATION_39_40 = object : StashMigration(39, 40) {
+            override fun migrateDb(db: SQLiteConnection) {
                 db.execSQL(
                     """
                     UPDATE playlists SET is_active = 0
@@ -881,8 +882,8 @@ object StashMigrations {
          * playlists" rail). NULL = not on Home, so every existing row
          * stays off the rail until the user pins it.
          */
-        val MIGRATION_41_42 = object : Migration(41, 42) {
-            override fun migrate(db: SupportSQLiteDatabase) {
+        val MIGRATION_41_42 = object : StashMigration(41, 42) {
+            override fun migrateDb(db: SQLiteConnection) {
                 db.execSQL("ALTER TABLE playlists ADD COLUMN pinned_to_home_at INTEGER")
             }
         }
@@ -962,8 +963,8 @@ object StashMigrations {
          * this migration, and inventing it would offer downloads the user may
          * have deleted on purpose.
          */
-        val MIGRATION_45_46 = object : Migration(45, 46) {
-            override fun migrate(db: SupportSQLiteDatabase) {
+        val MIGRATION_45_46 = object : StashMigration(45, 46) {
+            override fun migrateDb(db: SQLiteConnection) {
                 db.execSQL("ALTER TABLE tracks ADD COLUMN download_missing_at INTEGER")
                 db.execSQL(
                     "ALTER TABLE download_queue ADD COLUMN user_requested INTEGER NOT NULL DEFAULT 0",
@@ -971,8 +972,8 @@ object StashMigrations {
             }
         }
 
-        val MIGRATION_44_45 = object : Migration(44, 45) {
-            override fun migrate(db: SupportSQLiteDatabase) {
+        val MIGRATION_44_45 = object : StashMigration(44, 45) {
+            override fun migrateDb(db: SQLiteConnection) {
                 for (variant in listOf("default", "mqdefault", "hqdefault", "sddefault")) {
                     db.execSQL(
                         "UPDATE tracks SET album_art_url = " +
@@ -988,8 +989,8 @@ object StashMigrations {
             }
         }
 
-        val MIGRATION_43_44 = object : Migration(43, 44) {
-            override fun migrate(db: SupportSQLiteDatabase) {
+        val MIGRATION_43_44 = object : StashMigration(43, 44) {
+            override fun migrateDb(db: SQLiteConnection) {
                 db.execSQL(
                     "UPDATE tracks SET album_art_url = " +
                         "REPLACE(REPLACE(album_art_url, '/i/u/300x300/', '/i/u/770x0/'), '.png', '.jpg') " +
@@ -1003,8 +1004,8 @@ object StashMigrations {
             }
         }
 
-        val MIGRATION_42_43 = object : Migration(42, 43) {
-            override fun migrate(db: SupportSQLiteDatabase) {
+        val MIGRATION_42_43 = object : StashMigration(42, 43) {
+            override fun migrateDb(db: SQLiteConnection) {
                 db.execSQL(
                     "UPDATE tracks SET album_art_url = REPLACE(album_art_url, '/sddefault.', '/hqdefault.') " +
                         "WHERE album_art_url LIKE 'https://i.ytimg.com/%/sddefault.%'",
@@ -1028,8 +1029,8 @@ object StashMigrations {
          * The primary key is COLLATE NOCASE so a case-variant credit collapses
          * onto the same row (one photo per artist, not one per spelling).
          */
-        val MIGRATION_46_47 = object : Migration(46, 47) {
-            override fun migrate(db: SupportSQLiteDatabase) {
+        val MIGRATION_46_47 = object : StashMigration(46, 47) {
+            override fun migrateDb(db: SQLiteConnection) {
                 db.execSQL(
                     """
                     CREATE TABLE IF NOT EXISTS `artist_images` (
@@ -1047,8 +1048,8 @@ object StashMigrations {
          * v47 -> v48: shared mixes (spec docs/superpowers/specs/2026-09-23-shared-mixes-design.md §5).
          * One row per playlist that this phone shares (OWNER) or follows (FOLLOWER). Additive.
          */
-        val MIGRATION_47_48 = object : Migration(47, 48) {
-            override fun migrate(db: SupportSQLiteDatabase) {
+        val MIGRATION_47_48 = object : StashMigration(47, 48) {
+            override fun migrateDb(db: SQLiteConnection) {
                 db.execSQL(
                     """
                     CREATE TABLE IF NOT EXISTS `shared_mixes` (
@@ -1093,8 +1094,8 @@ object StashMigrations {
          * alone. No real master integrates at or below -69.9 LUFS, so the
          * threshold cannot claw back a legitimate measurement.
          */
-        val MIGRATION_40_41 = object : Migration(40, 41) {
-            override fun migrate(db: SupportSQLiteDatabase) {
+        val MIGRATION_40_41 = object : StashMigration(40, 41) {
+            override fun migrateDb(db: SQLiteConnection) {
                 db.execSQL(
                     """
                     UPDATE tracks
@@ -1108,8 +1109,8 @@ object StashMigrations {
             }
         }
 
-        val MIGRATION_38_39 = object : Migration(38, 39) {
-            override fun migrate(db: SupportSQLiteDatabase) {
+        val MIGRATION_38_39 = object : StashMigration(38, 39) {
+            override fun migrateDb(db: SQLiteConnection) {
                 db.execSQL(
                     """
                     CREATE TABLE IF NOT EXISTS `sync_undo_points` (
@@ -1153,8 +1154,8 @@ object StashMigrations {
             }
         }
 
-        val MIGRATION_36_37 = object : Migration(36, 37) {
-            override fun migrate(db: SupportSQLiteDatabase) {
+        val MIGRATION_36_37 = object : StashMigration(36, 37) {
+            override fun migrateDb(db: SQLiteConnection) {
                 db.execSQL(
                     """
                     CREATE TABLE IF NOT EXISTS `listen_submissions` (
@@ -1183,8 +1184,8 @@ object StashMigrations {
          * stamp: NULL = never tried, so the worker terminates instead of re-polling misses.
          * Purely additive.
          */
-        val MIGRATION_48_49 = object : Migration(48, 49) {
-            override fun migrate(db: SupportSQLiteDatabase) {
+        val MIGRATION_48_49 = object : StashMigration(48, 49) {
+            override fun migrateDb(db: SQLiteConnection) {
                 db.execSQL("ALTER TABLE lyrics ADD COLUMN ttml TEXT")
                 db.execSQL("ALTER TABLE lyrics ADD COLUMN ttml_checked_at INTEGER")
             }
@@ -1194,8 +1195,8 @@ object StashMigrations {
          * v49 -> v50: per-track lyrics sync offset (`lyrics.sync_offset_ms`, signed milliseconds,
          * default 0). Positive delays lyrics, negative shows them earlier. Purely additive.
          */
-        val MIGRATION_49_50 = object : Migration(49, 50) {
-            override fun migrate(db: SupportSQLiteDatabase) {
+        val MIGRATION_49_50 = object : StashMigration(49, 50) {
+            override fun migrateDb(db: SQLiteConnection) {
                 db.execSQL("ALTER TABLE lyrics ADD COLUMN sync_offset_ms INTEGER NOT NULL DEFAULT 0")
             }
         }
@@ -1222,8 +1223,8 @@ object StashMigrations {
          * its songs (keep_offline, the other download switch, is 0 for everything
          * right after the ALTER above).
          */
-        val MIGRATION_50_51 = object : Migration(50, 51) {
-            override fun migrate(db: SupportSQLiteDatabase) {
+        val MIGRATION_50_51 = object : StashMigration(50, 51) {
+            override fun migrateDb(db: SQLiteConnection) {
                 db.execSQL("ALTER TABLE playlists ADD COLUMN keep_offline INTEGER NOT NULL DEFAULT 0")
                 db.execSQL("UPDATE playlists SET sync_enabled = 0 WHERE type = 'DAILY_MIX'")
                 db.execSQL(
@@ -1251,8 +1252,8 @@ object StashMigrations {
          * v51 -> v52: `tracks.match_picked_at`, set when the user picks a
          * track's audio in Failed Matches (#531). NULL on every existing row.
          */
-        val MIGRATION_51_52 = object : Migration(51, 52) {
-            override fun migrate(db: SupportSQLiteDatabase) {
+        val MIGRATION_51_52 = object : StashMigration(51, 52) {
+            override fun migrateDb(db: SQLiteConnection) {
                 db.execSQL("ALTER TABLE tracks ADD COLUMN match_picked_at INTEGER")
             }
         }
@@ -1267,8 +1268,8 @@ object StashMigrations {
         * batch, so there is no earlier history to recover. Tracks stamp themselves as
         * sweeps find misses.
         */
-        val MIGRATION_52_53 = object : Migration(52, 53) {
-            override fun migrate(db: SupportSQLiteDatabase) {
+        val MIGRATION_52_53 = object : StashMigration(52, 53) {
+            override fun migrateDb(db: SQLiteConnection) {
                 db.execSQL("ALTER TABLE tracks ADD COLUMN flac_no_match_at INTEGER")
             }
         }
@@ -1279,8 +1280,8 @@ object StashMigrations {
          * the web library file or send, later the mirror). Nullable, no default:
          * every existing row is this phone's own play.
          */
-        val MIGRATION_53_54 = object : Migration(53, 54) {
-            override fun migrate(db: SupportSQLiteDatabase) {
+        val MIGRATION_53_54 = object : StashMigration(53, 54) {
+            override fun migrateDb(db: SQLiteConnection) {
                 db.execSQL("ALTER TABLE listening_events ADD COLUMN origin_device TEXT")
             }
         }
@@ -1297,8 +1298,8 @@ object StashMigrations {
          * get the one loose rule's values from CanonicalRecomputeWorker after the
          * app starts (Kotlin, in batches): SQL here can't run that rule.
          */
-        val MIGRATION_54_55 = object : Migration(54, 55) {
-            override fun migrate(db: SupportSQLiteDatabase) {
+        val MIGRATION_54_55 = object : StashMigration(54, 55) {
+            override fun migrateDb(db: SQLiteConnection) {
                 db.execSQL(
                     "CREATE INDEX IF NOT EXISTS `index_tracks_canonical_title_canonical_artist` " +
                         "ON `tracks` (`canonical_title`, `canonical_artist`)",
@@ -1311,8 +1312,8 @@ object StashMigrations {
          * what the shared Tidal relay answered per song, so plays, syncs and upgrade sweeps stop
          * re-asking it. A new, empty table; no existing row changes.
          */
-        val MIGRATION_55_56 = object : Migration(55, 56) {
-            override fun migrate(db: SupportSQLiteDatabase) {
+        val MIGRATION_55_56 = object : StashMigration(55, 56) {
+            override fun migrateDb(db: SQLiteConnection) {
                 db.execSQL(
                     "CREATE TABLE IF NOT EXISTS `tidal_match_cache` (" +
                         "`key` TEXT NOT NULL, `tidal_id` TEXT, `title` TEXT NOT NULL, " +
@@ -1338,8 +1339,8 @@ object StashMigrations {
          * the two scan tables. They are a cache of what is on disk; the next scan refills them,
          * so dropping loses nothing but those debug builds' folder list.
          */
-        val MIGRATION_56_57 = object : Migration(56, 57) {
-            override fun migrate(db: SupportSQLiteDatabase) {
+        val MIGRATION_56_57 = object : StashMigration(56, 57) {
+            override fun migrateDb(db: SQLiteConnection) {
                 db.execSQL(
                     "CREATE INDEX IF NOT EXISTS `index_tracks_canonical_title_canonical_artist` " +
                         "ON `tracks` (`canonical_title`, `canonical_artist`)",
@@ -1385,8 +1386,8 @@ object StashMigrations {
          * this column but not master's `tidal_match_cache`: the column is added only when it's
          * missing and the table only when it's absent, so that build's folders and songs stay.
          */
-        val MIGRATION_57_58 = object : Migration(57, 58) {
-            override fun migrate(db: SupportSQLiteDatabase) {
+        val MIGRATION_57_58 = object : StashMigration(57, 58) {
+            override fun migrateDb(db: SQLiteConnection) {
                 createTidalMatchCacheIfMissing(db)
                 if (!db.hasColumn("scanned_songs", "album_art_path")) {
                     db.execSQL("ALTER TABLE `scanned_songs` ADD COLUMN `album_art_path` TEXT")
@@ -1410,8 +1411,8 @@ object StashMigrations {
          * needs the phone's time zone, which SQL can't do correctly after travel). Their
          * listening time stays unknown for good.
          */
-        val MIGRATION_58_59 = object : Migration(58, 59) {
-            override fun migrate(db: SupportSQLiteDatabase) {
+        val MIGRATION_58_59 = object : StashMigration(58, 59) {
+            override fun migrateDb(db: SQLiteConnection) {
                 db.execSQL("ALTER TABLE `listening_events` ADD COLUMN `local_day` INTEGER")
                 db.execSQL("ALTER TABLE `listening_events` ADD COLUMN `local_minute` INTEGER")
                 db.execSQL("ALTER TABLE `listening_events` ADD COLUMN `listened_ms` INTEGER")
@@ -1430,8 +1431,8 @@ object StashMigrations {
          * A new, empty cache table: nothing existing is touched. The primary key is COLLATE NOCASE
          * like `artist_images`, so case variants of a credit share one row.
          */
-        val MIGRATION_59_60 = object : Migration(59, 60) {
-            override fun migrate(db: SupportSQLiteDatabase) {
+        val MIGRATION_59_60 = object : StashMigration(59, 60) {
+            override fun migrateDb(db: SQLiteConnection) {
                 db.execSQL(
                     """
                     CREATE TABLE IF NOT EXISTS `artist_genres` (
@@ -1455,8 +1456,8 @@ object StashMigrations {
          *    here; they live in the encrypted token store.
          * The `source` column is TEXT, so the new `MusicSource.CLOUD` value needs nothing.
          */
-        val MIGRATION_60_61 = object : Migration(60, 61) {
-            override fun migrate(db: SupportSQLiteDatabase) {
+        val MIGRATION_60_61 = object : StashMigration(60, 61) {
+            override fun migrateDb(db: SQLiteConnection) {
                 db.execSQL("ALTER TABLE `tracks` ADD COLUMN `cloud_uri` TEXT")
                 db.execSQL(
                     "CREATE TABLE IF NOT EXISTS `cloud_accounts` (" +
@@ -1509,8 +1510,8 @@ object StashMigrations {
          * `cloud_uploads` (one row per local track on its way to Drive, with its resumable
          * session). Nothing existing changes.
          */
-        val MIGRATION_61_62 = object : Migration(61, 62) {
-            override fun migrate(db: SupportSQLiteDatabase) {
+        val MIGRATION_61_62 = object : StashMigration(61, 62) {
+            override fun migrateDb(db: SQLiteConnection) {
                 db.execSQL(
                     "CREATE TABLE IF NOT EXISTS `cloud_uploads` (" +
                         "`track_id` INTEGER NOT NULL, `account_id` INTEGER NOT NULL, `state` TEXT NOT NULL, " +
@@ -1533,8 +1534,8 @@ object StashMigrations {
          * `album_back_covers` (one row per album looked up on the Cover Art Archive). Nothing
          * existing changes.
          */
-        val MIGRATION_62_63 = object : Migration(62, 63) {
-            override fun migrate(db: SupportSQLiteDatabase) {
+        val MIGRATION_62_63 = object : StashMigration(62, 63) {
+            override fun migrateDb(db: SQLiteConnection) {
                 db.execSQL(
                     "CREATE TABLE IF NOT EXISTS `album_back_covers` (" +
                         "`album_key` TEXT NOT NULL COLLATE NOCASE, `image_url` TEXT, `release_mbid` TEXT, " +
@@ -1547,8 +1548,8 @@ object StashMigrations {
          * v63 -> v64: the pages inside an album's cover, beside its back. One nullable column,
          * `album_back_covers.inside_urls`; a v63 row reads as "inside not looked for yet".
          */
-        val MIGRATION_63_64 = object : Migration(63, 64) {
-            override fun migrate(db: SupportSQLiteDatabase) {
+        val MIGRATION_63_64 = object : StashMigration(63, 64) {
+            override fun migrateDb(db: SQLiteConnection) {
                 db.execSQL("ALTER TABLE `album_back_covers` ADD COLUMN `inside_urls` TEXT")
             }
         }
@@ -1561,8 +1562,8 @@ object StashMigrations {
          * back or an inside is made due for a lookup again (attempted at the epoch), so Discogs is
          * asked for what the archive lacked now, not once the 30-day miss TTL runs out.
          */
-        val MIGRATION_64_65 = object : Migration(64, 65) {
-            override fun migrate(db: SupportSQLiteDatabase) {
+        val MIGRATION_64_65 = object : StashMigration(64, 65) {
+            override fun migrateDb(db: SQLiteConnection) {
                 db.execSQL("UPDATE `album_back_covers` SET `attempted_at` = 0 WHERE `image_url` IS NULL OR `inside_urls` = ''")
                 db.execSQL("ALTER TABLE `album_back_covers` ADD COLUMN `back_from_discogs` INTEGER NOT NULL DEFAULT 0")
                 db.execSQL("ALTER TABLE `album_back_covers` ADD COLUMN `inside_from_discogs` INTEGER NOT NULL DEFAULT 0")
@@ -1579,8 +1580,8 @@ object StashMigrations {
          * original; the next sync writes Spotify's real flag back. A Spotify song's stored YouTube
          * video stays: on the owner's phone 762 of 846 were the owner's own YouTube Music picks.
          */
-        val MIGRATION_65_66 = object : Migration(65, 66) {
-            override fun migrate(db: SupportSQLiteDatabase) {
+        val MIGRATION_65_66 = object : StashMigration(65, 66) {
+            override fun migrateDb(db: SQLiteConnection) {
                 db.execSQL("UPDATE `tracks` SET `explicit` = NULL WHERE `explicit` = 0")
                 db.execSQL("UPDATE `remote_track_snapshots` SET `explicit` = NULL WHERE `explicit` = 0")
             }
@@ -1601,30 +1602,32 @@ object StashMigrations {
          * library's 10-21 copy, 5 of the 7,557 albums it already had go too, each one Last.fm
          * agreed with ("Nude" on "In Rainbows").
          */
-        val MIGRATION_66_67 = object : Migration(66, 67) {
-            override fun migrate(db: SupportSQLiteDatabase) {
+        val MIGRATION_66_67 = object : StashMigration(66, 67) {
+            override fun migrateDb(db: SQLiteConnection) {
                 val guessed = mutableListOf<Long>()
-                db.query(
+                db.prepare(
                     "SELECT `id`, `artist`, `title`, `album`, `album_artist` FROM `tracks` " +
                         "WHERE `album` != '' AND `album_artist` != '' " +
                         "AND `file_path` IS NULL AND `cloud_uri` IS NULL",
                 ).use { c ->
-                    while (c.moveToNext()) {
+                    while (c.step()) {
                         val key = lastFmCacheKey(
                             mapOf(
                                 "method" to "track.getInfo",
-                                "artist" to LastFmLookupRules.cleanArtist(c.getString(1)),
-                                "track" to LastFmLookupRules.cleanTitle(c.getString(2)),
+                                "artist" to LastFmLookupRules.cleanArtist(c.getText(1)),
+                                "track" to LastFmLookupRules.cleanTitle(c.getText(2)),
                                 "autocorrect" to "1",
                             ),
                         )
-                        val json = db.query(
+                        val json = db.prepare(
                             "SELECT `json` FROM `lastfm_response_cache` WHERE `cache_key` = ?",
-                            arrayOf<Any?>(key),
-                        ).use { if (it.moveToFirst()) it.getString(0) else null } ?: continue
+                        ).use { stmt ->
+                            stmt.bindText(1, key)
+                            if (stmt.step()) stmt.getText(0) else null
+                        } ?: continue
                         val info = runCatching { LastFmTrackInfo.parse(Json.parseToJsonElement(json)) }
                             .getOrNull() ?: continue
-                        if (info.albumTitle == c.getString(3) && info.albumArtist == c.getString(4)) {
+                        if (info.albumTitle == c.getText(3) && info.albumArtist == c.getText(4)) {
                             guessed += c.getLong(0)
                         }
                     }
@@ -1643,8 +1646,8 @@ object StashMigrations {
          * play's id (no other index: every read is by id or a whole pass). Kept apart from `listening_events` on purpose: these
          * plays are never scrobbled, mirrored or exported as this phone's own. Nothing existing changes.
          */
-        val MIGRATION_67_68 = object : Migration(67, 68) {
-            override fun migrate(db: SupportSQLiteDatabase) {
+        val MIGRATION_67_68 = object : StashMigration(67, 68) {
+            override fun migrateDb(db: SQLiteConnection) {
                 db.execSQL(
                     "CREATE TABLE IF NOT EXISTS `record_plays` (" +
                         "`id` TEXT NOT NULL, `t` TEXT NOT NULL, `a` TEXT NOT NULL, `al` TEXT, `sid` TEXT, " +
@@ -1657,8 +1660,8 @@ object StashMigrations {
          * v68 -> v69: Your record's lengths pass keeps the songs it couldn't time (`record_lengths`, keyed by song key): Last.fm
          * had no length for them, or their ask kept failing, and when. Empty to begin with; nothing else changes.
          */
-        val MIGRATION_68_69 = object : Migration(68, 69) {
-            override fun migrate(db: SupportSQLiteDatabase) {
+        val MIGRATION_68_69 = object : StashMigration(68, 69) {
+            override fun migrateDb(db: SQLiteConnection) {
                 db.execSQL(
                     "CREATE TABLE IF NOT EXISTS `record_lengths` (" +
                         "`key` TEXT NOT NULL, `kind` INTEGER NOT NULL, `at` INTEGER NOT NULL, PRIMARY KEY(`key`))",
@@ -1670,8 +1673,8 @@ object StashMigrations {
          * v69 -> v70: Your record's songs hidden on Spotify (`record_hidden`, keyed by song key), from a Spotify export's
          * YourLibrary.json. Empty to begin with; nothing else changes.
          */
-        val MIGRATION_69_70 = object : Migration(69, 70) {
-            override fun migrate(db: SupportSQLiteDatabase) {
+        val MIGRATION_69_70 = object : StashMigration(69, 70) {
+            override fun migrateDb(db: SQLiteConnection) {
                 db.execSQL(
                     "CREATE TABLE IF NOT EXISTS `record_hidden` (" +
                         "`key` TEXT NOT NULL, `t` TEXT NOT NULL, `a` TEXT NOT NULL, PRIMARY KEY(`key`))",
@@ -1687,8 +1690,8 @@ object StashMigrations {
          * Unicode `IGNORE_CASE` and ICU's `\d`, and the song key now spells out JavaScript's ASCII-only classes, so a key that
          * differs moves to its new one (two that become one keep the first written, rowid order).
          */
-        val MIGRATION_70_71 = object : Migration(70, 71) {
-            override fun migrate(db: SupportSQLiteDatabase) {
+        val MIGRATION_70_71 = object : StashMigration(70, 71) {
+            override fun migrateDb(db: SQLiteConnection) {
                 db.execSQL(
                     "CREATE TABLE IF NOT EXISTS `record_taste_songs` (`key` TEXT NOT NULL, `rank` INTEGER NOT NULL, " +
                         "`title` TEXT NOT NULL, `artist` TEXT NOT NULL, `album` TEXT, `sid` TEXT, `artist_key` TEXT NOT NULL, " +
@@ -1712,8 +1715,8 @@ object StashMigrations {
          * v71 -> v72: `playlists.user_hidden`, a playlist taken out of the library from its
          * account's page (the Sync tab overhaul). 0 for every row: nothing was hidden before.
          */
-        val MIGRATION_71_72 = object : Migration(71, 72) {
-            override fun migrate(db: SupportSQLiteDatabase) {
+        val MIGRATION_71_72 = object : StashMigration(71, 72) {
+            override fun migrateDb(db: SQLiteConnection) {
                 db.execSQL("ALTER TABLE playlists ADD COLUMN user_hidden INTEGER NOT NULL DEFAULT 0")
             }
         }
@@ -1724,15 +1727,15 @@ object StashMigrations {
          * account that was accumulating already had (DiffWorker, once), so nobody's collected
          * mix shrinks back to this week's.
          */
-        val MIGRATION_72_73 = object : Migration(72, 73) {
-            override fun migrate(db: SupportSQLiteDatabase) {
+        val MIGRATION_72_73 = object : StashMigration(72, 73) {
+            override fun migrateDb(db: SQLiteConnection) {
                 db.execSQL("ALTER TABLE playlists ADD COLUMN stack_songs INTEGER NOT NULL DEFAULT 0")
             }
         }
 
         /** SoundCloud recording identity; old rows remain unlinked and keep their audio and ordering. */
-        val MIGRATION_74_75 = object : Migration(74, 75) {
-            override fun migrate(db: SupportSQLiteDatabase) {
+        val MIGRATION_74_75 = object : StashMigration(74, 75) {
+            override fun migrateDb(db: SQLiteConnection) {
                 for (table in listOf("tracks", "remote_track_snapshots")) {
                     db.execSQL("ALTER TABLE `$table` ADD COLUMN `soundcloud_id` TEXT")
                     db.execSQL("ALTER TABLE `$table` ADD COLUMN `soundcloud_permalink` TEXT")
@@ -1752,8 +1755,8 @@ object StashMigrations {
          * [com.stash.core.data.library.duplicates.DuplicateCleanup]: SQL can't run the same-song
          * rule.
          */
-        val MIGRATION_75_76 = object : Migration(75, 76) {
-            override fun migrate(db: SupportSQLiteDatabase) {
+        val MIGRATION_75_76 = object : StashMigration(75, 76) {
+            override fun migrateDb(db: SQLiteConnection) {
                 db.execSQL(
                     "CREATE TABLE IF NOT EXISTS `track_aliases` (`kind` TEXT NOT NULL, `value` TEXT NOT NULL, " +
                         "`track_id` INTEGER NOT NULL, `created_at` INTEGER NOT NULL, PRIMARY KEY(`kind`, `value`), " +
@@ -1793,8 +1796,8 @@ object StashMigrations {
          * [DatabaseBackupManager.verifyDatabaseIntegrity] (`repairSearchIndex`), because that check
          * runs before this chain does.
          */
-        val MIGRATION_76_77 = object : Migration(76, 77) {
-            override fun migrate(db: SupportSQLiteDatabase) {
+        val MIGRATION_76_77 = object : StashMigration(76, 77) {
+            override fun migrateDb(db: SQLiteConnection) {
                 db.execSQL("INSERT INTO tracks_fts(tracks_fts) VALUES('rebuild')")
             }
         }
@@ -1808,8 +1811,8 @@ object StashMigrations {
          * columns at v77, and a phone that ran it is already at 77 with them. That 77 never ran
          * #838's `tracks_fts` rebuild ([MIGRATION_76_77]), so such a phone gets it here instead.
          */
-        val MIGRATION_77_78 = object : Migration(77, 78) {
-            override fun migrate(db: SupportSQLiteDatabase) {
+        val MIGRATION_77_78 = object : StashMigration(77, 78) {
+            override fun migrateDb(db: SQLiteConnection) {
                 // Frozen here, not shared with the entity: a later rename must not change what 78 adds.
                 val columns = listOf("credit_uploader_name", "credit_uploader_url", "credit_maker_name", "credit_maker_url")
                 val fromPrBuild = columns.any { db.hasColumn("lyrics", it) }
@@ -1823,8 +1826,8 @@ object StashMigrations {
         }
 
         /** Edit order tables start empty, so existing playlists retain their native order. */
-        val MIGRATION_73_74 = object : Migration(73, 74) {
-            override fun migrate(db: SupportSQLiteDatabase) {
+        val MIGRATION_73_74 = object : StashMigration(73, 74) {
+            override fun migrateDb(db: SQLiteConnection) {
                 db.execSQL(
                     "CREATE TABLE IF NOT EXISTS `playlist_order` (`playlist_id` INTEGER NOT NULL, PRIMARY KEY(`playlist_id`), " +
                         "FOREIGN KEY(`playlist_id`) REFERENCES `playlists`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
@@ -1843,22 +1846,24 @@ object StashMigrations {
         }
 
         /** `record_hidden` keyed by today's [com.stash.core.model.weblink.SongKey.songKey], the first spelling of each kept. */
-        internal fun rekeyHidden(db: SupportSQLiteDatabase) {
+        internal fun rekeyHidden(db: SQLiteConnection) {
             class Row(val key: String, val t: String, val a: String)
             val rows = ArrayList<Row>()
-            db.query("SELECT `key`, t, a FROM record_hidden ORDER BY rowid").use { c ->
-                while (c.moveToNext()) rows += Row(c.getString(0), c.getString(1), c.getString(2))
+            db.prepare("SELECT `key`, t, a FROM record_hidden ORDER BY rowid").use { c ->
+                while (c.step()) rows += Row(c.getText(0), c.getText(1), c.getText(2))
             }
             val keyed = rows.map { it to com.stash.core.model.weblink.SongKey.songKey(it.t, it.a) }
             if (keyed.all { (r, k) -> r.key == k }) return
             db.execSQL("DELETE FROM record_hidden")
-            val insert = db.compileStatement("INSERT OR IGNORE INTO record_hidden (`key`, t, a) VALUES (?, ?, ?)")
-            for ((r, k) in keyed) {
-                insert.clearBindings()
-                insert.bindString(1, k)
-                insert.bindString(2, r.t)
-                insert.bindString(3, r.a)
-                insert.executeInsert()
+            db.prepare("INSERT OR IGNORE INTO record_hidden (`key`, t, a) VALUES (?, ?, ?)").use { insert ->
+                for ((r, k) in keyed) {
+                    insert.reset()
+                    insert.clearBindings()
+                    insert.bindText(1, k)
+                    insert.bindText(2, r.t)
+                    insert.bindText(3, r.a)
+                    insert.step()
+                }
             }
         }
 
@@ -1867,7 +1872,7 @@ object StashMigrations {
          * databases (they skipped master's 55 -> 56). Must stay identical to [MIGRATION_55_56]'s
          * table; the migration tests validate both against the exported schema.
          */
-        private fun createTidalMatchCacheIfMissing(db: SupportSQLiteDatabase) {
+        private fun createTidalMatchCacheIfMissing(db: SQLiteConnection) {
             db.execSQL(
                 "CREATE TABLE IF NOT EXISTS `tidal_match_cache` (" +
                     "`key` TEXT NOT NULL, `tidal_id` TEXT, `title` TEXT NOT NULL, " +
@@ -1878,11 +1883,12 @@ object StashMigrations {
         }
 
         /** True when [table] has a column named [column] (false when the table doesn't exist). */
-        private fun SupportSQLiteDatabase.hasColumn(table: String, column: String): Boolean =
-            query("PRAGMA table_info(`$table`)").use { c ->
-                val name = c.getColumnIndexOrThrow("name")
+        private fun SQLiteConnection.hasColumn(table: String, column: String): Boolean =
+            prepare("PRAGMA table_info(`$table`)").use { c ->
+                val nameIdx = (0 until c.getColumnCount()).firstOrNull { c.getColumnName(it) == "name" }
+                    ?: error("Column 'name' not found in PRAGMA table_info")
                 var found = false
-                while (!found && c.moveToNext()) found = c.getString(name) == column
+                while (!found && c.step()) found = c.getText(nameIdx) == column
                 found
             }
 

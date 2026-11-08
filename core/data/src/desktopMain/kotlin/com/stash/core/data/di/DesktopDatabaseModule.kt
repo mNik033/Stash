@@ -2,6 +2,7 @@ package com.stash.core.data.di
 
 import androidx.room.Room
 import androidx.sqlite.driver.bundled.BundledSQLiteDriver
+import com.stash.core.data.db.ALL_MIGRATIONS
 import com.stash.core.data.db.StashDatabase
 import com.stash.core.data.db.dao.ArtistGenreDao
 import com.stash.core.data.db.dao.ArtistImageDao
@@ -49,6 +50,7 @@ object DesktopDatabaseModule {
         return Room.databaseBuilder<StashDatabase>(name = dbFile.absolutePath)
             .setDriver(BundledSQLiteDriver())
             .setQueryCoroutineContext(Dispatchers.IO)
+            .addMigrations(*StashDatabase.ALL_MIGRATIONS)
             .build()
     }
 
